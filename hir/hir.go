@@ -42,6 +42,7 @@ type FuncDecl struct {
 // Material is one authored material.
 type Material struct {
 	Name    string
+	Extends string // parent material name, or "" — resolved during lowering
 	Params  []Param
 	Surface Func  // surface(geo) -> color
 	Vertex  *Func // optional geometry hook; nil = use the default transform
@@ -94,8 +95,16 @@ type Binary struct {
 	L, R Expr
 }
 
-func (Ref) isExpr()    {}
-func (Lit) isExpr()    {}
-func (Member) isExpr() {}
-func (Call) isExpr()   {}
-func (Binary) isExpr() {}
+// SuperCall is super.<Method>(args) — calls the parent material's method (only
+// surface in v1). Resolved during lowering by inlining the parent's surface.
+type SuperCall struct {
+	Method string
+	Args   []Expr
+}
+
+func (Ref) isExpr()       {}
+func (Lit) isExpr()       {}
+func (Member) isExpr()    {}
+func (Call) isExpr()      {}
+func (Binary) isExpr()    {}
+func (SuperCall) isExpr() {}

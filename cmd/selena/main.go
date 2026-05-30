@@ -81,35 +81,36 @@ func run(args []string) error {
 }
 
 // resolveProgram resolves a built-in material name or parses a .sel file,
-// returning the (first) material and any reusable functions it declares.
-func resolveProgram(nameOrFile string) (hir.Material, []hir.FuncDecl, error) {
+// returning the program and the index of the target material (the last, i.e.
+// most-derived, material declared).
+func resolveProgram(nameOrFile string) (hir.Program, int, error) {
 	switch nameOrFile {
 	case "sample", "directional-diffuse":
-		return hir.DirectionalDiffuse(), nil, nil
+		return hir.Program{Materials: []hir.Material{hir.DirectionalDiffuse()}}, 0, nil
 	case "textured":
-		return hir.Textured(), nil, nil
+		return hir.Program{Materials: []hir.Material{hir.Textured()}}, 0, nil
 	default:
 		src, err := os.ReadFile(nameOrFile)
 		if err != nil {
-			return hir.Material{}, nil, err
+			return hir.Program{}, 0, err
 		}
 		p, err := parse.Program(src)
 		if err != nil {
-			return hir.Material{}, nil, err
+			return hir.Program{}, 0, err
 		}
 		if len(p.Materials) == 0 {
-			return hir.Material{}, nil, fmt.Errorf("%s: no material declared", nameOrFile)
+			return hir.Program{}, 0, fmt.Errorf("%s: no material declared", nameOrFile)
 		}
-		return p.Materials[0], p.Funcs, nil
+		return p, len(p.Materials) - 1, nil
 	}
 }
 
 func emit(target, file string) error {
-	m, funcs, err := resolveProgram(file)
+	prog, idx, err := resolveProgram(file)
 	if err != nil {
 		return err
 	}
-	mod, _, err := lower.LowerWith(m, funcs)
+	mod, _, err := lower.LowerProgram(prog, idx)
 	if err != nil {
 		return err
 	}
@@ -143,15 +144,15 @@ func emit(target, file string) error {
 }
 
 func check(file string) error {
-	m, funcs, err := resolveProgram(file)
+	prog, idx, err := resolveProgram(file)
 	if err != nil {
 		return err
 	}
-	mod, layout, err := lower.LowerWith(m, funcs)
+	mod, layout, err := lower.LowerProgram(prog, idx)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("ok: %s — %d uniforms (%d-byte block), %d attributes, %d varyings, %d textures\n",
-		m.Name, len(mod.Uniforms), layout.UniformBlock.Size, len(mod.Attributes), len(mod.Varyings), len(mod.Textures))
+		mod.Name, len(mod.Uniforms), layout.UniformBlock.Size, len(mod.Attributes), len(mod.Varyings), len(mod.Textures))
 	return nil
 }

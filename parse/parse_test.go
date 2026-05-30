@@ -117,3 +117,47 @@ material Composed {
 		t.Errorf("composed fn did not inline to the expected shader\n--- got ---\n%s", src)
 	}
 }
+
+// TestParseExtends covers material inheritance: Tinted extends Base, adds a
+// param, and reuses the parent surface via super.surface(geo).
+func TestParseExtends(t *testing.T) {
+	p, err := Program([]byte(`
+material Base {
+    param baseColor : color
+    param light : Sun
+    surface(geo) -> color {
+        let n = normalize(geo.worldNormal)
+        return baseColor * (light.ambient + max(dot(n, light.dir), 0))
+    }
+}
+material Tinted extends Base {
+    param tint : color
+    surface(geo) -> color { return super.surface(geo) * tint }
+}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Materials) != 2 {
+		t.Fatalf("materials = %d, want 2", len(p.Materials))
+	}
+	mod, _, err := lower.LowerProgram(p, 1) // the derived material
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hasTint, hasBase bool
+	for _, u := range mod.Uniforms {
+		switch u.Name {
+		case "tint":
+			hasTint = true
+		case "baseColor":
+			hasBase = true
+		}
+	}
+	if !hasTint || !hasBase {
+		t.Fatalf("merged uniforms missing tint/baseColor: %+v", mod.Uniforms)
+	}
+	src, _ := wgsl.Emit(mod)
+	if !strings.Contains(src, "u.tint") || !strings.Contains(src, "normalize(in.vWorldNormal)") {
+		t.Errorf("extends/super did not inline the base surface * tint\n--- got ---\n%s", src)
+	}
+}

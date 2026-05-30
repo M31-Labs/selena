@@ -39,8 +39,9 @@ func inlineFuncs(m hir.Material, funcs []hir.FuncDecl) (hir.Material, error) {
 }
 
 type inliner struct {
-	funcs map[string]hir.FuncDecl
-	depth int
+	funcs  map[string]hir.FuncDecl
+	parent *hir.Func // parent material's surface, for super.surface(...)
+	depth  int
 }
 
 // expr returns e with env substitutions applied and user-function calls inlined.
@@ -106,6 +107,30 @@ func (in *inliner) expr(e hir.Expr, env map[string]hir.Expr) (hir.Expr, error) {
 		res, err := in.expr(fn.Result, env2)
 		in.depth--
 		return res, err
+	case hir.SuperCall:
+		if in.parent == nil {
+			return nil, fmt.Errorf("super used in a material with no parent (extends)")
+		}
+		if x.Method != "surface" {
+			return nil, fmt.Errorf("super.%s is not supported (only super.surface)", x.Method)
+		}
+		if len(x.Args) != 1 {
+			return nil, fmt.Errorf("super.surface expects 1 argument (the geometry)")
+		}
+		geoArg, err := in.expr(x.Args[0], env)
+		if err != nil {
+			return nil, err
+		}
+		// inline the parent surface with its geo param bound to the passed arg
+		env2 := map[string]hir.Expr{in.parent.Geo: geoArg}
+		for _, l := range in.parent.Body {
+			v, err := in.expr(l.Value, env2)
+			if err != nil {
+				return nil, err
+			}
+			env2[l.Name] = v
+		}
+		return in.expr(in.parent.Result, env2)
 	}
 	return nil, fmt.Errorf("unsupported expression %T in inliner", e)
 }

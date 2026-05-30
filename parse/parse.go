@@ -101,6 +101,9 @@ func (w *walker) field(n *gts.Node, f string) *gts.Node { return n.ChildByFieldN
 
 func (w *walker) material(n *gts.Node) (hir.Material, error) {
 	m := hir.Material{Name: w.text(w.field(n, "name"))}
+	if p := w.field(n, "parent"); p != nil {
+		m.Extends = w.text(p)
+	}
 	for i := 0; i < n.NamedChildCount(); i++ {
 		c := n.NamedChild(i)
 		if w.typ(c) != "member" {
@@ -250,6 +253,22 @@ func (w *walker) expr(n *gts.Node) (hir.Expr, error) {
 			}
 		}
 		return hir.Call{Func: w.text(w.field(n, "callee")), Args: args}, nil
+	case "super_call":
+		var args []hir.Expr
+		for i := 0; i < n.NamedChildCount(); i++ {
+			c := n.NamedChild(i)
+			if w.typ(c) != "arguments" {
+				continue
+			}
+			for j := 0; j < c.NamedChildCount(); j++ {
+				a, err := w.expr(c.NamedChild(j))
+				if err != nil {
+					return nil, err
+				}
+				args = append(args, a)
+			}
+		}
+		return hir.SuperCall{Method: w.text(w.field(n, "method")), Args: args}, nil
 	}
 	return nil, fmt.Errorf("unexpected expression node %q", w.typ(n))
 }

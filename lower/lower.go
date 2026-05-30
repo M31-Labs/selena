@@ -59,7 +59,11 @@ func hirToIRType(t hir.Type) (ir.Type, bool) {
 // LowerWith inlines the given user functions into the material, then lowers it.
 // Materials with no user functions can call Lower directly.
 func LowerWith(m hir.Material, funcs []hir.FuncDecl) (ir.Module, bindings.Layout, error) {
-	inlined, err := inlineFuncs(m, funcs)
+	flat, err := resolveExtends(m, nil)
+	if err != nil {
+		return ir.Module{}, bindings.Layout{}, err
+	}
+	inlined, err := inlineFuncs(flat, funcs)
 	if err != nil {
 		return ir.Module{}, bindings.Layout{}, err
 	}

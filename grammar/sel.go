@@ -44,6 +44,7 @@ func SelenaGrammar() *grammargen.Grammar {
 	g.Define("material", seq(
 		s("material"),
 		field("name", sym("identifier")),
+		grammargen.Optional(seq(s("extends"), field("parent", sym("identifier")))),
 		s("{"),
 		grammargen.Repeat(sym("member")),
 		s("}"),
@@ -84,11 +85,20 @@ func SelenaGrammar() *grammargen.Grammar {
 	g.Define("expression", grammargen.Choice(
 		sym("binary_expression"),
 		sym("member_expression"),
+		sym("super_call"),
 		sym("call"),
 		sym("paren_expression"),
 		sym("number"),
 		sym("identifier"),
 	))
+
+	g.Define("super_call", grammargen.PrecLeft(6, seq(
+		s("super"), s("."),
+		field("method", sym("identifier")),
+		s("("),
+		grammargen.Optional(sym("arguments")),
+		s(")"),
+	)))
 
 	g.Define("binary_expression", grammargen.Choice(
 		grammargen.PrecLeft(1, seq(
