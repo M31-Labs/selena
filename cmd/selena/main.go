@@ -24,6 +24,7 @@ const usage = `selena - shader authoring for the GoSX ecosystem
 
 usage:
   selena emit <target> <file.sel>   emit a shader (target: wgsl|glsl|metal|gles)
+  selena demo <out.html>            write a WebGPU+WebGL2 render proof harness
   selena check <file.sel>           parse + type-check only
   selena help                       show this help
 
@@ -57,6 +58,11 @@ func run(args []string) error {
 			return fmt.Errorf("unknown target %q (want one of: wgsl, glsl, metal, gles)", args[1])
 		}
 		return emit(args[1], args[2])
+	case "demo":
+		if len(args) != 2 {
+			return fmt.Errorf("usage: selena demo <out.html>")
+		}
+		return runDemo(args[1])
 	case "check":
 		if len(args) != 2 {
 			return fmt.Errorf("usage: selena check <file.sel>")
