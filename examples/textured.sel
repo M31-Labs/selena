@@ -1,0 +1,9 @@
+material Textured {
+    param albedo : texture2d
+    param light  : Sun
+
+    surface(geo) -> color {
+        let c = sample(albedo, geo.uv).rgb
+        return c * (light.ambient + max(dot(normalize(geo.worldNormal), light.dir), 0))
+    }
+}

@@ -1,12 +1,12 @@
 // Command selena is the CLI for the Selena shader authoring language.
 //
-// Planned usage:
-//
 //	selena emit <target> <file.sel>   # target: wgsl | glsl | metal | gles
-//	selena check <file.sel>           # parse + type-check only
+//	selena check <file.sel>           # parse + lower (front-end check)
+//	selena demo  <out.html> [material]
 //
-// The compiler pipeline (grammar -> AST -> IR -> emit) is not yet implemented;
-// this scaffold establishes the command surface.
+// emit/check parse a .sel file through the full pipeline (parse -> HIR -> lower
+// -> emit). The names "sample"/"directional-diffuse" and "textured" resolve to
+// the built-in materials instead of a file.
 package main
 
 import (
@@ -17,22 +17,25 @@ import (
 	"m31labs.dev/selena/emit/glsl"
 	"m31labs.dev/selena/emit/metal"
 	"m31labs.dev/selena/emit/wgsl"
-	"m31labs.dev/selena/ir"
+	"m31labs.dev/selena/hir"
+	"m31labs.dev/selena/lower"
+	"m31labs.dev/selena/parse"
 )
 
 const usage = `selena - shader authoring for the GoSX ecosystem
 
 usage:
   selena emit <target> <file.sel>   emit a shader (target: wgsl|glsl|metal|gles)
+  selena check <file.sel>           parse + lower a material
   selena demo <out.html> [material] render harness (material: directional-diffuse|textured)
-  selena check <file.sel>           parse + type-check only
   selena help                       show this help
 
-The grammar/front-end is not built yet; pass the built-in material name
-'sample' as <file.sel> to emit the DirectionalDiffuse sample, e.g.
+<file.sel> may also be a built-in material name: 'directional-diffuse' (or
+'sample') and 'textured'. Examples:
 
-  selena emit wgsl sample
-  selena emit glsl sample
+  selena emit wgsl examples/directional-diffuse.sel
+  selena emit metal textured
+  selena check examples/textured.sel
 `
 
 var emitTargets = map[string]bool{"wgsl": true, "glsl": true, "metal": true, "gles": true}
@@ -58,6 +61,11 @@ func run(args []string) error {
 			return fmt.Errorf("unknown target %q (want one of: wgsl, glsl, metal, gles)", args[1])
 		}
 		return emit(args[1], args[2])
+	case "check":
+		if len(args) != 2 {
+			return fmt.Errorf("usage: selena check <file.sel>")
+		}
+		return check(args[1])
 	case "demo":
 		if len(args) < 2 || len(args) > 3 {
 			return fmt.Errorf("usage: selena demo <out.html> [material]  (material: directional-diffuse|textured)")
@@ -67,50 +75,75 @@ func run(args []string) error {
 			mat = args[2]
 		}
 		return runDemo(args[1], mat)
-	case "check":
-		if len(args) != 2 {
-			return fmt.Errorf("usage: selena check <file.sel>")
-		}
-		return fmt.Errorf("check %s: compiler pipeline not yet implemented", args[1])
 	default:
 		return fmt.Errorf("unknown command %q (run 'selena help')", args[0])
 	}
 }
 
-// emit resolves the material (only the built-in 'sample' until the front-end
-// lands) and prints the requested target's shader source.
-func emit(target, file string) error {
-	if file != "sample" {
-		return fmt.Errorf("front-end not implemented yet; pass 'sample' to emit the built-in material")
+// resolveMaterial resolves a built-in material name or parses a .sel file.
+func resolveMaterial(nameOrFile string) (hir.Material, error) {
+	switch nameOrFile {
+	case "sample", "directional-diffuse":
+		return hir.DirectionalDiffuse(), nil
+	case "textured":
+		return hir.Textured(), nil
+	default:
+		src, err := os.ReadFile(nameOrFile)
+		if err != nil {
+			return hir.Material{}, err
+		}
+		return parse.Material(src)
 	}
-	m := ir.DirectionalDiffuse()
+}
+
+func emit(target, file string) error {
+	m, err := resolveMaterial(file)
+	if err != nil {
+		return err
+	}
+	mod, _, err := lower.Lower(m)
+	if err != nil {
+		return err
+	}
 	switch target {
 	case "wgsl":
-		src, err := wgsl.Emit(m)
+		src, err := wgsl.Emit(mod)
+		if err != nil {
+			return err
+		}
+		fmt.Print(src)
+	case "metal":
+		src, err := metal.Emit(mod)
 		if err != nil {
 			return err
 		}
 		fmt.Print(src)
 	case "glsl":
-		vert, frag, err := glsl.Emit(m)
+		vert, frag, err := glsl.Emit(mod)
 		if err != nil {
 			return err
 		}
 		fmt.Printf("// --- vertex ---\n%s\n// --- fragment ---\n%s", vert, frag)
-	case "metal":
-		src, err := metal.Emit(m)
-		if err != nil {
-			return err
-		}
-		fmt.Print(src)
 	case "gles":
-		vert, frag, err := gles.Emit(m)
+		vert, frag, err := gles.Emit(mod)
 		if err != nil {
 			return err
 		}
 		fmt.Printf("// --- vertex ---\n%s\n// --- fragment ---\n%s", vert, frag)
-	default:
-		return fmt.Errorf("emit %s: emitter not implemented", target)
 	}
+	return nil
+}
+
+func check(file string) error {
+	m, err := resolveMaterial(file)
+	if err != nil {
+		return err
+	}
+	mod, layout, err := lower.Lower(m)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("ok: %s — %d uniforms (%d-byte block), %d attributes, %d varyings, %d textures\n",
+		m.Name, len(mod.Uniforms), layout.UniformBlock.Size, len(mod.Attributes), len(mod.Varyings), len(mod.Textures))
 	return nil
 }

@@ -1,0 +1,9 @@
+material DirectionalDiffuse {
+    param baseColor : color
+    param light     : Sun
+
+    surface(geo) -> color {
+        let n = normalize(geo.worldNormal)
+        return baseColor * (light.ambient + max(dot(n, light.dir), 0))
+    }
+}
