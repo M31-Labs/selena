@@ -1,0 +1,12 @@
+# Build output
+/bin/
+/dist/
+*.wasm
+
+# Go
+*.test
+*.out
+
+# Editor / OS
+.DS_Store
+*.swp
