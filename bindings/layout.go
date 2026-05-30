@@ -42,10 +42,51 @@ type Attribute struct {
 	Type     string `json:"type"`
 }
 
-// Texture is a sampled texture with its assigned binding (M2+).
+// Texture is a sampled texture with its per-backend binding coordinates. The
+// backends disagree on how textures bind, so the descriptor carries all three:
+// WGSL/Metal split the texture and its sampler into separate bindings; GLSL/GLES
+// use a single combined sampler2D uniform set from a texture unit.
 type Texture struct {
-	Name    string `json:"name"`
-	Binding int    `json:"binding"`
+	Name  string          `json:"name"`
+	WGSL  WGSLTexBinding  `json:"wgsl"`
+	GL    GLTexBinding    `json:"gl"`
+	Metal MetalTexBinding `json:"metal"`
+}
+
+// WGSLTexBinding gives the bind-group slots for the texture and its sampler.
+type WGSLTexBinding struct {
+	Group          int `json:"group"`
+	TextureBinding int `json:"textureBinding"`
+	SamplerBinding int `json:"samplerBinding"`
+}
+
+// GLTexBinding gives the sampler2D uniform name and the texture unit.
+type GLTexBinding struct {
+	Uniform string `json:"uniform"`
+	Unit    int    `json:"unit"`
+}
+
+// MetalTexBinding gives the [[texture(i)]] / [[sampler(i)]] indices.
+type MetalTexBinding struct {
+	Texture int `json:"texture"`
+	Sampler int `json:"sampler"`
+}
+
+// ComputeTextures assigns per-backend binding coordinates to the given textures
+// in order, matching the conventions the emitters use: WGSL group 0 with the
+// uniform block at binding 0, then texture i at 1+2i and its sampler at 2+2i;
+// GL texture unit i; Metal texture/sampler index i.
+func ComputeTextures(names []string) []Texture {
+	out := make([]Texture, len(names))
+	for i, n := range names {
+		out[i] = Texture{
+			Name:  n,
+			WGSL:  WGSLTexBinding{Group: 0, TextureBinding: 1 + 2*i, SamplerBinding: 2 + 2*i},
+			GL:    GLTexBinding{Uniform: n, Unit: i},
+			Metal: MetalTexBinding{Texture: i, Sampler: i},
+		}
+	}
+	return out
 }
 
 // WGSLBinding is where the uniform block lives in the WGSL bind-group space.

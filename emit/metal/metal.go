@@ -52,7 +52,11 @@ func Emit(m ir.Module) (string, error) {
 	fmt.Fprintf(&b, "  out.position = %s;\n  return out;\n}\n\n", ir.Print(m.Vertex.Output, vs))
 
 	fs := newScope(m, true)
-	b.WriteString("fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {\n")
+	fragSig := "fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]"
+	for i, t := range m.Textures {
+		fragSig += fmt.Sprintf(", texture2d<float> %s [[texture(%d)]], sampler %sSampler [[sampler(%d)]]", t.Name, i, t.Name, i)
+	}
+	b.WriteString(fragSig + ") {\n")
 	for _, s := range m.Fragment.Body {
 		fmt.Fprintf(&b, "  %s %s = %s;\n", typeName(s.Type), s.Target, ir.Print(s.Value, fs))
 	}
@@ -92,6 +96,12 @@ func (s scope) Ref(name string) string {
 	default:
 		return name
 	}
+}
+
+// Sample uses Metal's texture.sample(sampler, uv); the sampler is a separate
+// function argument bound at [[sampler(i)]].
+func (s scope) Sample(tex, uv string) string {
+	return tex + ".sample(" + tex + "Sampler, " + uv + ")"
 }
 
 func typeName(t ir.Type) string {

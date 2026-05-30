@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>selena · DirectionalDiffuse</title>
+<title>selena · Textured</title>
 <style>
   :root { color-scheme: dark; }
   body { margin: 0; background: #0b0b12; color: #e7e7f0;
@@ -27,7 +27,7 @@
 </head>
 <body>
 <header>
-  <h1>🌒 selena · DirectionalDiffuse</h1>
+  <h1>🌒 selena · Textured</h1>
   <p class="sub">High-level material &rarr; lowered IR &rarr; emitted shaders <b>and</b> a generated
   binding descriptor. Uniforms are packed and textures bound straight from the descriptor.</p>
 </header>
@@ -55,25 +55,30 @@ falls back to software WebGPU and to WebGL1 automatically.</p>
 <script type="x-shader/wgsl" id="src-wgsl">struct Uniforms {
   mvp : mat4x4<f32>,
   normalMatrix : mat3x3<f32>,
-  baseColor : vec3<f32>,
   light_ambient : f32,
   light_dir : vec3<f32>,
 };
 @group(0) @binding(0) var<uniform> u : Uniforms;
 
+@group(0) @binding(1) var albedo : texture_2d<f32>;
+@group(0) @binding(2) var albedoSampler : sampler;
+
 struct VertexInput {
   @location(0) position : vec3<f32>,
   @location(1) normal : vec3<f32>,
+  @location(2) uv : vec2<f32>,
 };
 
 struct VertexOutput {
   @builtin(position) position : vec4<f32>,
-  @location(0) vWorldNormal : vec3<f32>,
+  @location(0) vUv : vec2<f32>,
+  @location(1) vWorldNormal : vec3<f32>,
 };
 
 @vertex
 fn vertexMain(in : VertexInput) -> VertexOutput {
   var out : VertexOutput;
+  out.vUv = in.uv;
   out.vWorldNormal = normalize((u.normalMatrix * in.normal));
   out.position = (u.mvp * vec4<f32>(in.position, 1.0));
   return out;
@@ -81,20 +86,22 @@ fn vertexMain(in : VertexInput) -> VertexOutput {
 
 @fragment
 fn fragmentMain(in : VertexOutput) -> @location(0) vec4<f32> {
-  let n = normalize(in.vWorldNormal);
-  return vec4<f32>((u.baseColor * (u.light_ambient + max(dot(n, u.light_dir), 0.0))), 1.0);
+  let c = textureSample(albedo, albedoSampler, in.vUv).rgb;
+  return vec4<f32>((c * (u.light_ambient + max(dot(normalize(in.vWorldNormal), u.light_dir), 0.0))), 1.0);
 }</script>
 <script type="x-shader/glsl" id="src-glesv">#version 300 es
 in vec3 position;
 in vec3 normal;
+in vec2 uv;
 uniform mat4 mvp;
 uniform mat3 normalMatrix;
-uniform vec3 baseColor;
 uniform float light_ambient;
 uniform vec3 light_dir;
+out vec2 vUv;
 out vec3 vWorldNormal;
 
 void main() {
+  vUv = uv;
   vWorldNormal = normalize((normalMatrix * normal));
   gl_Position = (mvp * vec4(position, 1.0));
 }</script>
@@ -102,43 +109,47 @@ void main() {
 precision mediump float;
 uniform mat4 mvp;
 uniform mat3 normalMatrix;
-uniform vec3 baseColor;
 uniform float light_ambient;
 uniform vec3 light_dir;
+in vec2 vUv;
 in vec3 vWorldNormal;
+uniform sampler2D albedo;
 out vec4 fragColor;
 
 void main() {
-  vec3 n = normalize(vWorldNormal);
-  fragColor = vec4((baseColor * (light_ambient + max(dot(n, light_dir), 0.0))), 1.0);
+  vec3 c = texture(albedo, vUv).rgb;
+  fragColor = vec4((c * (light_ambient + max(dot(normalize(vWorldNormal), light_dir), 0.0))), 1.0);
 }</script>
 <script type="x-shader/glsl" id="src-glslv">attribute vec3 position;
 attribute vec3 normal;
+attribute vec2 uv;
 uniform mat4 mvp;
 uniform mat3 normalMatrix;
-uniform vec3 baseColor;
 uniform float light_ambient;
 uniform vec3 light_dir;
+varying vec2 vUv;
 varying vec3 vWorldNormal;
 
 void main() {
+  vUv = uv;
   vWorldNormal = normalize((normalMatrix * normal));
   gl_Position = (mvp * vec4(position, 1.0));
 }</script>
 <script type="x-shader/glsl" id="src-glslf">precision mediump float;
 uniform mat4 mvp;
 uniform mat3 normalMatrix;
-uniform vec3 baseColor;
 uniform float light_ambient;
 uniform vec3 light_dir;
+varying vec2 vUv;
 varying vec3 vWorldNormal;
+uniform sampler2D albedo;
 
 void main() {
-  vec3 n = normalize(vWorldNormal);
-  gl_FragColor = vec4((baseColor * (light_ambient + max(dot(n, light_dir), 0.0))), 1.0);
+  vec3 c = texture2D(albedo, vUv).rgb;
+  gl_FragColor = vec4((c * (light_ambient + max(dot(normalize(vWorldNormal), light_dir), 0.0))), 1.0);
 }</script>
 <script type="application/json" id="src-desc">{
-  "material": "DirectionalDiffuse",
+  "material": "Textured",
   "uniformBlock": {
     "size": 144,
     "fields": [
@@ -155,15 +166,9 @@ void main() {
         "size": 48
       },
       {
-        "name": "baseColor",
-        "type": "vec3",
-        "offset": 112,
-        "size": 12
-      },
-      {
         "name": "light_ambient",
         "type": "float",
-        "offset": 124,
+        "offset": 112,
         "size": 4
       },
       {
@@ -184,9 +189,31 @@ void main() {
       "name": "normal",
       "location": 1,
       "type": "vec3"
+    },
+    {
+      "name": "uv",
+      "location": 2,
+      "type": "vec2"
     }
   ],
-  "textures": [],
+  "textures": [
+    {
+      "name": "albedo",
+      "wgsl": {
+        "group": 0,
+        "textureBinding": 1,
+        "samplerBinding": 2
+      },
+      "gl": {
+        "uniform": "albedo",
+        "unit": 0
+      },
+      "metal": {
+        "texture": 0,
+        "sampler": 0
+      }
+    }
+  ],
   "wgsl": {
     "group": 0,
     "binding": 0

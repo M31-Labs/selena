@@ -20,6 +20,16 @@ func Emit(m ir.Module) (string, error) {
 		b.WriteString("};\n@group(0) @binding(0) var<uniform> u : Uniforms;\n\n")
 	}
 
+	// Textures: WGSL binds the texture and its sampler separately. Convention:
+	// uniform block is binding 0, then texture i takes 1+2i and its sampler 2+2i.
+	for i, t := range m.Textures {
+		fmt.Fprintf(&b, "@group(0) @binding(%d) var %s : texture_2d<f32>;\n", 1+2*i, t.Name)
+		fmt.Fprintf(&b, "@group(0) @binding(%d) var %sSampler : sampler;\n", 2+2*i, t.Name)
+	}
+	if len(m.Textures) > 0 {
+		b.WriteString("\n")
+	}
+
 	b.WriteString("struct VertexInput {\n")
 	for i, a := range m.Attributes {
 		fmt.Fprintf(&b, "  @location(%d) %s : %s,\n", i, a.Name, typeName(a.Type))
@@ -86,6 +96,10 @@ func (s scope) Ref(name string) string {
 	default:
 		return name // stage-local
 	}
+}
+
+func (s scope) Sample(tex, uv string) string {
+	return "textureSample(" + tex + ", " + tex + "Sampler, " + uv + ")"
 }
 
 func typeName(t ir.Type) string {

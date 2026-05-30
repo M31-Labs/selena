@@ -49,6 +49,9 @@ func emitFragment(m ir.Module) string {
 	for _, v := range m.Varyings {
 		fmt.Fprintf(&b, "in %s %s;\n", typeName(v.Type), v.Name)
 	}
+	for _, t := range m.Textures {
+		fmt.Fprintf(&b, "uniform sampler2D %s;\n", t.Name)
+	}
 	b.WriteString("out vec4 fragColor;\n\nvoid main() {\n")
 	for _, s := range m.Fragment.Body {
 		fmt.Fprintf(&b, "  %s %s = %s;\n", typeName(s.Type), s.Target, ir.Print(s.Value, bare{}))
@@ -62,6 +65,9 @@ type bare struct{}
 
 func (bare) TypeName(t ir.Type) string { return typeName(t) }
 func (bare) Ref(name string) string    { return name }
+
+// Sample uses GLSL ES 3.00's texture (combined sampler2D).
+func (bare) Sample(tex, uv string) string { return "texture(" + tex + ", " + uv + ")" }
 
 func typeName(t ir.Type) string {
 	switch t {

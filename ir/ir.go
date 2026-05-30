@@ -16,14 +16,23 @@ const (
 )
 
 // Module is a complete material shader: a declared interface (uniforms,
-// per-vertex attributes, vertex->fragment varyings) plus the two stages.
+// per-vertex attributes, vertex->fragment varyings, sampled textures) plus the
+// two stages.
 type Module struct {
 	Name       string
 	Uniforms   []Binding // shared constants (mvp, color, light, ...)
 	Attributes []Binding // per-vertex inputs (position, normal, uv, ...)
 	Varyings   []Binding // interpolated vertex -> fragment values
+	Textures   []Texture // sampled textures (fragment stage)
 	Vertex     Stage
 	Fragment   Stage
+}
+
+// Texture is a sampled texture used by the fragment stage. Backends bind it
+// differently (WGSL/Metal split texture + sampler; GLSL/GLES use a combined
+// sampler2D) — the emitters and the binding descriptor encode that.
+type Texture struct {
+	Name string
 }
 
 // Binding is a named, typed interface slot.
@@ -86,12 +95,20 @@ type Swizzle struct {
 	Field string
 }
 
+// Sample samples Texture at UV. Each backend renders it differently (see
+// Dialect.Sample); the named texture must be declared in Module.Textures.
+type Sample struct {
+	Texture string
+	UV      Expr
+}
+
 func (Ref) isExpr()       {}
 func (Lit) isExpr()       {}
 func (Construct) isExpr() {}
 func (Call) isExpr()      {}
 func (Binary) isExpr()    {}
 func (Swizzle) isExpr()   {}
+func (Sample) isExpr()    {}
 
 // Dialect spells the backend-specific parts of expression printing: how a type
 // name renders (vec4 vs vec4<f32>) and how a reference renders in the current
@@ -102,6 +119,10 @@ func (Swizzle) isExpr()   {}
 type Dialect interface {
 	TypeName(Type) string
 	Ref(name string) string
+	// Sample renders a texture sample given the texture name and the
+	// already-rendered UV expression (WGSL: textureSample(t, tSampler, uv);
+	// GLSL ES3: texture(t, uv); Metal: t.sample(tSampler, uv)).
+	Sample(tex, uv string) string
 }
 
 // Print renders e using d for the backend-specific spellings.
@@ -119,6 +140,8 @@ func Print(e Expr, d Dialect) string {
 		return "(" + Print(x.L, d) + " " + x.Op + " " + Print(x.R, d) + ")"
 	case Swizzle:
 		return Print(x.E, d) + "." + x.Field
+	case Sample:
+		return d.Sample(x.Texture, Print(x.UV, d))
 	default:
 		return "/* unknown expr */"
 	}

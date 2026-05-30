@@ -82,6 +82,7 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 	addUniform("normalMatrix", ir.Mat3)
 
 	uniformOf := map[string]string{} // "baseColor" or "light.dir" -> uniform name
+	var textures []string            // texture params, in declaration order
 	for _, p := range m.Params {
 		switch p.Type {
 		case hir.Sun:
@@ -91,7 +92,7 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 				uniformOf[p.Name+"."+f] = un
 			}
 		case hir.Texture2D:
-			return fail("textures are not supported until M2 (param %q)", p.Name)
+			textures = append(textures, p.Name)
 		default:
 			t, ok := hirToIRType(p.Type)
 			if !ok {
@@ -181,11 +182,17 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 	vertexOut := ir.Binary{Op: "*", L: ir.Ref{Name: "mvp"},
 		R: ir.Construct{Type: ir.Vec4, Args: []ir.Expr{ir.Ref{Name: "position"}, ir.Lit{Value: 1.0}}}}
 
+	irTextures := make([]ir.Texture, len(textures))
+	for i, t := range textures {
+		irTextures[i] = ir.Texture{Name: t}
+	}
+
 	mod := ir.Module{
 		Name:       m.Name,
 		Uniforms:   toBindings(uniforms),
 		Attributes: attributes,
 		Varyings:   varyings,
+		Textures:   irTextures,
 		Vertex:     ir.Stage{Body: vertexBody, Output: vertexOut},
 		Fragment:   ir.Stage{Body: fragBody, Output: fragOut},
 	}
@@ -193,9 +200,12 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 		Material:     m.Name,
 		UniformBlock: bindings.ComputeUniformBlock(uniforms),
 		Attributes:   toAttrs(attributes),
-		Textures:     []bindings.Texture{},
+		Textures:     bindings.ComputeTextures(textures),
 		WGSL:         bindings.WGSLBinding{Group: 0, Binding: 0},
 		Metal:        bindings.MetalBinding{Buffer: 0},
+	}
+	if layout.Textures == nil {
+		layout.Textures = []bindings.Texture{}
 	}
 	return mod, layout, nil
 }
@@ -219,26 +229,43 @@ func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
 		}
 		return ir.Ref{Name: x.Name}, nil // stage-local
 	case hir.Member:
-		base, ok := x.E.(hir.Ref)
-		if !ok {
-			return nil, fmt.Errorf("only simple member access (a.b) is supported")
-		}
-		if base.Name == r.geo {
-			vn, ok := r.varyingOf[x.Field]
-			if !ok {
-				return nil, fmt.Errorf("geo.%s is not available in the surface", x.Field)
+		if base, ok := x.E.(hir.Ref); ok {
+			if base.Name == r.geo {
+				vn, ok := r.varyingOf[x.Field]
+				if !ok {
+					return nil, fmt.Errorf("geo.%s is not available in the surface", x.Field)
+				}
+				return ir.Ref{Name: vn}, nil
 			}
-			return ir.Ref{Name: vn}, nil
-		}
-		if r.paramKind[base.Name] == hir.Sun {
-			un, ok := r.uniformOf[base.Name+"."+x.Field]
-			if !ok {
-				return nil, fmt.Errorf("Sun has no field %q", x.Field)
+			if r.paramKind[base.Name] == hir.Sun {
+				un, ok := r.uniformOf[base.Name+"."+x.Field]
+				if !ok {
+					return nil, fmt.Errorf("Sun has no field %q", x.Field)
+				}
+				return ir.Ref{Name: un}, nil
 			}
-			return ir.Ref{Name: un}, nil
 		}
-		return nil, fmt.Errorf("cannot access .%s on %q", x.Field, base.Name)
+		// otherwise a vector swizzle (.rgb, .xyz, .x)
+		inner, err := r.expr(x.E)
+		if err != nil {
+			return nil, err
+		}
+		return ir.Swizzle{E: inner, Field: x.Field}, nil
 	case hir.Call:
+		if x.Func == "sample" {
+			if len(x.Args) != 2 {
+				return nil, fmt.Errorf("sample(texture, uv) takes 2 arguments")
+			}
+			texRef, ok := x.Args[0].(hir.Ref)
+			if !ok || r.paramKind[texRef.Name] != hir.Texture2D {
+				return nil, fmt.Errorf("sample: first argument must be a texture2d param")
+			}
+			uv, err := r.expr(x.Args[1])
+			if err != nil {
+				return nil, err
+			}
+			return ir.Sample{Texture: texRef.Name, UV: uv}, nil
+		}
 		args, err := r.args(x.Args)
 		if err != nil {
 			return nil, err
@@ -301,26 +328,24 @@ func (t *typer) typeOf(e hir.Expr) (ir.Type, error) {
 		}
 		return "", fmt.Errorf("unknown name %q", x.Name)
 	case hir.Member:
-		base, ok := x.E.(hir.Ref)
-		if !ok {
-			return "", fmt.Errorf("only simple member access is supported")
-		}
-		if base.Name == t.geo {
-			if cg, ok := geoComputed[x.Field]; ok {
-				return cg.typ, nil
+		if base, ok := x.E.(hir.Ref); ok {
+			if base.Name == t.geo {
+				if cg, ok := geoComputed[x.Field]; ok {
+					return cg.typ, nil
+				}
+				if at, ok := geoAttr[x.Field]; ok {
+					return at, nil
+				}
+				return "", fmt.Errorf("unknown geometry field geo.%s", x.Field)
 			}
-			if at, ok := geoAttr[x.Field]; ok {
-				return at, nil
+			if t.paramKind[base.Name] == hir.Sun {
+				if ft, ok := sunFields[x.Field]; ok {
+					return ft, nil
+				}
+				return "", fmt.Errorf("Sun has no field %q", x.Field)
 			}
-			return "", fmt.Errorf("unknown geometry field geo.%s", x.Field)
 		}
-		if t.paramKind[base.Name] == hir.Sun {
-			if ft, ok := sunFields[x.Field]; ok {
-				return ft, nil
-			}
-			return "", fmt.Errorf("Sun has no field %q", x.Field)
-		}
-		return "", fmt.Errorf("cannot access .%s on %q", x.Field, base.Name)
+		return swizzleType(x.Field) // .rgb, .xyz, .x …
 	case hir.Call:
 		return t.callType(x)
 	case hir.Binary:
@@ -333,6 +358,8 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 	switch c.Func {
 	case "dot", "length", "distance":
 		return ir.Float, nil
+	case "sample":
+		return ir.Vec4, nil
 	case "rgb":
 		if len(c.Args) == 4 {
 			return ir.Vec4, nil
@@ -433,4 +460,26 @@ func title(s string) string {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// swizzleType infers the result type of a component swizzle (.rgb, .xy, .x).
+func swizzleType(field string) (ir.Type, error) {
+	for _, c := range field {
+		switch c {
+		case 'r', 'g', 'b', 'a', 'x', 'y', 'z', 'w':
+		default:
+			return "", fmt.Errorf("invalid swizzle .%s", field)
+		}
+	}
+	switch len(field) {
+	case 1:
+		return ir.Float, nil
+	case 2:
+		return ir.Vec2, nil
+	case 3:
+		return ir.Vec3, nil
+	case 4:
+		return ir.Vec4, nil
+	}
+	return "", fmt.Errorf("invalid swizzle .%s", field)
 }

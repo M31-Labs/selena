@@ -45,3 +45,49 @@ func DirectionalDiffuse() Material {
 		},
 	}
 }
+
+// Textured lights a sampled albedo texture with one directional light. It is the
+// M2 sample that exercises the texture binding model (and swizzle + uv interpolant).
+//
+//	material Textured {
+//	    param albedo : texture2d
+//	    param light  : Sun
+//	    surface(geo) -> color {
+//	        let c = sample(albedo, geo.uv).rgb
+//	        return c * (light.ambient + max(dot(normalize(geo.worldNormal), light.dir), 0))
+//	    }
+//	}
+func Textured() Material {
+	return Material{
+		Name: "Textured",
+		Params: []Param{
+			{Name: "albedo", Type: Texture2D},
+			{Name: "light", Type: Sun},
+		},
+		Surface: Func{
+			Geo: "geo",
+			Body: []Let{
+				{Name: "c", Value: Member{
+					E: Call{Func: "sample", Args: []Expr{
+						Ref{Name: "albedo"},
+						Member{E: Ref{Name: "geo"}, Field: "uv"},
+					}},
+					Field: "rgb",
+				}},
+			},
+			Result: Binary{Op: "*",
+				L: Ref{Name: "c"},
+				R: Binary{Op: "+",
+					L: Member{E: Ref{Name: "light"}, Field: "ambient"},
+					R: Call{Func: "max", Args: []Expr{
+						Call{Func: "dot", Args: []Expr{
+							Call{Func: "normalize", Args: []Expr{Member{E: Ref{Name: "geo"}, Field: "worldNormal"}}},
+							Member{E: Ref{Name: "light"}, Field: "dir"},
+						}},
+						Lit{Value: 0.0},
+					}},
+				},
+			},
+		},
+	}
+}

@@ -24,7 +24,7 @@ const usage = `selena - shader authoring for the GoSX ecosystem
 
 usage:
   selena emit <target> <file.sel>   emit a shader (target: wgsl|glsl|metal|gles)
-  selena demo <out.html>            write a WebGPU+WebGL2 render proof harness
+  selena demo <out.html> [material] render harness (material: directional-diffuse|textured)
   selena check <file.sel>           parse + type-check only
   selena help                       show this help
 
@@ -59,10 +59,14 @@ func run(args []string) error {
 		}
 		return emit(args[1], args[2])
 	case "demo":
-		if len(args) != 2 {
-			return fmt.Errorf("usage: selena demo <out.html>")
+		if len(args) < 2 || len(args) > 3 {
+			return fmt.Errorf("usage: selena demo <out.html> [material]  (material: directional-diffuse|textured)")
 		}
-		return runDemo(args[1])
+		mat := ""
+		if len(args) == 3 {
+			mat = args[2]
+		}
+		return runDemo(args[1], mat)
 	case "check":
 		if len(args) != 2 {
 			return fmt.Errorf("usage: selena check <file.sel>")
