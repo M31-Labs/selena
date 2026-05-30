@@ -54,6 +54,42 @@ func Material(src []byte) (hir.Material, error) {
 	return hir.Material{}, fmt.Errorf("no material declared")
 }
 
+// Program parses src into all of its functions and materials.
+func Program(src []byte) (hir.Program, error) {
+	l, err := language()
+	if err != nil {
+		return hir.Program{}, fmt.Errorf("generate selena language: %w", err)
+	}
+	tree, err := gts.NewParser(l).Parse(src)
+	if err != nil {
+		return hir.Program{}, fmt.Errorf("parse: %w", err)
+	}
+	root := tree.RootNode()
+	if root.HasError() {
+		return hir.Program{}, fmt.Errorf("syntax error in .sel source")
+	}
+	w := &walker{lang: l, src: src}
+	var p hir.Program
+	for i := 0; i < root.NamedChildCount(); i++ {
+		c := root.NamedChild(i)
+		switch w.typ(c) {
+		case "material":
+			m, err := w.material(c)
+			if err != nil {
+				return p, err
+			}
+			p.Materials = append(p.Materials, m)
+		case "fn_decl":
+			fd, err := w.funcDecl(c)
+			if err != nil {
+				return p, err
+			}
+			p.Funcs = append(p.Funcs, fd)
+		}
+	}
+	return p, nil
+}
+
 type walker struct {
 	lang *gts.Language
 	src  []byte
@@ -119,6 +155,55 @@ func (w *walker) fn(n *gts.Node) (hir.Func, error) {
 		return f, fmt.Errorf("surface has no return")
 	}
 	return f, nil
+}
+
+func (w *walker) funcDecl(n *gts.Node) (hir.FuncDecl, error) {
+	fd := hir.FuncDecl{
+		Name:    w.text(w.field(n, "name")),
+		Returns: hir.Type(w.text(w.field(n, "returns"))),
+	}
+	for i := 0; i < n.NamedChildCount(); i++ {
+		c := n.NamedChild(i)
+		if w.typ(c) != "fn_params" {
+			continue
+		}
+		for j := 0; j < c.NamedChildCount(); j++ {
+			p := c.NamedChild(j)
+			if w.typ(p) != "fn_param" {
+				continue
+			}
+			fd.Params = append(fd.Params, hir.Param{
+				Name: w.text(w.field(p, "name")),
+				Type: hir.Type(w.text(w.field(p, "type"))),
+			})
+		}
+	}
+	body := w.field(n, "body")
+	for i := 0; i < body.NamedChildCount(); i++ {
+		st := body.NamedChild(i)
+		if w.typ(st) != "statement" {
+			continue
+		}
+		s := st.NamedChild(0)
+		switch w.typ(s) {
+		case "let_stmt":
+			e, err := w.expr(w.field(s, "value"))
+			if err != nil {
+				return fd, err
+			}
+			fd.Body = append(fd.Body, hir.Let{Name: w.text(w.field(s, "name")), Value: e})
+		case "return_stmt":
+			e, err := w.expr(w.field(s, "value"))
+			if err != nil {
+				return fd, err
+			}
+			fd.Result = e
+		}
+	}
+	if fd.Result == nil {
+		return fd, fmt.Errorf("fn %q has no return", fd.Name)
+	}
+	return fd, nil
 }
 
 func (w *walker) expr(n *gts.Node) (hir.Expr, error) {

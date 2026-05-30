@@ -22,6 +22,23 @@ const (
 	Texture2D Type = "texture2d" // M2
 )
 
+// Program is the whole parsed unit: reusable functions plus materials.
+type Program struct {
+	Funcs     []FuncDecl
+	Materials []Material
+}
+
+// FuncDecl is a reusable top-level function: fn name(p: T, …) -> R { … }. It is
+// inlined at call sites during lowering (params and locals substituted), so it
+// composes without runtime cost and needs no backend function support.
+type FuncDecl struct {
+	Name    string
+	Params  []Param // typed parameters
+	Body    []Let
+	Result  Expr
+	Returns Type
+}
+
 // Material is one authored material.
 type Material struct {
 	Name    string

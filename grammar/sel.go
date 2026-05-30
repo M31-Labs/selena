@@ -23,7 +23,23 @@ func SelenaGrammar() *grammargen.Grammar {
 
 	g := grammargen.NewGrammar("selena")
 
-	g.Define("source_file", grammargen.Repeat(sym("material")))
+	g.Define("source_file", grammargen.Repeat(grammargen.Choice(sym("material"), sym("fn_decl"))))
+
+	g.Define("fn_decl", seq(
+		s("fn"),
+		field("name", sym("identifier")),
+		s("("),
+		grammargen.Optional(sym("fn_params")),
+		s(")"), s("->"),
+		field("returns", sym("identifier")),
+		field("body", sym("block")),
+	))
+	g.Define("fn_params", seq(sym("fn_param"), grammargen.Repeat(seq(s(","), sym("fn_param")))))
+	g.Define("fn_param", seq(
+		field("name", sym("identifier")),
+		s(":"),
+		field("type", sym("identifier")),
+	))
 
 	g.Define("material", seq(
 		s("material"),

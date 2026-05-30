@@ -85,3 +85,35 @@ func TestParseExampleFiles(t *testing.T) {
 		}
 	}
 }
+
+// TestParseComposedFunc proves composition: a user function inlines to the
+// exact same shader as the hand-written DirectionalDiffuse.
+func TestParseComposedFunc(t *testing.T) {
+	p, err := Program([]byte(`
+fn diffuse(n: vec3, dir: vec3, ambient: float) -> float {
+    return ambient + max(dot(n, dir), 0.0)
+}
+material Composed {
+    param baseColor : color
+    param light : Sun
+    surface(geo) -> color {
+        let n = normalize(geo.worldNormal)
+        return baseColor * diffuse(n, light.dir, light.ambient)
+    }
+}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Funcs) != 1 || len(p.Materials) != 1 {
+		t.Fatalf("program = %d funcs, %d materials", len(p.Funcs), len(p.Materials))
+	}
+	mod, _, err := lower.LowerWith(p.Materials[0], p.Funcs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, _ := wgsl.Emit(mod)
+	want := "return vec4<f32>((u.baseColor * (u.light_ambient + max(dot(n, u.light_dir), 0.0))), 1.0);"
+	if !strings.Contains(src, want) {
+		t.Errorf("composed fn did not inline to the expected shader\n--- got ---\n%s", src)
+	}
+}

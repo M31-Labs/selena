@@ -1,0 +1,13 @@
+fn diffuse(n: vec3, dir: vec3, ambient: float) -> float {
+    return ambient + max(dot(n, dir), 0.0)
+}
+
+material Composed {
+    param baseColor : color
+    param light     : Sun
+
+    surface(geo) -> color {
+        let n = normalize(geo.worldNormal)
+        return baseColor * diffuse(n, light.dir, light.ambient)
+    }
+}

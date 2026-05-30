@@ -80,28 +80,36 @@ func run(args []string) error {
 	}
 }
 
-// resolveMaterial resolves a built-in material name or parses a .sel file.
-func resolveMaterial(nameOrFile string) (hir.Material, error) {
+// resolveProgram resolves a built-in material name or parses a .sel file,
+// returning the (first) material and any reusable functions it declares.
+func resolveProgram(nameOrFile string) (hir.Material, []hir.FuncDecl, error) {
 	switch nameOrFile {
 	case "sample", "directional-diffuse":
-		return hir.DirectionalDiffuse(), nil
+		return hir.DirectionalDiffuse(), nil, nil
 	case "textured":
-		return hir.Textured(), nil
+		return hir.Textured(), nil, nil
 	default:
 		src, err := os.ReadFile(nameOrFile)
 		if err != nil {
-			return hir.Material{}, err
+			return hir.Material{}, nil, err
 		}
-		return parse.Material(src)
+		p, err := parse.Program(src)
+		if err != nil {
+			return hir.Material{}, nil, err
+		}
+		if len(p.Materials) == 0 {
+			return hir.Material{}, nil, fmt.Errorf("%s: no material declared", nameOrFile)
+		}
+		return p.Materials[0], p.Funcs, nil
 	}
 }
 
 func emit(target, file string) error {
-	m, err := resolveMaterial(file)
+	m, funcs, err := resolveProgram(file)
 	if err != nil {
 		return err
 	}
-	mod, _, err := lower.Lower(m)
+	mod, _, err := lower.LowerWith(m, funcs)
 	if err != nil {
 		return err
 	}
@@ -135,11 +143,11 @@ func emit(target, file string) error {
 }
 
 func check(file string) error {
-	m, err := resolveMaterial(file)
+	m, funcs, err := resolveProgram(file)
 	if err != nil {
 		return err
 	}
-	mod, layout, err := lower.Lower(m)
+	mod, layout, err := lower.LowerWith(m, funcs)
 	if err != nil {
 		return err
 	}

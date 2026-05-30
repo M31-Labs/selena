@@ -56,6 +56,16 @@ func hirToIRType(t hir.Type) (ir.Type, bool) {
 	return "", false
 }
 
+// LowerWith inlines the given user functions into the material, then lowers it.
+// Materials with no user functions can call Lower directly.
+func LowerWith(m hir.Material, funcs []hir.FuncDecl) (ir.Module, bindings.Layout, error) {
+	inlined, err := inlineFuncs(m, funcs)
+	if err != nil {
+		return ir.Module{}, bindings.Layout{}, err
+	}
+	return Lower(inlined)
+}
+
 // Lower compiles a high-level material into the low-level ir.Module plus the
 // host binding layout. This is where the pains disappear: bindings are
 // allocated, the std140 layout is computed, interpolants are inferred and the
