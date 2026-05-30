@@ -13,7 +13,9 @@ import (
 	"fmt"
 	"os"
 
+	"m31labs.dev/selena/emit/gles"
 	"m31labs.dev/selena/emit/glsl"
+	"m31labs.dev/selena/emit/metal"
 	"m31labs.dev/selena/emit/wgsl"
 	"m31labs.dev/selena/ir"
 )
@@ -85,8 +87,20 @@ func emit(target, file string) error {
 			return err
 		}
 		fmt.Printf("// --- vertex ---\n%s\n// --- fragment ---\n%s", vert, frag)
+	case "metal":
+		src, err := metal.Emit(m)
+		if err != nil {
+			return err
+		}
+		fmt.Print(src)
+	case "gles":
+		vert, frag, err := gles.Emit(m)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("// --- vertex ---\n%s\n// --- fragment ---\n%s", vert, frag)
 	default:
-		return fmt.Errorf("emit %s: emitter not implemented yet (have: wgsl, glsl)", target)
+		return fmt.Errorf("emit %s: emitter not implemented", target)
 	}
 	return nil
 }
