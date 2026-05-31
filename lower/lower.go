@@ -82,18 +82,29 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 
 	paramKind := map[string]hir.Type{}
 	for _, p := range m.Params {
+		if _, ok := paramKind[p.Name]; ok {
+			return fail("duplicate param %q", p.Name)
+		}
 		paramKind[p.Name] = p.Type
 	}
 
 	// --- ordered uniforms: implicit Transform first, then params/records ---
 	var uniforms []bindings.NamedType
 	uniType := map[string]ir.Type{}
-	addUniform := func(name string, t ir.Type) {
+	addUniform := func(name string, t ir.Type) error {
+		if _, ok := uniType[name]; ok {
+			return fmt.Errorf("uniform %q is declared more than once", name)
+		}
 		uniforms = append(uniforms, bindings.NamedType{Name: name, Type: t})
 		uniType[name] = t
+		return nil
 	}
-	addUniform("mvp", ir.Mat4)
-	addUniform("normalMatrix", ir.Mat3)
+	if err := addUniform("mvp", ir.Mat4); err != nil {
+		return fail("%w", err)
+	}
+	if err := addUniform("normalMatrix", ir.Mat3); err != nil {
+		return fail("%w", err)
+	}
 
 	uniformOf := map[string]string{} // "baseColor" or "light.dir" -> uniform name
 	var textures []string            // texture params, in declaration order
@@ -102,7 +113,9 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 		case hir.Sun:
 			for _, f := range sortedKeys(sunFields) {
 				un := p.Name + "_" + f
-				addUniform(un, sunFields[f])
+				if err := addUniform(un, sunFields[f]); err != nil {
+					return fail("param %q: %w", p.Name, err)
+				}
 				uniformOf[p.Name+"."+f] = un
 			}
 		case hir.Texture2D:
@@ -112,7 +125,9 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 			if !ok {
 				return fail("param %q: unsupported type %q", p.Name, p.Type)
 			}
-			addUniform(p.Name, t)
+			if err := addUniform(p.Name, t); err != nil {
+				return fail("param %q: %w", p.Name, err)
+			}
 			uniformOf[p.Name] = p.Name
 		}
 	}
@@ -155,13 +170,24 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 			attributes = append(attributes, ir.Binding{Name: a, Type: geoAttr[a]})
 		}
 	}
+	reserved, err := interfaceNames(uniforms, textures, attributes, varyings)
+	if err != nil {
+		return fail("%w", err)
+	}
 
 	rs := &resolver{paramKind: paramKind, uniformOf: uniformOf, varyingOf: varyingOf, geo: m.Surface.Geo}
 	tp := &typer{paramKind: paramKind, geo: m.Surface.Geo, locals: map[string]ir.Type{}}
 
 	// --- fragment body: type each local, then lower it ---
 	var fragBody []ir.Stmt
+	seenLocals := map[string]bool{}
 	for _, l := range m.Surface.Body {
+		if kind, ok := reserved[l.Name]; ok {
+			return fail("surface local %q conflicts with %s", l.Name, kind)
+		}
+		if seenLocals[l.Name] {
+			return fail("duplicate surface local %q", l.Name)
+		}
 		t, err := tp.typeOf(l.Value)
 		if err != nil {
 			return fail("surface local %q: %w", l.Name, err)
@@ -170,6 +196,7 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 		if err != nil {
 			return fail("surface local %q: %w", l.Name, err)
 		}
+		seenLocals[l.Name] = true
 		tp.locals[l.Name] = t
 		fragBody = append(fragBody, ir.Stmt{Target: l.Name, Type: t, Value: ve})
 	}
@@ -359,7 +386,11 @@ func (t *typer) typeOf(e hir.Expr) (ir.Type, error) {
 				return "", fmt.Errorf("Sun has no field %q", x.Field)
 			}
 		}
-		return swizzleType(x.Field) // .rgb, .xyz, .x …
+		bt, err := t.typeOf(x.E)
+		if err != nil {
+			return "", err
+		}
+		return swizzleType(bt, x.Field) // .rgb, .xyz, .x …
 	case hir.Call:
 		return t.callType(x)
 	case hir.Binary:
@@ -370,15 +401,94 @@ func (t *typer) typeOf(e hir.Expr) (ir.Type, error) {
 
 func (t *typer) callType(c hir.Call) (ir.Type, error) {
 	switch c.Func {
-	case "dot", "length", "distance":
+	case "dot":
+		if len(c.Args) != 2 {
+			return "", fmt.Errorf("dot expects 2 arguments, got %d", len(c.Args))
+		}
+		a, err := t.typeOf(c.Args[0])
+		if err != nil {
+			return "", err
+		}
+		b, err := t.typeOf(c.Args[1])
+		if err != nil {
+			return "", err
+		}
+		if !isVector(a) || a != b {
+			return "", fmt.Errorf("dot arguments must be matching vectors, got %s and %s", a, b)
+		}
+		return ir.Float, nil
+	case "length":
+		if len(c.Args) != 1 {
+			return "", fmt.Errorf("length expects 1 argument, got %d", len(c.Args))
+		}
+		a, err := t.typeOf(c.Args[0])
+		if err != nil {
+			return "", err
+		}
+		if !isVector(a) {
+			return "", fmt.Errorf("length argument must be a vector, got %s", a)
+		}
+		return ir.Float, nil
+	case "distance":
+		if len(c.Args) != 2 {
+			return "", fmt.Errorf("distance expects 2 arguments, got %d", len(c.Args))
+		}
+		a, err := t.typeOf(c.Args[0])
+		if err != nil {
+			return "", err
+		}
+		b, err := t.typeOf(c.Args[1])
+		if err != nil {
+			return "", err
+		}
+		if !isVector(a) || a != b {
+			return "", fmt.Errorf("distance arguments must be matching vectors, got %s and %s", a, b)
+		}
 		return ir.Float, nil
 	case "sample":
+		if len(c.Args) != 2 {
+			return "", fmt.Errorf("sample(texture, uv) takes 2 arguments")
+		}
+		tex, ok := c.Args[0].(hir.Ref)
+		if !ok || t.paramKind[tex.Name] != hir.Texture2D {
+			return "", fmt.Errorf("sample: first argument must be a texture2d param")
+		}
+		uv, err := t.typeOf(c.Args[1])
+		if err != nil {
+			return "", err
+		}
+		if uv != ir.Vec2 {
+			return "", fmt.Errorf("sample: second argument must be vec2 uv, got %s", uv)
+		}
 		return ir.Vec4, nil
 	case "rgb":
+		if len(c.Args) != 3 && len(c.Args) != 4 {
+			return "", fmt.Errorf("rgb expects 3 or 4 arguments, got %d", len(c.Args))
+		}
+		for i, a := range c.Args {
+			at, err := t.typeOf(a)
+			if err != nil {
+				return "", err
+			}
+			if at != ir.Float {
+				return "", fmt.Errorf("rgb argument %d must be float, got %s", i+1, at)
+			}
+		}
 		if len(c.Args) == 4 {
 			return ir.Vec4, nil
 		}
 		return ir.Vec3, nil
+	case "normalize", "abs":
+		if len(c.Args) != 1 {
+			return "", fmt.Errorf("%s expects 1 argument, got %d", c.Func, len(c.Args))
+		}
+		return t.typeOf(c.Args[0])
+	case "max", "min":
+		return t.sameOrScalarCall(c.Func, c.Args, 2)
+	case "pow":
+		return t.sameOrScalarCall(c.Func, c.Args, 2)
+	case "clamp", "mix":
+		return t.sameOrScalarCall(c.Func, c.Args, 3)
 	default: // normalize, max, min, clamp, mix, pow, abs, … take the type of arg0
 		if len(c.Args) == 0 {
 			return "", fmt.Errorf("call %q has no arguments", c.Func)
@@ -387,7 +497,30 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 	}
 }
 
+func (t *typer) sameOrScalarCall(name string, args []hir.Expr, n int) (ir.Type, error) {
+	if len(args) != n {
+		return "", fmt.Errorf("%s expects %d arguments, got %d", name, n, len(args))
+	}
+	base, err := t.typeOf(args[0])
+	if err != nil {
+		return "", err
+	}
+	for i := 1; i < len(args); i++ {
+		at, err := t.typeOf(args[i])
+		if err != nil {
+			return "", err
+		}
+		if at != base && at != ir.Float {
+			return "", fmt.Errorf("%s argument %d must be %s or float, got %s", name, i+1, base, at)
+		}
+	}
+	return base, nil
+}
+
 func (t *typer) binaryType(b hir.Binary) (ir.Type, error) {
+	if b.Op != "+" && b.Op != "-" && b.Op != "*" && b.Op != "/" {
+		return "", fmt.Errorf("unsupported operator %q", b.Op)
+	}
 	lt, err := t.typeOf(b.L)
 	if err != nil {
 		return "", err
@@ -395,6 +528,9 @@ func (t *typer) binaryType(b hir.Binary) (ir.Type, error) {
 	rt, err := t.typeOf(b.R)
 	if err != nil {
 		return "", err
+	}
+	if lt == rt {
+		return lt, nil
 	}
 	// matrix * vector -> vector
 	if b.Op == "*" {
@@ -409,7 +545,10 @@ func (t *typer) binaryType(b hir.Binary) (ir.Type, error) {
 	if lt == ir.Float {
 		return rt, nil
 	}
-	return lt, nil
+	if rt == ir.Float {
+		return lt, nil
+	}
+	return "", fmt.Errorf("operator %s is not defined for %s and %s", b.Op, lt, rt)
 }
 
 // --- geo usage scan ---
@@ -476,13 +615,86 @@ func title(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-// swizzleType infers the result type of a component swizzle (.rgb, .xy, .x).
-func swizzleType(field string) (ir.Type, error) {
+func interfaceNames(uniforms []bindings.NamedType, textures []string, attributes, varyings []ir.Binding) (map[string]string, error) {
+	seen := map[string]string{}
+	claim := func(kind, name string) error {
+		if prev, ok := seen[name]; ok {
+			return fmt.Errorf("%s %q conflicts with %s", kind, name, prev)
+		}
+		seen[name] = kind
+		return nil
+	}
+	for _, u := range uniforms {
+		if err := claim("uniform", u.Name); err != nil {
+			return nil, err
+		}
+	}
+	for _, t := range textures {
+		if err := claim("texture", t); err != nil {
+			return nil, err
+		}
+		if err := claim("texture sampler", t+"Sampler"); err != nil {
+			return nil, err
+		}
+	}
+	for _, a := range attributes {
+		if err := claim("attribute", a.Name); err != nil {
+			return nil, err
+		}
+	}
+	for _, v := range varyings {
+		if err := claim("varying", v.Name); err != nil {
+			return nil, err
+		}
+	}
+	return seen, nil
+}
+
+func isVector(t ir.Type) bool {
+	return t == ir.Vec2 || t == ir.Vec3 || t == ir.Vec4
+}
+
+func vectorWidth(t ir.Type) int {
+	switch t {
+	case ir.Vec2:
+		return 2
+	case ir.Vec3:
+		return 3
+	case ir.Vec4:
+		return 4
+	default:
+		return 0
+	}
+}
+
+// swizzleType infers the result type of a component swizzle (.rgb, .xy, .x)
+// and validates that the selected components exist on the receiver.
+func swizzleType(base ir.Type, field string) (ir.Type, error) {
+	width := vectorWidth(base)
+	if width == 0 {
+		return "", fmt.Errorf("cannot swizzle %s with .%s", base, field)
+	}
+	var family byte
 	for _, c := range field {
+		var idx int
+		var fam byte
 		switch c {
-		case 'r', 'g', 'b', 'a', 'x', 'y', 'z', 'w':
+		case 'x', 'y', 'z', 'w':
+			fam = 'x'
+			idx = strings.IndexRune("xyzw", c)
+		case 'r', 'g', 'b', 'a':
+			fam = 'r'
+			idx = strings.IndexRune("rgba", c)
 		default:
-			return "", fmt.Errorf("invalid swizzle .%s", field)
+			return "", fmt.Errorf("invalid swizzle .%s for %s", field, base)
+		}
+		if family == 0 {
+			family = fam
+		} else if family != fam {
+			return "", fmt.Errorf("invalid mixed swizzle .%s for %s", field, base)
+		}
+		if idx >= width {
+			return "", fmt.Errorf("invalid swizzle .%s for %s", field, base)
 		}
 	}
 	switch len(field) {

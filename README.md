@@ -57,6 +57,18 @@ Because browser and desktop are both Chromium, emitting WGSL alongside GLSL ligh
 up WebGPU on *both* at once — which is exactly how "reach WebGPU the same way we
 reach WebGL" stops being a feature chase and falls out of the compiler.
 
+## Try it
+
+```sh
+go test ./...
+go run ./cmd/selena check examples/textured.sel
+go run ./cmd/selena emit wgsl examples/directional-diffuse.sel
+go run ./cmd/selena demo /tmp/selena-textured.html textured
+```
+
+Open the generated demo HTML in Chrome to compare the WGSL/WebGPU path with the
+GLSL/WebGL path from the same `.sel` material.
+
 ## How it plugs into GoSX
 
 - **Grammar engine:** `gotreesitter` + `grammargen` — the same stack that builds
@@ -110,6 +122,17 @@ will resolve them):
 
 ## Status
 
-Greenfield — scaffold only. Grammar, IR, lowering, and emitters are stubs. Next:
-a design pass to lock the IR + DSL surface, then a first vertical slice (one
-non-trivial material authored once → WGSL + GLSL) to prove the loop end-to-end.
+Vertical slice online. Selena now parses `.sel` files, lowers typed HIR into the
+neutral shader IR, computes host binding layouts, emits WGSL / GLSL / Metal /
+GLSL-ES, adapts into GoSX `scene.IRMaterial`, and compile-checks emitted WGSL
+and GLSL-ES where offline validators are installed.
+
+Current compiler coverage includes directional diffuse materials, texture
+sampling, reusable functions, material inheritance via `extends` /
+`super.surface`, deterministic binding descriptors, and semantic validation for
+common name/type errors before backend shader emission. Next development work:
+parameter defaults, a real stdlib registry, richer diagnostics with source
+locations, and broader material/PBR interop.
+
+See [ROADMAP.md](ROADMAP.md) for the public next-step plan and
+[CONTRIBUTING.md](CONTRIBUTING.md) for development notes.

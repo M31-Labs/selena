@@ -114,3 +114,153 @@ func TestLowerTextured(t *testing.T) {
 		}
 	}
 }
+
+func TestLowerRejectsInterfaceNameCollisions(t *testing.T) {
+	cases := []struct {
+		name string
+		m    hir.Material
+		want string
+	}{
+		{
+			name: "duplicate param",
+			m: hir.Material{
+				Name: "Bad",
+				Params: []hir.Param{
+					{Name: "baseColor", Type: hir.Color},
+					{Name: "baseColor", Type: hir.Vec3},
+				},
+				Surface: hir.Func{Geo: "geo", Result: hir.Ref{Name: "baseColor"}},
+			},
+			want: `duplicate param "baseColor"`,
+		},
+		{
+			name: "uniform collides with implicit attribute",
+			m: hir.Material{
+				Name:    "Bad",
+				Params:  []hir.Param{{Name: "position", Type: hir.Color}},
+				Surface: hir.Func{Geo: "geo", Result: hir.Ref{Name: "position"}},
+			},
+			want: `attribute "position" conflicts with uniform`,
+		},
+		{
+			name: "texture sampler collides with uniform",
+			m: hir.Material{
+				Name: "Bad",
+				Params: []hir.Param{
+					{Name: "albedo", Type: hir.Texture2D},
+					{Name: "albedoSampler", Type: hir.Color},
+				},
+				Surface: hir.Func{Geo: "geo", Result: hir.Member{E: hir.Call{Func: "sample", Args: []hir.Expr{hir.Ref{Name: "albedo"}, hir.Member{E: hir.Ref{Name: "geo"}, Field: "uv"}}}, Field: "rgb"}},
+			},
+			want: `texture sampler "albedoSampler" conflicts with uniform`,
+		},
+		{
+			name: "local collides with uniform",
+			m: hir.Material{
+				Name:   "Bad",
+				Params: []hir.Param{{Name: "baseColor", Type: hir.Color}},
+				Surface: hir.Func{
+					Geo:    "geo",
+					Body:   []hir.Let{{Name: "baseColor", Value: hir.Lit{Value: 1}}},
+					Result: hir.Ref{Name: "baseColor"},
+				},
+			},
+			want: `surface local "baseColor" conflicts with uniform`,
+		},
+		{
+			name: "duplicate local",
+			m: hir.Material{
+				Name: "Bad",
+				Surface: hir.Func{
+					Geo: "geo",
+					Body: []hir.Let{
+						{Name: "c", Value: hir.Call{Func: "rgb", Args: []hir.Expr{hir.Lit{Value: 1}, hir.Lit{Value: 0}, hir.Lit{Value: 0}}}},
+						{Name: "c", Value: hir.Call{Func: "rgb", Args: []hir.Expr{hir.Lit{Value: 0}, hir.Lit{Value: 1}, hir.Lit{Value: 0}}}},
+					},
+					Result: hir.Ref{Name: "c"},
+				},
+			},
+			want: `duplicate surface local "c"`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := Lower(tc.m)
+			if err == nil {
+				t.Fatal("Lower succeeded, want error")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %q, want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestLowerRejectsInvalidExpressions(t *testing.T) {
+	cases := []struct {
+		name string
+		m    hir.Material
+		want string
+	}{
+		{
+			name: "invalid swizzle",
+			m: hir.Material{
+				Name:    "Bad",
+				Params:  []hir.Param{{Name: "baseColor", Type: hir.Color}},
+				Surface: hir.Func{Geo: "geo", Result: hir.Member{E: hir.Ref{Name: "baseColor"}, Field: "a"}},
+			},
+			want: "invalid swizzle .a for vec3",
+		},
+		{
+			name: "binary type mismatch",
+			m: hir.Material{
+				Name:   "Bad",
+				Params: []hir.Param{{Name: "baseColor", Type: hir.Color}},
+				Surface: hir.Func{Geo: "geo", Result: hir.Binary{
+					Op: "+",
+					L:  hir.Ref{Name: "baseColor"},
+					R:  hir.Call{Func: "rgb", Args: []hir.Expr{hir.Lit{Value: 1}, hir.Lit{Value: 0}, hir.Lit{Value: 0}, hir.Lit{Value: 1}}},
+				}},
+			},
+			want: "operator + is not defined for vec3 and vec4",
+		},
+		{
+			name: "sample uv type",
+			m: hir.Material{
+				Name:   "Bad",
+				Params: []hir.Param{{Name: "albedo", Type: hir.Texture2D}},
+				Surface: hir.Func{Geo: "geo", Result: hir.Member{E: hir.Call{Func: "sample", Args: []hir.Expr{
+					hir.Ref{Name: "albedo"},
+					hir.Member{E: hir.Ref{Name: "geo"}, Field: "worldNormal"},
+				}}, Field: "rgb"}},
+			},
+			want: "sample: second argument must be vec2 uv, got vec3",
+		},
+		{
+			name: "dot type mismatch",
+			m: hir.Material{
+				Name: "Bad",
+				Surface: hir.Func{Geo: "geo", Result: hir.Call{Func: "rgb", Args: []hir.Expr{
+					hir.Call{Func: "dot", Args: []hir.Expr{
+						hir.Member{E: hir.Ref{Name: "geo"}, Field: "worldNormal"},
+						hir.Member{E: hir.Ref{Name: "geo"}, Field: "uv"},
+					}},
+					hir.Lit{Value: 0},
+					hir.Lit{Value: 0},
+				}}},
+			},
+			want: "dot arguments must be matching vectors, got vec3 and vec2",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := Lower(tc.m)
+			if err == nil {
+				t.Fatal("Lower succeeded, want error")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %q, want substring %q", err, tc.want)
+			}
+		})
+	}
+}

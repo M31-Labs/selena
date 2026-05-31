@@ -7,6 +7,6 @@
 // lower -> the neutral Selena IR (package ir) -> per-target emitters
 // (package emit/...). See README.md for the architecture and design notes.
 //
-// This root package holds shared types and the top-level Compile entry point as
-// the pieces land; today the project is a scaffold.
+// This root package holds shared types and will host the top-level Compile entry
+// point once the package-level API is formalized.
 package selena
