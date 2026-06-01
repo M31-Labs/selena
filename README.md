@@ -63,6 +63,7 @@ reach WebGL" stops being a feature chase and falls out of the compiler.
 go test ./...
 go run ./cmd/selena check examples/textured.sel
 go run ./cmd/selena inspect examples/tinted.sel Tinted
+go run ./cmd/selena inspect examples/defaults.sel
 go run ./cmd/selena emit wgsl examples/directional-diffuse.sel
 go run ./cmd/selena demo /tmp/selena-textured.html textured
 ```
@@ -90,6 +91,8 @@ Set `Material` to choose a named material from a file, or pass
 `Targets: []selena.Target{}` to parse and lower without emitting shader source.
 Use `bindings.PackUniforms(res.Layout, values)` to fill the generated std140
 uniform block without hand-packing `vec3` tails or `mat3` column strides.
+`bindings.PackUniformsWithDefaults` also fills omitted uniform fields from
+descriptor defaults declared in `.sel`.
 Compile failures that can be tied to source return `*selena.CompileError` with
 diagnostic codes and 1-based line/column ranges. The CLI renders those ranges
 as annotated snippets with fix-oriented hints.
@@ -155,10 +158,10 @@ and GLSL-ES where offline validators are installed.
 
 Current compiler coverage includes directional diffuse materials, texture
 sampling, reusable functions, material inheritance via `extends` /
-`super.surface`, deterministic binding descriptors, CLI inspectability, and
-source-aware semantic validation with annotated CLI snippets before backend
-shader emission. Next development work: parameter defaults, a real stdlib
-registry, and broader material/PBR interop.
+`super.surface`, deterministic binding descriptors with scalar/vector defaults,
+CLI inspectability, and source-aware semantic validation with annotated CLI
+snippets before backend shader emission. Next development work: richer default
+coverage, a real stdlib registry, and broader material/PBR interop.
 
 See [ROADMAP.md](ROADMAP.md) for the public next-step plan and
 [CONTRIBUTING.md](CONTRIBUTING.md) for development notes.

@@ -23,8 +23,9 @@ type Layout struct {
 
 // UniformBlock is the packed std140 uniform block.
 type UniformBlock struct {
-	Size   int     `json:"size"` // total size in bytes, rounded to 16
-	Fields []Field `json:"fields"`
+	Size     int            `json:"size"` // total size in bytes, rounded to 16
+	Fields   []Field        `json:"fields"`
+	Defaults []DefaultValue `json:"defaults,omitempty"`
 }
 
 // Field is one uniform at a computed byte offset.
@@ -33,6 +34,14 @@ type Field struct {
 	Type   string `json:"type"`
 	Offset int    `json:"offset"`
 	Size   int    `json:"size"`
+}
+
+// DefaultValue is a host-packable default for one uniform field. Values are
+// scalar components in shader order; mat3/mat4 use column-major order.
+type DefaultValue struct {
+	Name   string    `json:"name"`
+	Type   string    `json:"type"`
+	Values []float32 `json:"values"`
 }
 
 // Attribute is a per-vertex input with its assigned location.

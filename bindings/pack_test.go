@@ -121,6 +121,28 @@ func TestPackUniformsRejectsBadInputs(t *testing.T) {
 	}
 }
 
+func TestPackUniformsWithDefaults(t *testing.T) {
+	block := ComputeUniformBlock([]NamedType{
+		{Name: "baseColor", Type: ir.Vec3},
+		{Name: "roughness", Type: ir.Float},
+	})
+	block.Defaults = []DefaultValue{
+		{Name: "baseColor", Type: "vec3", Values: []float32{0.25, 0.5, 0.75}},
+		{Name: "roughness", Type: "float", Values: []float32{0.4}},
+	}
+
+	buf, err := PackUniformBlockWithDefaults(block, map[string]any{"roughness": 0.8})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := f32(buf, 0); got != 0.25 {
+		t.Fatalf("baseColor.r = %v, want default 0.25", got)
+	}
+	if got := f32(buf, 12); got != 0.8 {
+		t.Fatalf("roughness = %v, want override 0.8", got)
+	}
+}
+
 func seq(n int) []float32 {
 	out := make([]float32, n)
 	for i := range out {

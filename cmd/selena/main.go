@@ -265,6 +265,12 @@ func printLayoutSummary(layout bindings.Layout) {
 	for _, f := range layout.UniformBlock.Fields {
 		fmt.Printf("    %s: %s offset=%d size=%d\n", f.Name, f.Type, f.Offset, f.Size)
 	}
+	if len(layout.UniformBlock.Defaults) > 0 {
+		fmt.Println("  defaults:")
+		for _, d := range layout.UniformBlock.Defaults {
+			fmt.Printf("    %s: %v\n", d.Name, d.Values)
+		}
+	}
 	fmt.Println("  textures:")
 	if len(layout.Textures) == 0 {
 		fmt.Println("    (none)")

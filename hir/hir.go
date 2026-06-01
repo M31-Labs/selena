@@ -70,9 +70,10 @@ type Material struct {
 
 // Param is a material input. Defaults are deferred to a later milestone.
 type Param struct {
-	Name string
-	Type Type
-	Span Span
+	Name    string
+	Type    Type
+	Default Expr
+	Span    Span
 }
 
 // Func is a surface or vertex body: a binding name for the geometry record,

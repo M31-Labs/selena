@@ -15,8 +15,9 @@ The next phase should make the project easier to adopt and harder to misuse.
   layout, target output, and descriptor review.
 - Improve diagnostic precision for inlined functions, `super.surface`, parser
   expected-token context, and backend emission failures.
-- Add parameter defaults and generated host-side default values in the binding
-  descriptor. The Go std140 packer exists; defaults should feed it directly.
+- Expand parameter defaults beyond the first scalar/vector slice. `.sel`
+  defaults now flow into the binding descriptor and the Go std140 packer for
+  float, vec2, vec3/color, and vec4 uniforms.
 - Add a small language guide with copy-pasteable materials for color, texture,
   tinting, lighting, and composition.
 
@@ -42,5 +43,6 @@ The next phase should make the project easier to adopt and harder to misuse.
 - Version the `.sel` language and descriptor schema before downstream tools rely
   on them.
 - Publish a few complete GoSX examples that load real textures, pack uniforms
-  through the descriptor, and switch between standard and Selena materials.
+  and defaults through the descriptor, and switch between standard and Selena
+  materials.
 - Add benchmark coverage for parser generation/cache behavior and compile time.

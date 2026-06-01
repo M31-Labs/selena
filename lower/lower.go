@@ -90,6 +90,7 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 
 	// --- ordered uniforms: implicit Transform first, then params/records ---
 	var uniforms []bindings.NamedType
+	var defaults []bindings.DefaultValue
 	uniType := map[string]ir.Type{}
 	addUniform := func(name string, t ir.Type) error {
 		if _, ok := uniType[name]; ok {
@@ -111,6 +112,9 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 	for _, p := range m.Params {
 		switch p.Type {
 		case hir.Sun:
+			if p.Default != nil {
+				return ir.Module{}, bindings.Layout{}, diagnostic(CodeInvalidDefault, hir.ExprSpan(p.Default), "param %q: defaults for Sun records are not supported yet", p.Name)
+			}
 			for _, f := range sortedKeys(sunFields) {
 				un := p.Name + "_" + f
 				if err := addUniform(un, sunFields[f]); err != nil {
@@ -119,6 +123,9 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 				uniformOf[p.Name+"."+f] = un
 			}
 		case hir.Texture2D:
+			if p.Default != nil {
+				return ir.Module{}, bindings.Layout{}, diagnostic(CodeInvalidDefault, hir.ExprSpan(p.Default), "param %q: defaults for texture2d are not supported", p.Name)
+			}
 			textures = append(textures, p.Name)
 		default:
 			t, ok := hirToIRType(p.Type)
@@ -129,6 +136,13 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 				return fail("param %q: %w", p.Name, err)
 			}
 			uniformOf[p.Name] = p.Name
+			if p.Default != nil {
+				vals, err := constDefault(p.Default, p.Type)
+				if err != nil {
+					return ir.Module{}, bindings.Layout{}, diagnostic(CodeInvalidDefault, hir.ExprSpan(p.Default), "param %q default: %v", p.Name, err)
+				}
+				defaults = append(defaults, bindings.DefaultValue{Name: p.Name, Type: string(t), Values: vals})
+			}
 		}
 	}
 
@@ -248,6 +262,7 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 	if layout.Textures == nil {
 		layout.Textures = []bindings.Texture{}
 	}
+	layout.UniformBlock.Defaults = defaults
 	return mod, layout, nil
 }
 

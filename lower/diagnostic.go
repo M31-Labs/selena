@@ -15,6 +15,7 @@ const (
 	CodeInvalidCall     = "SEL2003"
 	CodeInvalidSwizzle  = "SEL2004"
 	CodeTypeMismatch    = "SEL2005"
+	CodeInvalidDefault  = "SEL3001"
 )
 
 // DiagnosticError is a lowerer error that can be anchored back to source.

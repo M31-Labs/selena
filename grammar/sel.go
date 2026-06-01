@@ -6,7 +6,7 @@ import "github.com/odvcencio/gotreesitter/grammargen"
 // same engine behind GoSX's .gsx and gosx-native's .swift.gsx. Shape:
 //
 //	material <Name> {
-//	    param <name> : <type>
+//	    param <name> : <type> [= <constant expr>]
 //	    surface(<geo>) -> <type> {
 //	        let <name> = <expr>
 //	        return <expr>
@@ -57,6 +57,7 @@ func SelenaGrammar() *grammargen.Grammar {
 		field("name", sym("identifier")),
 		s(":"),
 		field("type", sym("identifier")),
+		grammargen.Optional(seq(s("="), field("default", sym("expression")))),
 	))
 
 	g.Define("surface", seq(

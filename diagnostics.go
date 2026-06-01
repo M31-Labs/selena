@@ -99,6 +99,8 @@ func diagnosticHint(code, message string) string {
 		return "Use only components that exist on the vector, and do not mix xyzw with rgba in one swizzle."
 	case "SEL2005":
 		return "Make the operand and argument types match, or introduce an explicit scalar/vector conversion."
+	case "SEL3001":
+		return "Use a constant scalar or vector default that matches the parameter type."
 	default:
 		return ""
 	}

@@ -7,6 +7,7 @@ import (
 	"m31labs.dev/selena/emit/metal"
 	"m31labs.dev/selena/emit/wgsl"
 	"m31labs.dev/selena/hir"
+	"m31labs.dev/selena/parse"
 )
 
 func TestLowerDirectionalDiffuse(t *testing.T) {
@@ -112,6 +113,30 @@ func TestLowerTextured(t *testing.T) {
 		if !strings.Contains(m, want) {
 			t.Errorf("Metal missing %q", want)
 		}
+	}
+}
+
+func TestLowerParamDefaults(t *testing.T) {
+	p, err := parse.Program([]byte(`material Defaults {
+    param baseColor : color = rgb(0.25, 0.5, 0.75)
+    param gain : float = 1.5
+    surface(geo) -> color { return baseColor * gain }
+}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, layout, err := LowerProgram(p, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(layout.UniformBlock.Defaults) != 2 {
+		t.Fatalf("defaults = %+v, want 2", layout.UniformBlock.Defaults)
+	}
+	if got := layout.UniformBlock.Defaults[0]; got.Name != "baseColor" || got.Type != "vec3" || got.Values[2] != 0.75 {
+		t.Fatalf("baseColor default = %+v", got)
+	}
+	if got := layout.UniformBlock.Defaults[1]; got.Name != "gain" || got.Type != "float" || got.Values[0] != 1.5 {
+		t.Fatalf("gain default = %+v", got)
 	}
 }
 
@@ -257,6 +282,54 @@ func TestLowerRejectsInvalidExpressions(t *testing.T) {
 			_, _, err := Lower(tc.m)
 			if err == nil {
 				t.Fatal("Lower succeeded, want error")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %q, want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestLowerRejectsInvalidParamDefaults(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "wrong type",
+			src: `material Bad {
+    param gain : float = rgb(1, 1, 1)
+    surface(geo) -> color { return rgb(gain, gain, gain) }
+}`,
+			want: "param \"gain\" default: got vec3, want float",
+		},
+		{
+			name: "non constant",
+			src: `material Bad {
+    param baseColor : color = missing
+    surface(geo) -> color { return baseColor }
+}`,
+			want: "param \"baseColor\" default: hir.Ref is not a constant default expression",
+		},
+		{
+			name: "texture default",
+			src: `material Bad {
+    param albedo : texture2d = rgb(1, 1, 1)
+    surface(geo) -> color { return sample(albedo, geo.uv).rgb }
+}`,
+			want: "param \"albedo\": defaults for texture2d are not supported",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p, err := parse.Program([]byte(tc.src))
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _, err = LowerProgram(p, 0)
+			if err == nil {
+				t.Fatal("LowerProgram succeeded, want error")
 			}
 			if !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("error = %q, want substring %q", err, tc.want)

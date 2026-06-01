@@ -155,11 +155,11 @@ func (w *walker) material(n *gts.Node) (hir.Material, error) {
 		inner := c.NamedChild(0)
 		switch w.typ(inner) {
 		case "param":
-			m.Params = append(m.Params, hir.Param{
-				Name: w.text(w.field(inner, "name")),
-				Type: hir.Type(w.text(w.field(inner, "type"))),
-				Span: w.span(inner),
-			})
+			p, err := w.param(inner)
+			if err != nil {
+				return m, err
+			}
+			m.Params = append(m.Params, p)
 		case "surface":
 			sf, err := w.fn(inner)
 			if err != nil {
@@ -172,6 +172,22 @@ func (w *walker) material(n *gts.Node) (hir.Material, error) {
 		return m, fmt.Errorf("material %q has no surface", m.Name)
 	}
 	return m, nil
+}
+
+func (w *walker) param(n *gts.Node) (hir.Param, error) {
+	p := hir.Param{
+		Name: w.text(w.field(n, "name")),
+		Type: hir.Type(w.text(w.field(n, "type"))),
+		Span: w.span(n),
+	}
+	if d := w.field(n, "default"); d != nil {
+		e, err := w.expr(d)
+		if err != nil {
+			return p, err
+		}
+		p.Default = e
+	}
+	return p, nil
 }
 
 func (w *walker) fn(n *gts.Node) (hir.Func, error) {

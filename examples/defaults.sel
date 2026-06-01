@@ -1,0 +1,8 @@
+material Defaults {
+    param baseColor : color = rgb(0.78, 0.42, 0.98)
+    param gain : float = 1.0
+
+    surface(geo) -> color {
+        return baseColor * gain
+    }
+}

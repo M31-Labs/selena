@@ -19,11 +19,37 @@ func PackUniforms(layout Layout, values map[string]any) ([]byte, error) {
 
 // PackUniformBlock packs host values into block's std140 byte layout.
 func PackUniformBlock(block UniformBlock, values map[string]any) ([]byte, error) {
+	return packUniformBlock(block, values, false)
+}
+
+// PackUniformsWithDefaults packs host values into layout's uniform block,
+// filling omitted fields from descriptor defaults when available.
+func PackUniformsWithDefaults(layout Layout, values map[string]any) ([]byte, error) {
+	return PackUniformBlockWithDefaults(layout.UniformBlock, values)
+}
+
+// PackUniformBlockWithDefaults packs host values into block's std140 byte
+// layout, filling omitted fields from descriptor defaults when available.
+func PackUniformBlockWithDefaults(block UniformBlock, values map[string]any) ([]byte, error) {
+	return packUniformBlock(block, values, true)
+}
+
+func packUniformBlock(block UniformBlock, values map[string]any, useDefaults bool) ([]byte, error) {
 	out := make([]byte, block.Size)
+	defaults := map[string]DefaultValue{}
+	if useDefaults {
+		for _, d := range block.Defaults {
+			defaults[d.Name] = d
+		}
+	}
 	for _, field := range block.Fields {
 		value, ok := values[field.Name]
 		if !ok {
-			return nil, fmt.Errorf("missing uniform %q", field.Name)
+			d, hasDefault := defaults[field.Name]
+			if !hasDefault {
+				return nil, fmt.Errorf("missing uniform %q", field.Name)
+			}
+			value = d.Values
 		}
 		floats, err := numericValues(value)
 		if err != nil {

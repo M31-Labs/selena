@@ -69,9 +69,29 @@ func TestParseTextured(t *testing.T) {
 	}
 }
 
+func TestParseParamDefaults(t *testing.T) {
+	m, err := Material([]byte(`material Defaults {
+    param baseColor : color = rgb(0.25, 0.5, 0.75)
+    param gain : float = 1.5
+    surface(geo) -> color { return baseColor * gain }
+}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Params) != 2 {
+		t.Fatalf("params = %d, want 2", len(m.Params))
+	}
+	if m.Params[0].Default == nil || m.Params[1].Default == nil {
+		t.Fatalf("defaults were not parsed: %+v", m.Params)
+	}
+	if m.Params[0].Span.Start.Line != 2 {
+		t.Fatalf("param span start line = %d, want 2", m.Params[0].Span.Start.Line)
+	}
+}
+
 // TestParseExampleFiles parses the checked-in .sel examples end to end.
 func TestParseExampleFiles(t *testing.T) {
-	for _, f := range []string{"../examples/directional-diffuse.sel", "../examples/textured.sel"} {
+	for _, f := range []string{"../examples/directional-diffuse.sel", "../examples/textured.sel", "../examples/defaults.sel"} {
 		src, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatalf("read %s: %v", f, err)
