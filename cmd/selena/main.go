@@ -1,7 +1,8 @@
 // Command selena is the CLI for the Selena shader authoring language.
 //
-//	selena emit <target> <file.sel>   # target: wgsl | glsl | metal | gles
-//	selena check <file.sel>           # parse + lower (front-end check)
+//	selena emit <target> <file.sel> [material]  # target: wgsl | glsl | metal | gles
+//	selena check <file.sel> [material]          # parse + lower (front-end check)
+//	selena inspect <file.sel> [material]        # print interface + descriptor
 //	selena demo  <out.html> [material]
 //
 // emit/check parse a .sel file through the full pipeline (parse -> HIR -> lower
@@ -13,20 +14,19 @@ import (
 	"fmt"
 	"os"
 
-	"m31labs.dev/selena/emit/gles"
-	"m31labs.dev/selena/emit/glsl"
-	"m31labs.dev/selena/emit/metal"
-	"m31labs.dev/selena/emit/wgsl"
+	"m31labs.dev/selena"
+	"m31labs.dev/selena/bindings"
 	"m31labs.dev/selena/hir"
-	"m31labs.dev/selena/lower"
+	"m31labs.dev/selena/ir"
 	"m31labs.dev/selena/parse"
 )
 
 const usage = `selena - shader authoring for the GoSX ecosystem
 
 usage:
-  selena emit <target> <file.sel>   emit a shader (target: wgsl|glsl|metal|gles)
-  selena check <file.sel>           parse + lower a material
+  selena emit <target> <file.sel> [material]  emit a shader (target: wgsl|glsl|metal|gles)
+  selena check <file.sel> [material]          parse + lower a material
+  selena inspect <file.sel> [material]        print material interface + descriptor
   selena demo <out.html> [material] render harness (material: directional-diffuse|textured)
   selena help                       show this help
 
@@ -35,10 +35,16 @@ usage:
 
   selena emit wgsl examples/directional-diffuse.sel
   selena emit metal textured
+  selena inspect examples/tinted.sel Tinted
   selena check examples/textured.sel
 `
 
-var emitTargets = map[string]bool{"wgsl": true, "glsl": true, "metal": true, "gles": true}
+var emitTargets = map[string]selena.Target{
+	"wgsl":  selena.TargetWGSL,
+	"glsl":  selena.TargetGLSL,
+	"metal": selena.TargetMetal,
+	"gles":  selena.TargetGLES,
+}
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -54,18 +60,36 @@ func run(args []string) error {
 	}
 	switch args[0] {
 	case "emit":
-		if len(args) != 3 {
-			return fmt.Errorf("usage: selena emit <target> <file.sel>")
+		if len(args) < 3 || len(args) > 4 {
+			return fmt.Errorf("usage: selena emit <target> <file.sel> [material]")
 		}
-		if !emitTargets[args[1]] {
+		target, ok := emitTargets[args[1]]
+		if !ok {
 			return fmt.Errorf("unknown target %q (want one of: wgsl, glsl, metal, gles)", args[1])
 		}
-		return emit(args[1], args[2])
-	case "check":
-		if len(args) != 2 {
-			return fmt.Errorf("usage: selena check <file.sel>")
+		material := ""
+		if len(args) == 4 {
+			material = args[3]
 		}
-		return check(args[1])
+		return emit(target, args[2], material)
+	case "check":
+		if len(args) < 2 || len(args) > 3 {
+			return fmt.Errorf("usage: selena check <file.sel> [material]")
+		}
+		material := ""
+		if len(args) == 3 {
+			material = args[2]
+		}
+		return check(args[1], material)
+	case "inspect":
+		if len(args) < 2 || len(args) > 3 {
+			return fmt.Errorf("usage: selena inspect <file.sel> [material]")
+		}
+		material := ""
+		if len(args) == 3 {
+			material = args[2]
+		}
+		return inspect(args[1], material)
 	case "demo":
 		if len(args) < 2 || len(args) > 3 {
 			return fmt.Errorf("usage: selena demo <out.html> [material]  (material: directional-diffuse|textured)")
@@ -80,79 +104,183 @@ func run(args []string) error {
 	}
 }
 
-// resolveProgram resolves a built-in material name or parses a .sel file,
-// returning the program and the index of the target material (the last, i.e.
-// most-derived, material declared).
-func resolveProgram(nameOrFile string) (hir.Program, int, error) {
+// resolveProgram resolves a built-in material name or parses a .sel file.
+// Downstream compile calls select an explicit material name, or the last material
+// declared when no name is given.
+func resolveProgram(nameOrFile string) (hir.Program, error) {
 	switch nameOrFile {
 	case "sample", "directional-diffuse":
-		return hir.Program{Materials: []hir.Material{hir.DirectionalDiffuse()}}, 0, nil
+		return hir.Program{Materials: []hir.Material{hir.DirectionalDiffuse()}}, nil
 	case "textured":
-		return hir.Program{Materials: []hir.Material{hir.Textured()}}, 0, nil
+		return hir.Program{Materials: []hir.Material{hir.Textured()}}, nil
 	default:
 		src, err := os.ReadFile(nameOrFile)
 		if err != nil {
-			return hir.Program{}, 0, err
+			return hir.Program{}, err
 		}
 		p, err := parse.Program(src)
 		if err != nil {
-			return hir.Program{}, 0, err
+			return hir.Program{}, err
 		}
 		if len(p.Materials) == 0 {
-			return hir.Program{}, 0, fmt.Errorf("%s: no material declared", nameOrFile)
+			return hir.Program{}, fmt.Errorf("%s: no material declared", nameOrFile)
 		}
-		return p, len(p.Materials) - 1, nil
+		return p, nil
 	}
 }
 
-func emit(target, file string) error {
-	prog, idx, err := resolveProgram(file)
+func emit(target selena.Target, file, material string) error {
+	prog, err := resolveProgram(file)
 	if err != nil {
 		return err
 	}
-	mod, _, err := lower.LowerProgram(prog, idx)
+	res, err := selena.CompileProgram(prog, selena.CompileOptions{
+		Material: material,
+		Targets:  []selena.Target{target},
+	})
 	if err != nil {
 		return err
 	}
-	switch target {
-	case "wgsl":
-		src, err := wgsl.Emit(mod)
-		if err != nil {
-			return err
-		}
-		fmt.Print(src)
-	case "metal":
-		src, err := metal.Emit(mod)
-		if err != nil {
-			return err
-		}
-		fmt.Print(src)
-	case "glsl":
-		vert, frag, err := glsl.Emit(mod)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("// --- vertex ---\n%s\n// --- fragment ---\n%s", vert, frag)
-	case "gles":
-		vert, frag, err := gles.Emit(mod)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("// --- vertex ---\n%s\n// --- fragment ---\n%s", vert, frag)
+	artifact, ok := res.Artifact(target)
+	if !ok {
+		return fmt.Errorf("target %q was not emitted", target)
 	}
+	printArtifact(artifact)
 	return nil
 }
 
-func check(file string) error {
-	prog, idx, err := resolveProgram(file)
+func printArtifact(a selena.Artifact) {
+	if a.Source != "" {
+		fmt.Print(a.Source)
+		return
+	}
+	fmt.Printf("// --- vertex ---\n%s\n// --- fragment ---\n%s", a.Vertex, a.Fragment)
+}
+
+func check(file, material string) error {
+	prog, err := resolveProgram(file)
 	if err != nil {
 		return err
 	}
-	mod, layout, err := lower.LowerProgram(prog, idx)
+	res, err := selena.CompileProgram(prog, selena.CompileOptions{
+		Material: material,
+		Targets:  []selena.Target{},
+	})
 	if err != nil {
 		return err
 	}
 	fmt.Printf("ok: %s — %d uniforms (%d-byte block), %d attributes, %d varyings, %d textures\n",
-		mod.Name, len(mod.Uniforms), layout.UniformBlock.Size, len(mod.Attributes), len(mod.Varyings), len(mod.Textures))
+		res.Module.Name, len(res.Module.Uniforms), res.Layout.UniformBlock.Size, len(res.Module.Attributes), len(res.Module.Varyings), len(res.Module.Textures))
 	return nil
+}
+
+func inspect(file, material string) error {
+	prog, err := resolveProgram(file)
+	if err != nil {
+		return err
+	}
+	res, err := selena.CompileProgram(prog, selena.CompileOptions{Material: material})
+	if err != nil {
+		return err
+	}
+	desc, err := res.Layout.JSON()
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("material: %s\n", res.Module.Name)
+	fmt.Printf("program: %d funcs, %d materials\n", len(res.Program.Funcs), len(res.Program.Materials))
+	fmt.Println()
+	printHIRSummary(res)
+	fmt.Println()
+	printIRSummary(res.Module)
+	fmt.Println()
+	printLayoutSummary(res.Layout)
+	fmt.Println()
+	printTargetSummary(res.Artifacts)
+	fmt.Println()
+	fmt.Println("descriptor:")
+	fmt.Println(desc)
+	return nil
+}
+
+func printHIRSummary(res selena.Result) {
+	fmt.Println("hir:")
+	fmt.Printf("  selected: %s", res.Material.Name)
+	if res.Material.Extends != "" {
+		fmt.Printf(" extends %s", res.Material.Extends)
+	}
+	fmt.Println()
+	fmt.Printf("  surface geo: %s\n", res.Material.Surface.Geo)
+	printParams("  authored params", res.Material.Params)
+}
+
+func printParams(label string, params []hir.Param) {
+	fmt.Printf("%s:\n", label)
+	if len(params) == 0 {
+		fmt.Println("    (none)")
+		return
+	}
+	for _, p := range params {
+		fmt.Printf("    %s: %s\n", p.Name, p.Type)
+	}
+}
+
+func printIRSummary(mod ir.Module) {
+	fmt.Println("ir:")
+	printBindings("  uniforms", mod.Uniforms)
+	printBindings("  attributes", mod.Attributes)
+	printBindings("  varyings", mod.Varyings)
+	if len(mod.Textures) == 0 {
+		fmt.Println("  textures:")
+		fmt.Println("    (none)")
+		return
+	}
+	fmt.Println("  textures:")
+	for _, t := range mod.Textures {
+		fmt.Printf("    %s\n", t.Name)
+	}
+}
+
+func printBindings(label string, bindings []ir.Binding) {
+	fmt.Printf("%s:\n", label)
+	if len(bindings) == 0 {
+		fmt.Println("    (none)")
+		return
+	}
+	for _, b := range bindings {
+		fmt.Printf("    %s: %s\n", b.Name, b.Type)
+	}
+}
+
+func printLayoutSummary(layout bindings.Layout) {
+	fmt.Println("layout:")
+	fmt.Printf("  uniform block: %d bytes\n", layout.UniformBlock.Size)
+	for _, f := range layout.UniformBlock.Fields {
+		fmt.Printf("    %s: %s offset=%d size=%d\n", f.Name, f.Type, f.Offset, f.Size)
+	}
+	fmt.Println("  textures:")
+	if len(layout.Textures) == 0 {
+		fmt.Println("    (none)")
+		return
+	}
+	for _, t := range layout.Textures {
+		fmt.Printf("    %s: wgsl @group(%d) texture=%d sampler=%d, gl unit=%d, metal texture=%d sampler=%d\n",
+			t.Name, t.WGSL.Group, t.WGSL.TextureBinding, t.WGSL.SamplerBinding, t.GL.Unit, t.Metal.Texture, t.Metal.Sampler)
+	}
+}
+
+func printTargetSummary(artifacts []selena.Artifact) {
+	fmt.Println("targets:")
+	if len(artifacts) == 0 {
+		fmt.Println("  (none)")
+		return
+	}
+	for _, a := range artifacts {
+		if a.Source != "" {
+			fmt.Printf("  %s: source %d bytes\n", a.Target, len(a.Source))
+			continue
+		}
+		fmt.Printf("  %s: vertex %d bytes, fragment %d bytes\n", a.Target, len(a.Vertex), len(a.Fragment))
+	}
 }

@@ -62,12 +62,32 @@ reach WebGL" stops being a feature chase and falls out of the compiler.
 ```sh
 go test ./...
 go run ./cmd/selena check examples/textured.sel
+go run ./cmd/selena inspect examples/tinted.sel Tinted
 go run ./cmd/selena emit wgsl examples/directional-diffuse.sel
 go run ./cmd/selena demo /tmp/selena-textured.html textured
 ```
 
 Open the generated demo HTML in Chrome to compare the WGSL/WebGPU path with the
 GLSL/WebGL path from the same `.sel` material.
+
+## Use as a library
+
+```go
+src, err := os.ReadFile("examples/textured.sel")
+if err != nil {
+    return err
+}
+res, err := selena.Compile(src, selena.CompileOptions{})
+if err != nil {
+    return err
+}
+wgsl, _ := res.Artifact(selena.TargetWGSL)
+fmt.Println(res.Layout.UniformBlock.Size, len(wgsl.Source))
+```
+
+`CompileOptions{}` emits WGSL, GLSL, Metal, and GLES in a deterministic order.
+Set `Material` to choose a named material from a file, or pass
+`Targets: []selena.Target{}` to parse and lower without emitting shader source.
 
 ## How it plugs into GoSX
 
@@ -97,7 +117,7 @@ adapter layers so the language stays reusable.
 | `emit/glsl/` | IR → GLSL (browser + desktop WebGL) |
 | `emit/metal/` | IR → Metal MSL (iOS SceneKit) |
 | `emit/gles/` | IR → GLSL ES (Android GLES) |
-| `cmd/selena/` | CLI: `selena emit <target> <file.sel>` |
+| `cmd/selena/` | CLI: `selena emit`, `selena check`, `selena inspect`, `selena demo` |
 | `examples/`, `testdata/` | sample materials + golden outputs |
 
 ## Open design decisions
@@ -124,15 +144,15 @@ will resolve them):
 
 Vertical slice online. Selena now parses `.sel` files, lowers typed HIR into the
 neutral shader IR, computes host binding layouts, emits WGSL / GLSL / Metal /
-GLSL-ES, adapts into GoSX `scene.IRMaterial`, and compile-checks emitted WGSL
-and GLSL-ES where offline validators are installed.
+GLSL-ES, exposes a root `Compile` API, adapts into GoSX `scene.IRMaterial`, and
+compile-checks emitted WGSL and GLSL-ES where offline validators are installed.
 
 Current compiler coverage includes directional diffuse materials, texture
 sampling, reusable functions, material inheritance via `extends` /
-`super.surface`, deterministic binding descriptors, and semantic validation for
-common name/type errors before backend shader emission. Next development work:
-parameter defaults, a real stdlib registry, richer diagnostics with source
-locations, and broader material/PBR interop.
+`super.surface`, deterministic binding descriptors, CLI inspectability, and
+semantic validation for common name/type errors before backend shader emission.
+Next development work: source-aware diagnostics, parameter defaults, a real
+stdlib registry, and broader material/PBR interop.
 
 See [ROADMAP.md](ROADMAP.md) for the public next-step plan and
 [CONTRIBUTING.md](CONTRIBUTING.md) for development notes.

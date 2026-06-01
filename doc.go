@@ -7,6 +7,7 @@
 // lower -> the neutral Selena IR (package ir) -> per-target emitters
 // (package emit/...). See README.md for the architecture and design notes.
 //
-// This root package holds shared types and will host the top-level Compile entry
-// point once the package-level API is formalized.
+// The root Compile APIs are the stable integration point for tools and hosts:
+// parse .sel source, select a material, lower it to IR, compute the binding
+// descriptor, and optionally emit all supported shader targets.
 package selena

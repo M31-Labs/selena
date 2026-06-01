@@ -8,10 +8,11 @@ The next phase should make the project easier to adopt and harder to misuse.
 
 ## Ergonomics
 
-- Add a top-level `Compile` API that accepts source plus options and returns all
-  shader outputs, the binding descriptor, and diagnostics in one object.
-- Add `selena inspect` to print the HIR, IR, interface layout, and backend
-  support matrix for a material.
+- Extend the new top-level `Compile` API with structured diagnostics once source
+  ranges exist. It already returns HIR, IR, shader outputs, and the binding
+  descriptor in one object.
+- Keep expanding `selena inspect` as the debug surface for HIR, IR, interface
+  layout, target output, and descriptor review.
 - Add source ranges to parse and lowering errors so diagnostics can point at the
   exact param, expression, or function call.
 - Add parameter defaults and generated host-side default values in the binding
