@@ -9,15 +9,7 @@ import (
 )
 
 func TestConformanceCorpusCompilesAllTargets(t *testing.T) {
-	files, err := filepath.Glob("testdata/conformance/*.sel")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(files) == 0 {
-		t.Fatal("no conformance corpus files found")
-	}
-
-	for _, file := range files {
+	for _, file := range conformanceFiles(t) {
 		t.Run(filepath.Base(file), func(t *testing.T) {
 			src, err := os.ReadFile(file)
 			if err != nil {
@@ -30,6 +22,18 @@ func TestConformanceCorpusCompilesAllTargets(t *testing.T) {
 			assertConformanceResult(t, res)
 		})
 	}
+}
+
+func conformanceFiles(t *testing.T) []string {
+	t.Helper()
+	files, err := filepath.Glob("testdata/conformance/*.sel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) == 0 {
+		t.Fatal("no conformance corpus files found")
+	}
+	return files
 }
 
 func assertConformanceResult(t *testing.T, res Result) {

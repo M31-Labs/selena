@@ -18,6 +18,7 @@ correct shaders and binding descriptors for every GoSX rendering surface.
 ```sh
 go test ./...
 go test -run '^$' -bench=. ./parse .
+go test -run TestConformanceGoldenOutputs -update-conformance-golden .
 go run ./cmd/selena check examples/textured.sel
 go run ./cmd/selena emit wgsl examples/directional-diffuse.sel
 go run ./cmd/selena demo /tmp/selena-textured.html textured

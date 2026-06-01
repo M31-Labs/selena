@@ -37,8 +37,8 @@ The next phase should make the project easier to adopt and harder to misuse.
 - Add arrays, bools, and integer types only after the binding descriptor can
   express them consistently across WGSL, GLSL, Metal, and GLES.
 - Build a conformance corpus of `.sel` inputs and golden outputs for every
-  backend. The first checked-in corpus now compiles core language patterns
-  across all targets; golden-output coverage is the next increment.
+  backend. The checked-in corpus now compiles core language patterns across all
+  targets and snapshots every emitted shader artifact as reviewable goldens.
 
 ## Real-World Readiness
 
