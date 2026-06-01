@@ -388,10 +388,18 @@ func (t *typer) typeOf(e hir.Expr) (ir.Type, error) {
 }
 
 func (t *typer) callType(c hir.Call) (ir.Type, error) {
-	switch c.Func {
-	case "dot":
-		if len(c.Args) != 2 {
-			return "", diagnostic(CodeInvalidCall, c.Span, "dot expects 2 arguments, got %d", len(c.Args))
+	spec, ok := stdlib.builtin(c.Func)
+	if !ok {
+		if len(c.Args) == 0 {
+			return "", diagnostic(CodeInvalidCall, c.Span, "call %q has no arguments", c.Func)
+		}
+		return t.typeOf(c.Args[0])
+	}
+
+	switch spec.kind {
+	case builtinDot:
+		if len(c.Args) != spec.arity {
+			return "", diagnostic(CodeInvalidCall, c.Span, "%s expects %d arguments, got %d", c.Func, spec.arity, len(c.Args))
 		}
 		a, err := t.typeOf(c.Args[0])
 		if err != nil {
@@ -405,9 +413,9 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 			return "", diagnostic(CodeTypeMismatch, c.Span, "dot arguments must be matching vectors, got %s and %s", a, b)
 		}
 		return ir.Float, nil
-	case "length":
-		if len(c.Args) != 1 {
-			return "", diagnostic(CodeInvalidCall, c.Span, "length expects 1 argument, got %d", len(c.Args))
+	case builtinLength:
+		if len(c.Args) != spec.arity {
+			return "", diagnostic(CodeInvalidCall, c.Span, "%s expects %d arguments, got %d", c.Func, spec.arity, len(c.Args))
 		}
 		a, err := t.typeOf(c.Args[0])
 		if err != nil {
@@ -417,9 +425,9 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 			return "", diagnostic(CodeTypeMismatch, c.Span, "length argument must be a vector, got %s", a)
 		}
 		return ir.Float, nil
-	case "distance":
-		if len(c.Args) != 2 {
-			return "", diagnostic(CodeInvalidCall, c.Span, "distance expects 2 arguments, got %d", len(c.Args))
+	case builtinDistance:
+		if len(c.Args) != spec.arity {
+			return "", diagnostic(CodeInvalidCall, c.Span, "%s expects %d arguments, got %d", c.Func, spec.arity, len(c.Args))
 		}
 		a, err := t.typeOf(c.Args[0])
 		if err != nil {
@@ -433,8 +441,8 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 			return "", diagnostic(CodeTypeMismatch, c.Span, "distance arguments must be matching vectors, got %s and %s", a, b)
 		}
 		return ir.Float, nil
-	case "sample":
-		if len(c.Args) != 2 {
+	case builtinSample:
+		if len(c.Args) != spec.arity {
 			return "", diagnostic(CodeInvalidCall, c.Span, "sample(texture, uv) takes 2 arguments")
 		}
 		tex, ok := c.Args[0].(hir.Ref)
@@ -449,7 +457,7 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 			return "", diagnostic(CodeTypeMismatch, c.Span, "sample: second argument must be vec2 uv, got %s", uv)
 		}
 		return ir.Vec4, nil
-	case "rgb":
+	case builtinRGB:
 		if len(c.Args) != 3 && len(c.Args) != 4 {
 			return "", diagnostic(CodeInvalidCall, c.Span, "rgb expects 3 or 4 arguments, got %d", len(c.Args))
 		}
@@ -466,22 +474,15 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 			return ir.Vec4, nil
 		}
 		return ir.Vec3, nil
-	case "normalize", "abs":
-		if len(c.Args) != 1 {
-			return "", diagnostic(CodeInvalidCall, c.Span, "%s expects 1 argument, got %d", c.Func, len(c.Args))
+	case builtinUnarySame:
+		if len(c.Args) != spec.arity {
+			return "", diagnostic(CodeInvalidCall, c.Span, "%s expects %d arguments, got %d", c.Func, spec.arity, len(c.Args))
 		}
 		return t.typeOf(c.Args[0])
-	case "max", "min":
-		return t.sameOrScalarCall(c.Func, c.Args, 2, c.Span)
-	case "pow":
-		return t.sameOrScalarCall(c.Func, c.Args, 2, c.Span)
-	case "clamp", "mix":
-		return t.sameOrScalarCall(c.Func, c.Args, 3, c.Span)
-	default: // normalize, max, min, clamp, mix, pow, abs, … take the type of arg0
-		if len(c.Args) == 0 {
-			return "", diagnostic(CodeInvalidCall, c.Span, "call %q has no arguments", c.Func)
-		}
-		return t.typeOf(c.Args[0])
+	case builtinSameOrScalar:
+		return t.sameOrScalarCall(c.Func, c.Args, spec.arity, c.Span)
+	default:
+		return "", diagnostic(CodeInvalidCall, c.Span, "builtin %q has unsupported registry kind %q", c.Func, spec.kind)
 	}
 }
 

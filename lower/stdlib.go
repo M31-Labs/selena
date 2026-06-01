@@ -7,6 +7,7 @@ import (
 type stdlibRegistry struct {
 	records  map[string]recordSpec
 	geometry map[string]geometrySpec
+	builtins map[string]builtinSpec
 }
 
 type recordSpec struct {
@@ -18,6 +19,23 @@ type geometrySpec struct {
 	varying string
 	attrs   []string
 	build   func() ir.Expr
+}
+
+type builtinKind string
+
+const (
+	builtinDot          builtinKind = "dot"
+	builtinLength       builtinKind = "length"
+	builtinDistance     builtinKind = "distance"
+	builtinSample       builtinKind = "sample"
+	builtinRGB          builtinKind = "rgb"
+	builtinUnarySame    builtinKind = "unary_same"
+	builtinSameOrScalar builtinKind = "same_or_scalar"
+)
+
+type builtinSpec struct {
+	kind  builtinKind
+	arity int
 }
 
 var stdlib = stdlibRegistry{
@@ -59,6 +77,20 @@ var stdlib = stdlibRegistry{
 			},
 		},
 	},
+	builtins: map[string]builtinSpec{
+		"dot":       {kind: builtinDot, arity: 2},
+		"length":    {kind: builtinLength, arity: 1},
+		"distance":  {kind: builtinDistance, arity: 2},
+		"sample":    {kind: builtinSample, arity: 2},
+		"rgb":       {kind: builtinRGB},
+		"normalize": {kind: builtinUnarySame, arity: 1},
+		"abs":       {kind: builtinUnarySame, arity: 1},
+		"max":       {kind: builtinSameOrScalar, arity: 2},
+		"min":       {kind: builtinSameOrScalar, arity: 2},
+		"pow":       {kind: builtinSameOrScalar, arity: 2},
+		"clamp":     {kind: builtinSameOrScalar, arity: 3},
+		"mix":       {kind: builtinSameOrScalar, arity: 3},
+	},
 }
 
 func (r stdlibRegistry) recordField(record, field string) (ir.Type, bool) {
@@ -80,5 +112,10 @@ func (r stdlibRegistry) recordFields(record string) map[string]ir.Type {
 
 func (r stdlibRegistry) geometryField(name string) (geometrySpec, bool) {
 	spec, ok := r.geometry[name]
+	return spec, ok
+}
+
+func (r stdlibRegistry) builtin(name string) (builtinSpec, bool) {
+	spec, ok := r.builtins[name]
 	return spec, ok
 }
