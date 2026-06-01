@@ -23,6 +23,7 @@ type Diagnostic struct {
 	Severity Severity
 	Message  string
 	Range    hir.Span
+	Hint     string
 }
 
 // CompileError wraps one or more diagnostics while preserving the original
@@ -58,6 +59,7 @@ func compileError(err error) error {
 				Severity: SeverityError,
 				Message:  pe.Message,
 				Range:    pe.Span,
+				Hint:     diagnosticHint("SEL0001", pe.Message),
 			}},
 		}
 	}
@@ -68,10 +70,36 @@ func compileError(err error) error {
 			Diagnostics: []Diagnostic{{
 				Code:     le.Code,
 				Severity: SeverityError,
-				Message:  err.Error(),
+				Message:  le.Message,
 				Range:    le.Span,
+				Hint:     diagnosticHint(le.Code, le.Message),
 			}},
 		}
 	}
 	return err
+}
+
+func diagnosticHint(code, message string) string {
+	switch code {
+	case "SEL0001":
+		return "Check the surrounding braces, parentheses, arrows, and return expression."
+	case "SEL1001":
+		return "Rename one parameter or remove the duplicate declaration."
+	case "SEL1002":
+		return "Rename the local binding or choose a name that does not collide with generated interface names."
+	case "SEL1003":
+		return "Use one of the currently supported parameter types: float, vec2, vec3, vec4, mat3, mat4, color, Sun, or texture2d."
+	case "SEL2001":
+		return "Declare a material param or let binding with this name, or correct the identifier."
+	case "SEL2002":
+		return "Check the record field name; available geometry fields are currently position, normal, uv, and worldNormal."
+	case "SEL2003":
+		return "Check the function name and argument count."
+	case "SEL2004":
+		return "Use only components that exist on the vector, and do not mix xyzw with rgba in one swizzle."
+	case "SEL2005":
+		return "Make the operand and argument types match, or introduce an explicit scalar/vector conversion."
+	default:
+		return ""
+	}
 }

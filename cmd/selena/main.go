@@ -48,7 +48,7 @@ var emitTargets = map[string]selena.Target{
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, "selena:", err)
+		printCommandError(os.Stderr, err)
 		os.Exit(1)
 	}
 }
@@ -107,25 +107,31 @@ func run(args []string) error {
 // resolveProgram resolves a built-in material name or parses a .sel file.
 // Downstream compile calls select an explicit material name, or the last material
 // declared when no name is given.
-func resolveProgram(nameOrFile string) (hir.Program, error) {
+type resolvedProgram struct {
+	Program hir.Program
+	File    string
+	Source  []byte
+}
+
+func resolveProgram(nameOrFile string) (resolvedProgram, error) {
 	switch nameOrFile {
 	case "sample", "directional-diffuse":
-		return hir.Program{Materials: []hir.Material{hir.DirectionalDiffuse()}}, nil
+		return resolvedProgram{Program: hir.Program{Materials: []hir.Material{hir.DirectionalDiffuse()}}}, nil
 	case "textured":
-		return hir.Program{Materials: []hir.Material{hir.Textured()}}, nil
+		return resolvedProgram{Program: hir.Program{Materials: []hir.Material{hir.Textured()}}}, nil
 	default:
 		src, err := os.ReadFile(nameOrFile)
 		if err != nil {
-			return hir.Program{}, err
+			return resolvedProgram{}, err
 		}
 		p, err := parse.Program(src)
 		if err != nil {
-			return hir.Program{}, err
+			return resolvedProgram{}, attachSource(nameOrFile, src, err)
 		}
 		if len(p.Materials) == 0 {
-			return hir.Program{}, fmt.Errorf("%s: no material declared", nameOrFile)
+			return resolvedProgram{}, fmt.Errorf("%s: no material declared", nameOrFile)
 		}
-		return p, nil
+		return resolvedProgram{Program: p, File: nameOrFile, Source: src}, nil
 	}
 }
 
@@ -134,12 +140,12 @@ func emit(target selena.Target, file, material string) error {
 	if err != nil {
 		return err
 	}
-	res, err := selena.CompileProgram(prog, selena.CompileOptions{
+	res, err := selena.CompileProgram(prog.Program, selena.CompileOptions{
 		Material: material,
 		Targets:  []selena.Target{target},
 	})
 	if err != nil {
-		return err
+		return attachResolvedSource(prog, err)
 	}
 	artifact, ok := res.Artifact(target)
 	if !ok {
@@ -162,12 +168,12 @@ func check(file, material string) error {
 	if err != nil {
 		return err
 	}
-	res, err := selena.CompileProgram(prog, selena.CompileOptions{
+	res, err := selena.CompileProgram(prog.Program, selena.CompileOptions{
 		Material: material,
 		Targets:  []selena.Target{},
 	})
 	if err != nil {
-		return err
+		return attachResolvedSource(prog, err)
 	}
 	fmt.Printf("ok: %s — %d uniforms (%d-byte block), %d attributes, %d varyings, %d textures\n",
 		res.Module.Name, len(res.Module.Uniforms), res.Layout.UniformBlock.Size, len(res.Module.Attributes), len(res.Module.Varyings), len(res.Module.Textures))
@@ -179,9 +185,9 @@ func inspect(file, material string) error {
 	if err != nil {
 		return err
 	}
-	res, err := selena.CompileProgram(prog, selena.CompileOptions{Material: material})
+	res, err := selena.CompileProgram(prog.Program, selena.CompileOptions{Material: material})
 	if err != nil {
-		return err
+		return attachResolvedSource(prog, err)
 	}
 	desc, err := res.Layout.JSON()
 	if err != nil {

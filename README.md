@@ -91,7 +91,8 @@ Set `Material` to choose a named material from a file, or pass
 Use `bindings.PackUniforms(res.Layout, values)` to fill the generated std140
 uniform block without hand-packing `vec3` tails or `mat3` column strides.
 Compile failures that can be tied to source return `*selena.CompileError` with
-diagnostic codes and 1-based line/column ranges.
+diagnostic codes and 1-based line/column ranges. The CLI renders those ranges
+as annotated snippets with fix-oriented hints.
 
 ## How it plugs into GoSX
 
@@ -155,9 +156,9 @@ and GLSL-ES where offline validators are installed.
 Current compiler coverage includes directional diffuse materials, texture
 sampling, reusable functions, material inheritance via `extends` /
 `super.surface`, deterministic binding descriptors, CLI inspectability, and
-source-aware semantic validation for common name/type errors before backend
-shader emission. Next development work: richer diagnostic rendering, parameter
-defaults, a real stdlib registry, and broader material/PBR interop.
+source-aware semantic validation with annotated CLI snippets before backend
+shader emission. Next development work: parameter defaults, a real stdlib
+registry, and broader material/PBR interop.
 
 See [ROADMAP.md](ROADMAP.md) for the public next-step plan and
 [CONTRIBUTING.md](CONTRIBUTING.md) for development notes.
