@@ -75,7 +75,9 @@ GLSL/WebGL path from the same `.sel` material.
 See [docs/language-guide.md](docs/language-guide.md) for copy-pasteable material
 patterns, supported types, defaults, host packing, and diagnostics. See
 [docs/compatibility.md](docs/compatibility.md) for the current backend and host
-descriptor contract.
+descriptor contract, and
+[docs/standard-material-interop.md](docs/standard-material-interop.md) for the
+PBR/standard-material boundary.
 
 ## Use as a library
 
@@ -176,7 +178,9 @@ metadata; backend builtin emission goes through declarative per-target spelling
 tables; descriptors carry explicit schema/language versions; and descriptor
 defaults now feed the demo harness plus GoSX `CustomUniforms`. Compatibility
 notes, a `.sel` conformance corpus, and parser/compile benchmarks now exist as
-the baseline for broader material/PBR interop and runtime conformance work.
+the baseline for broader material/PBR interop and runtime conformance work. The
+standard-material interop boundary is now documented so future PBR hooks extend
+GoSX's renderer instead of forking it.
 
 See [ROADMAP.md](ROADMAP.md) for the public next-step plan and
 [CONTRIBUTING.md](CONTRIBUTING.md) for development notes.

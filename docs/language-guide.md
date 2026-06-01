@@ -3,6 +3,9 @@
 Selena `.sel` files define one or more materials plus optional reusable
 functions. A material declares host-provided params and one `surface(geo)` body.
 Selena lowers the surface once, then emits WGSL, WebGL GLSL, Metal, and GLES.
+Selena materials are currently complete custom shaders. Standard/PBR material
+hooks are planned separately; see
+[standard-material-interop.md](standard-material-interop.md).
 
 ## Solid Color
 

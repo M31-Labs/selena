@@ -31,7 +31,8 @@ The next phase should make the project easier to adopt and harder to misuse.
   the registry; builtin emission now routes through backend dialect call hooks
   backed by declarative per-target spelling tables.
 - Define the material/PBR interop boundary: extension hooks for standard lit
-  materials, not a forked material system.
+  materials, not a forked material system. The public interop note now pins the
+  current custom-material boundary and the intended `StandardLit` hook model.
 - Add vertex hooks to the parser and lowering path, with clear rules for which
   geometry fields are mutable.
 - Add arrays, bools, and integer types only after the binding descriptor can
