@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"m31labs.dev/selena/emit/internal/spell"
 	"m31labs.dev/selena/ir"
 )
 
@@ -86,7 +87,7 @@ func newScope(m ir.Module, fragment bool) scope {
 func (s scope) TypeName(t ir.Type) string { return typeName(t) }
 
 func (s scope) Call(name string, args []string) string {
-	return name + "(" + strings.Join(args, ", ") + ")"
+	return spell.Call(name, args, builtinSpellings)
 }
 
 func (s scope) Ref(name string) string {
@@ -133,4 +134,17 @@ func nameSet(bs []ir.Binding) map[string]bool {
 		m[b.Name] = true
 	}
 	return m
+}
+
+var builtinSpellings = spell.Builtins{
+	"abs":       "abs",
+	"clamp":     "clamp",
+	"distance":  "distance",
+	"dot":       "dot",
+	"length":    "length",
+	"max":       "max",
+	"min":       "min",
+	"mix":       "mix",
+	"normalize": "normalize",
+	"pow":       "pow",
 }

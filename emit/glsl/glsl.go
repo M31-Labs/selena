@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"m31labs.dev/selena/emit/internal/spell"
 	"m31labs.dev/selena/ir"
 )
 
@@ -66,7 +67,7 @@ type bare struct{}
 func (bare) TypeName(t ir.Type) string { return typeName(t) }
 func (bare) Ref(name string) string    { return name }
 func (bare) Call(name string, args []string) string {
-	return name + "(" + strings.Join(args, ", ") + ")"
+	return spell.Call(name, args, builtinSpellings)
 }
 
 // Sample uses GLSL ES 1.00's texture2D (combined sampler2D).
@@ -97,4 +98,17 @@ func nameSet(bs []ir.Binding) map[string]bool {
 		m[b.Name] = true
 	}
 	return m
+}
+
+var builtinSpellings = spell.Builtins{
+	"abs":       "abs",
+	"clamp":     "clamp",
+	"distance":  "distance",
+	"dot":       "dot",
+	"length":    "length",
+	"max":       "max",
+	"min":       "min",
+	"mix":       "mix",
+	"normalize": "normalize",
+	"pow":       "pow",
 }
