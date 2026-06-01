@@ -10,34 +10,6 @@ import (
 	"m31labs.dev/selena/ir"
 )
 
-// --- stdlib knowledge (hardcoded for M1; generalized into a real stdlib in M4) ---
-
-// sunFields are the members of the stdlib Sun record.
-var sunFields = map[string]ir.Type{"dir": ir.Vec3, "ambient": ir.Float}
-
-// computedGeo describes a stdlib-computed geometry field: the varying it lands
-// in, its type, the attributes the vertex stage needs, and how to compute it.
-type computedGeo struct {
-	varying string
-	typ     ir.Type
-	attrs   []string
-	build   func() ir.Expr
-}
-
-var geoComputed = map[string]computedGeo{
-	"worldNormal": {
-		varying: "vWorldNormal", typ: ir.Vec3, attrs: []string{"normal"},
-		build: func() ir.Expr {
-			return ir.Call{Func: "normalize", Args: []ir.Expr{
-				ir.Binary{Op: "*", L: ir.Ref{Name: "normalMatrix"}, R: ir.Ref{Name: "normal"}},
-			}}
-		},
-	},
-}
-
-// geoAttr are geometry fields that map directly to a vertex attribute.
-var geoAttr = map[string]ir.Type{"position": ir.Vec3, "normal": ir.Vec3, "uv": ir.Vec2}
-
 func hirToIRType(t hir.Type) (ir.Type, bool) {
 	switch t {
 	case hir.Float:
@@ -115,9 +87,10 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 			if p.Default != nil {
 				return ir.Module{}, bindings.Layout{}, diagnostic(CodeInvalidDefault, hir.ExprSpan(p.Default), "param %q: defaults for Sun records are not supported yet", p.Name)
 			}
-			for _, f := range sortedKeys(sunFields) {
+			for _, f := range sortedKeys(stdlib.recordFields(string(hir.Sun))) {
 				un := p.Name + "_" + f
-				if err := addUniform(un, sunFields[f]); err != nil {
+				ft, _ := stdlib.recordField(string(hir.Sun), f)
+				if err := addUniform(un, ft); err != nil {
 					return fail("param %q: %w", p.Name, err)
 				}
 				uniformOf[p.Name+"."+f] = un
@@ -159,29 +132,28 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 	var varyings []ir.Binding
 	var vertexBody []ir.Stmt
 	for _, f := range sortedSet(usedGeo) {
-		if cg, ok := geoComputed[f]; ok {
-			for _, a := range cg.attrs {
-				attrNeeded[a] = true
-			}
-			varyingOf[f] = cg.varying
-			varyings = append(varyings, ir.Binding{Name: cg.varying, Type: cg.typ})
-			vertexBody = append(vertexBody, ir.Stmt{Target: cg.varying, Type: cg.typ, Value: cg.build()})
-		} else if at, ok := geoAttr[f]; ok {
-			attrNeeded[f] = true
-			vn := "v" + title(f)
-			varyingOf[f] = vn
-			varyings = append(varyings, ir.Binding{Name: vn, Type: at})
-			vertexBody = append(vertexBody, ir.Stmt{Target: vn, Type: at, Value: ir.Ref{Name: f}})
-		} else {
+		gf, ok := stdlib.geometryField(f)
+		if !ok {
 			return fail("unknown geometry field geo.%s", f)
 		}
+		for _, a := range gf.attrs {
+			attrNeeded[a] = true
+		}
+		varyingOf[f] = gf.varying
+		varyings = append(varyings, ir.Binding{Name: gf.varying, Type: gf.typ})
+		vertexBody = append(vertexBody, ir.Stmt{Target: gf.varying, Type: gf.typ, Value: gf.build()})
 	}
 
 	// --- attributes: position first (location 0), then the rest, deterministically ---
-	attributes := []ir.Binding{{Name: "position", Type: geoAttr["position"]}}
+	position, _ := stdlib.geometryField("position")
+	attributes := []ir.Binding{{Name: "position", Type: position.typ}}
 	for _, a := range sortedSet(attrNeeded) {
 		if a != "position" {
-			attributes = append(attributes, ir.Binding{Name: a, Type: geoAttr[a]})
+			gf, ok := stdlib.geometryField(a)
+			if !ok {
+				return fail("attribute %q is not registered", a)
+			}
+			attributes = append(attributes, ir.Binding{Name: a, Type: gf.typ})
 		}
 	}
 	reserved, err := interfaceNames(uniforms, textures, attributes, varyings)
@@ -386,16 +358,13 @@ func (t *typer) typeOf(e hir.Expr) (ir.Type, error) {
 	case hir.Member:
 		if base, ok := x.E.(hir.Ref); ok {
 			if base.Name == t.geo {
-				if cg, ok := geoComputed[x.Field]; ok {
-					return cg.typ, nil
-				}
-				if at, ok := geoAttr[x.Field]; ok {
-					return at, nil
+				if gf, ok := stdlib.geometryField(x.Field); ok {
+					return gf.typ, nil
 				}
 				return "", diagnostic(CodeInvalidMember, x.Span, "unknown geometry field geo.%s", x.Field)
 			}
 			if t.paramKind[base.Name] == hir.Sun {
-				if ft, ok := sunFields[x.Field]; ok {
+				if ft, ok := stdlib.recordField(string(hir.Sun), x.Field); ok {
 					return ft, nil
 				}
 				return "", diagnostic(CodeInvalidMember, x.Span, "Sun has no field %q", x.Field)
@@ -625,13 +594,6 @@ func sortedSet(m map[string]bool) []string {
 	}
 	sort.Strings(ks)
 	return ks
-}
-
-func title(s string) string {
-	if s == "" {
-		return s
-	}
-	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 func interfaceNames(uniforms []bindings.NamedType, textures []string, attributes, varyings []ir.Binding) (map[string]string, error) {

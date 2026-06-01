@@ -24,8 +24,9 @@ The next phase should make the project easier to adopt and harder to misuse.
 
 ## Completeness
 
-- Replace hardcoded stdlib knowledge with a registry for records, functions,
-  geometry fields, and backend spellings.
+- Continue replacing hardcoded stdlib knowledge with registry entries. `Sun`
+  record fields and geometry producers now live in the first registry slice;
+  functions and backend spellings still need to move.
 - Define the material/PBR interop boundary: extension hooks for standard lit
   materials, not a forked material system.
 - Add vertex hooks to the parser and lowering path, with clear rules for which
