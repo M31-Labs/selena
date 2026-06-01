@@ -27,7 +27,8 @@ The next phase should make the project easier to adopt and harder to misuse.
 
 - Continue replacing hardcoded stdlib knowledge with registry entries. `Sun`
   record fields, geometry producers, and builtin typing metadata now live in
-  the registry; backend spellings still need to move.
+  the registry; builtin emission now routes through backend dialect call hooks
+  so per-target spellings can move behind a declarative table next.
 - Define the material/PBR interop boundary: extension hooks for standard lit
   materials, not a forked material system.
 - Add vertex hooks to the parser and lowering path, with clear rules for which

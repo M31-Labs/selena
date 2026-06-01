@@ -85,6 +85,10 @@ func newScope(m ir.Module, fragment bool) scope {
 
 func (s scope) TypeName(t ir.Type) string { return typeName(t) }
 
+func (s scope) Call(name string, args []string) string {
+	return name + "(" + strings.Join(args, ", ") + ")"
+}
+
 func (s scope) Ref(name string) string {
 	switch {
 	case s.uniforms[name]:

@@ -75,8 +75,8 @@ type Construct struct {
 	Args []Expr
 }
 
-// Call is a builtin function call whose name is identical across backends
-// (normalize, dot, max, mix, clamp, ...).
+// Call is a builtin function call. Dialects render the backend spelling through
+// Dialect.Call so future builtins do not need to change the generic IR printer.
 type Call struct {
 	Func string
 	Args []Expr
@@ -119,6 +119,7 @@ func (Sample) isExpr()    {}
 type Dialect interface {
 	TypeName(Type) string
 	Ref(name string) string
+	Call(name string, args []string) string
 	// Sample renders a texture sample given the texture name and the
 	// already-rendered UV expression (WGSL: textureSample(t, tSampler, uv);
 	// GLSL ES3: texture(t, uv); Metal: t.sample(tSampler, uv)).
@@ -133,9 +134,9 @@ func Print(e Expr, d Dialect) string {
 	case Lit:
 		return formatFloat(x.Value)
 	case Construct:
-		return d.TypeName(x.Type) + "(" + printArgs(x.Args, d) + ")"
+		return d.TypeName(x.Type) + "(" + joinArgs(printArgs(x.Args, d)) + ")"
 	case Call:
-		return x.Func + "(" + printArgs(x.Args, d) + ")"
+		return d.Call(x.Func, printArgs(x.Args, d))
 	case Binary:
 		return "(" + Print(x.L, d) + " " + x.Op + " " + Print(x.R, d) + ")"
 	case Swizzle:
@@ -147,11 +148,15 @@ func Print(e Expr, d Dialect) string {
 	}
 }
 
-func printArgs(args []Expr, d Dialect) string {
+func printArgs(args []Expr, d Dialect) []string {
 	parts := make([]string, len(args))
 	for i, a := range args {
 		parts[i] = Print(a, d)
 	}
+	return parts
+}
+
+func joinArgs(parts []string) string {
 	out := ""
 	for i, p := range parts {
 		if i > 0 {

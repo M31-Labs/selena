@@ -65,6 +65,9 @@ type bare struct{}
 
 func (bare) TypeName(t ir.Type) string { return typeName(t) }
 func (bare) Ref(name string) string    { return name }
+func (bare) Call(name string, args []string) string {
+	return name + "(" + strings.Join(args, ", ") + ")"
+}
 
 // Sample uses GLSL ES 1.00's texture2D (combined sampler2D).
 func (bare) Sample(tex, uv string) string { return "texture2D(" + tex + ", " + uv + ")" }
