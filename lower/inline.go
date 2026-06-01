@@ -61,7 +61,7 @@ func (in *inliner) expr(e hir.Expr, env map[string]hir.Expr) (hir.Expr, error) {
 		if err != nil {
 			return nil, err
 		}
-		return hir.Member{E: obj, Field: x.Field}, nil
+		return hir.Member{E: obj, Field: x.Field, Span: x.Span}, nil
 	case hir.Binary:
 		l, err := in.expr(x.L, env)
 		if err != nil {
@@ -71,7 +71,7 @@ func (in *inliner) expr(e hir.Expr, env map[string]hir.Expr) (hir.Expr, error) {
 		if err != nil {
 			return nil, err
 		}
-		return hir.Binary{Op: x.Op, L: l, R: r}, nil
+		return hir.Binary{Op: x.Op, L: l, R: r, Span: x.Span}, nil
 	case hir.Call:
 		args := make([]hir.Expr, len(x.Args))
 		for i, a := range x.Args {
@@ -83,7 +83,7 @@ func (in *inliner) expr(e hir.Expr, env map[string]hir.Expr) (hir.Expr, error) {
 		}
 		fn, ok := in.funcs[x.Func]
 		if !ok {
-			return hir.Call{Func: x.Func, Args: args}, nil // builtin / stdlib
+			return hir.Call{Func: x.Func, Args: args, Span: x.Span}, nil // builtin / stdlib
 		}
 		if len(args) != len(fn.Params) {
 			return nil, fmt.Errorf("fn %s expects %d args, got %d", fn.Name, len(fn.Params), len(args))

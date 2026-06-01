@@ -8,13 +8,12 @@ The next phase should make the project easier to adopt and harder to misuse.
 
 ## Ergonomics
 
-- Extend the new top-level `Compile` API with structured diagnostics once source
-  ranges exist. It already returns HIR, IR, shader outputs, and the binding
-  descriptor in one object.
+- Broaden structured diagnostics across parser, lowerer, and emitters. The
+  first source ranges and diagnostic codes now flow through `CompileError`.
 - Keep expanding `selena inspect` as the debug surface for HIR, IR, interface
   layout, target output, and descriptor review.
-- Add source ranges to parse and lowering errors so diagnostics can point at the
-  exact param, expression, or function call.
+- Add CLI snippet rendering and fix hints for diagnostics that already carry
+  source ranges.
 - Add parameter defaults and generated host-side default values in the binding
   descriptor. The Go std140 packer exists; defaults should feed it directly.
 - Add a small language guide with copy-pasteable materials for color, texture,

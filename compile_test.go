@@ -1,6 +1,7 @@
 package selena
 
 import (
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -96,6 +97,36 @@ func TestCompileRejectsUnknownMaterialAndTarget(t *testing.T) {
 	}
 	if _, err := Compile(src, CompileOptions{Targets: []Target{"spirv"}}); err == nil || !strings.Contains(err.Error(), `unknown target "spirv"`) {
 		t.Fatalf("unknown target error = %v", err)
+	}
+}
+
+func TestCompileErrorCarriesSourceRange(t *testing.T) {
+	src := []byte(`material Bad {
+    surface(geo) -> color {
+        return missing
+    }
+}`)
+
+	_, err := Compile(src, CompileOptions{Targets: []Target{}})
+	if err == nil {
+		t.Fatal("Compile succeeded, want diagnostic error")
+	}
+	var ce *CompileError
+	if !errors.As(err, &ce) {
+		t.Fatalf("error type = %T, want *CompileError", err)
+	}
+	if len(ce.Diagnostics) != 1 {
+		t.Fatalf("diagnostics = %d, want 1", len(ce.Diagnostics))
+	}
+	d := ce.Diagnostics[0]
+	if d.Code != "SEL2001" {
+		t.Fatalf("diagnostic code = %s, want SEL2001", d.Code)
+	}
+	if d.Range.Start.Line != 3 || d.Range.Start.Column != 16 {
+		t.Fatalf("range start = %d:%d, want 3:16", d.Range.Start.Line, d.Range.Start.Column)
+	}
+	if !strings.Contains(err.Error(), "SEL2001 at 3:16") {
+		t.Fatalf("error string = %q, want line/column context", err.Error())
 	}
 }
 

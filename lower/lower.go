@@ -83,7 +83,7 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 	paramKind := map[string]hir.Type{}
 	for _, p := range m.Params {
 		if _, ok := paramKind[p.Name]; ok {
-			return fail("duplicate param %q", p.Name)
+			return ir.Module{}, bindings.Layout{}, diagnostic(CodeDuplicateParam, p.Span, "duplicate param %q", p.Name)
 		}
 		paramKind[p.Name] = p.Type
 	}
@@ -123,7 +123,7 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 		default:
 			t, ok := hirToIRType(p.Type)
 			if !ok {
-				return fail("param %q: unsupported type %q", p.Name, p.Type)
+				return ir.Module{}, bindings.Layout{}, diagnostic(CodeUnsupportedType, p.Span, "param %q: unsupported type %q", p.Name, p.Type)
 			}
 			if err := addUniform(p.Name, t); err != nil {
 				return fail("param %q: %w", p.Name, err)
@@ -183,10 +183,10 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 	seenLocals := map[string]bool{}
 	for _, l := range m.Surface.Body {
 		if kind, ok := reserved[l.Name]; ok {
-			return fail("surface local %q conflicts with %s", l.Name, kind)
+			return ir.Module{}, bindings.Layout{}, diagnostic(CodeDuplicateLocal, l.Span, "surface local %q conflicts with %s", l.Name, kind)
 		}
 		if seenLocals[l.Name] {
-			return fail("duplicate surface local %q", l.Name)
+			return ir.Module{}, bindings.Layout{}, diagnostic(CodeDuplicateLocal, l.Span, "duplicate surface local %q", l.Name)
 		}
 		t, err := tp.typeOf(l.Value)
 		if err != nil {
@@ -274,14 +274,14 @@ func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
 			if base.Name == r.geo {
 				vn, ok := r.varyingOf[x.Field]
 				if !ok {
-					return nil, fmt.Errorf("geo.%s is not available in the surface", x.Field)
+					return nil, diagnostic(CodeInvalidMember, x.Span, "geo.%s is not available in the surface", x.Field)
 				}
 				return ir.Ref{Name: vn}, nil
 			}
 			if r.paramKind[base.Name] == hir.Sun {
 				un, ok := r.uniformOf[base.Name+"."+x.Field]
 				if !ok {
-					return nil, fmt.Errorf("Sun has no field %q", x.Field)
+					return nil, diagnostic(CodeInvalidMember, x.Span, "Sun has no field %q", x.Field)
 				}
 				return ir.Ref{Name: un}, nil
 			}
@@ -295,11 +295,11 @@ func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
 	case hir.Call:
 		if x.Func == "sample" {
 			if len(x.Args) != 2 {
-				return nil, fmt.Errorf("sample(texture, uv) takes 2 arguments")
+				return nil, diagnostic(CodeInvalidCall, x.Span, "sample(texture, uv) takes 2 arguments")
 			}
 			texRef, ok := x.Args[0].(hir.Ref)
 			if !ok || r.paramKind[texRef.Name] != hir.Texture2D {
-				return nil, fmt.Errorf("sample: first argument must be a texture2d param")
+				return nil, diagnostic(CodeInvalidCall, x.Span, "sample: first argument must be a texture2d param")
 			}
 			uv, err := r.expr(x.Args[1])
 			if err != nil {
@@ -365,9 +365,9 @@ func (t *typer) typeOf(e hir.Expr) (ir.Type, error) {
 			if it, ok := hirToIRType(pk); ok {
 				return it, nil
 			}
-			return "", fmt.Errorf("%q has record type %q and must be accessed by field", x.Name, pk)
+			return "", diagnostic(CodeInvalidMember, x.Span, "%q has record type %q and must be accessed by field", x.Name, pk)
 		}
-		return "", fmt.Errorf("unknown name %q", x.Name)
+		return "", diagnostic(CodeUnknownName, x.Span, "unknown name %q", x.Name)
 	case hir.Member:
 		if base, ok := x.E.(hir.Ref); ok {
 			if base.Name == t.geo {
@@ -377,20 +377,24 @@ func (t *typer) typeOf(e hir.Expr) (ir.Type, error) {
 				if at, ok := geoAttr[x.Field]; ok {
 					return at, nil
 				}
-				return "", fmt.Errorf("unknown geometry field geo.%s", x.Field)
+				return "", diagnostic(CodeInvalidMember, x.Span, "unknown geometry field geo.%s", x.Field)
 			}
 			if t.paramKind[base.Name] == hir.Sun {
 				if ft, ok := sunFields[x.Field]; ok {
 					return ft, nil
 				}
-				return "", fmt.Errorf("Sun has no field %q", x.Field)
+				return "", diagnostic(CodeInvalidMember, x.Span, "Sun has no field %q", x.Field)
 			}
 		}
 		bt, err := t.typeOf(x.E)
 		if err != nil {
 			return "", err
 		}
-		return swizzleType(bt, x.Field) // .rgb, .xyz, .x …
+		st, err := swizzleType(bt, x.Field) // .rgb, .xyz, .x …
+		if err != nil {
+			return "", diagnostic(CodeInvalidSwizzle, x.Span, "%v", err)
+		}
+		return st, nil
 	case hir.Call:
 		return t.callType(x)
 	case hir.Binary:
@@ -403,7 +407,7 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 	switch c.Func {
 	case "dot":
 		if len(c.Args) != 2 {
-			return "", fmt.Errorf("dot expects 2 arguments, got %d", len(c.Args))
+			return "", diagnostic(CodeInvalidCall, c.Span, "dot expects 2 arguments, got %d", len(c.Args))
 		}
 		a, err := t.typeOf(c.Args[0])
 		if err != nil {
@@ -414,24 +418,24 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 			return "", err
 		}
 		if !isVector(a) || a != b {
-			return "", fmt.Errorf("dot arguments must be matching vectors, got %s and %s", a, b)
+			return "", diagnostic(CodeTypeMismatch, c.Span, "dot arguments must be matching vectors, got %s and %s", a, b)
 		}
 		return ir.Float, nil
 	case "length":
 		if len(c.Args) != 1 {
-			return "", fmt.Errorf("length expects 1 argument, got %d", len(c.Args))
+			return "", diagnostic(CodeInvalidCall, c.Span, "length expects 1 argument, got %d", len(c.Args))
 		}
 		a, err := t.typeOf(c.Args[0])
 		if err != nil {
 			return "", err
 		}
 		if !isVector(a) {
-			return "", fmt.Errorf("length argument must be a vector, got %s", a)
+			return "", diagnostic(CodeTypeMismatch, c.Span, "length argument must be a vector, got %s", a)
 		}
 		return ir.Float, nil
 	case "distance":
 		if len(c.Args) != 2 {
-			return "", fmt.Errorf("distance expects 2 arguments, got %d", len(c.Args))
+			return "", diagnostic(CodeInvalidCall, c.Span, "distance expects 2 arguments, got %d", len(c.Args))
 		}
 		a, err := t.typeOf(c.Args[0])
 		if err != nil {
@@ -442,28 +446,28 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 			return "", err
 		}
 		if !isVector(a) || a != b {
-			return "", fmt.Errorf("distance arguments must be matching vectors, got %s and %s", a, b)
+			return "", diagnostic(CodeTypeMismatch, c.Span, "distance arguments must be matching vectors, got %s and %s", a, b)
 		}
 		return ir.Float, nil
 	case "sample":
 		if len(c.Args) != 2 {
-			return "", fmt.Errorf("sample(texture, uv) takes 2 arguments")
+			return "", diagnostic(CodeInvalidCall, c.Span, "sample(texture, uv) takes 2 arguments")
 		}
 		tex, ok := c.Args[0].(hir.Ref)
 		if !ok || t.paramKind[tex.Name] != hir.Texture2D {
-			return "", fmt.Errorf("sample: first argument must be a texture2d param")
+			return "", diagnostic(CodeInvalidCall, c.Span, "sample: first argument must be a texture2d param")
 		}
 		uv, err := t.typeOf(c.Args[1])
 		if err != nil {
 			return "", err
 		}
 		if uv != ir.Vec2 {
-			return "", fmt.Errorf("sample: second argument must be vec2 uv, got %s", uv)
+			return "", diagnostic(CodeTypeMismatch, c.Span, "sample: second argument must be vec2 uv, got %s", uv)
 		}
 		return ir.Vec4, nil
 	case "rgb":
 		if len(c.Args) != 3 && len(c.Args) != 4 {
-			return "", fmt.Errorf("rgb expects 3 or 4 arguments, got %d", len(c.Args))
+			return "", diagnostic(CodeInvalidCall, c.Span, "rgb expects 3 or 4 arguments, got %d", len(c.Args))
 		}
 		for i, a := range c.Args {
 			at, err := t.typeOf(a)
@@ -471,7 +475,7 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 				return "", err
 			}
 			if at != ir.Float {
-				return "", fmt.Errorf("rgb argument %d must be float, got %s", i+1, at)
+				return "", diagnostic(CodeTypeMismatch, c.Span, "rgb argument %d must be float, got %s", i+1, at)
 			}
 		}
 		if len(c.Args) == 4 {
@@ -480,26 +484,26 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 		return ir.Vec3, nil
 	case "normalize", "abs":
 		if len(c.Args) != 1 {
-			return "", fmt.Errorf("%s expects 1 argument, got %d", c.Func, len(c.Args))
+			return "", diagnostic(CodeInvalidCall, c.Span, "%s expects 1 argument, got %d", c.Func, len(c.Args))
 		}
 		return t.typeOf(c.Args[0])
 	case "max", "min":
-		return t.sameOrScalarCall(c.Func, c.Args, 2)
+		return t.sameOrScalarCall(c.Func, c.Args, 2, c.Span)
 	case "pow":
-		return t.sameOrScalarCall(c.Func, c.Args, 2)
+		return t.sameOrScalarCall(c.Func, c.Args, 2, c.Span)
 	case "clamp", "mix":
-		return t.sameOrScalarCall(c.Func, c.Args, 3)
+		return t.sameOrScalarCall(c.Func, c.Args, 3, c.Span)
 	default: // normalize, max, min, clamp, mix, pow, abs, … take the type of arg0
 		if len(c.Args) == 0 {
-			return "", fmt.Errorf("call %q has no arguments", c.Func)
+			return "", diagnostic(CodeInvalidCall, c.Span, "call %q has no arguments", c.Func)
 		}
 		return t.typeOf(c.Args[0])
 	}
 }
 
-func (t *typer) sameOrScalarCall(name string, args []hir.Expr, n int) (ir.Type, error) {
+func (t *typer) sameOrScalarCall(name string, args []hir.Expr, n int, span hir.Span) (ir.Type, error) {
 	if len(args) != n {
-		return "", fmt.Errorf("%s expects %d arguments, got %d", name, n, len(args))
+		return "", diagnostic(CodeInvalidCall, span, "%s expects %d arguments, got %d", name, n, len(args))
 	}
 	base, err := t.typeOf(args[0])
 	if err != nil {
@@ -511,7 +515,7 @@ func (t *typer) sameOrScalarCall(name string, args []hir.Expr, n int) (ir.Type, 
 			return "", err
 		}
 		if at != base && at != ir.Float {
-			return "", fmt.Errorf("%s argument %d must be %s or float, got %s", name, i+1, base, at)
+			return "", diagnostic(CodeTypeMismatch, span, "%s argument %d must be %s or float, got %s", name, i+1, base, at)
 		}
 	}
 	return base, nil
@@ -519,7 +523,7 @@ func (t *typer) sameOrScalarCall(name string, args []hir.Expr, n int) (ir.Type, 
 
 func (t *typer) binaryType(b hir.Binary) (ir.Type, error) {
 	if b.Op != "+" && b.Op != "-" && b.Op != "*" && b.Op != "/" {
-		return "", fmt.Errorf("unsupported operator %q", b.Op)
+		return "", diagnostic(CodeInvalidCall, b.Span, "unsupported operator %q", b.Op)
 	}
 	lt, err := t.typeOf(b.L)
 	if err != nil {
@@ -548,7 +552,7 @@ func (t *typer) binaryType(b hir.Binary) (ir.Type, error) {
 	if rt == ir.Float {
 		return lt, nil
 	}
-	return "", fmt.Errorf("operator %s is not defined for %s and %s", b.Op, lt, rt)
+	return "", diagnostic(CodeTypeMismatch, b.Span, "operator %s is not defined for %s and %s", b.Op, lt, rt)
 }
 
 // --- geo usage scan ---

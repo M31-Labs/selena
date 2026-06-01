@@ -79,7 +79,7 @@ func (r Result) Artifact(target Target) (Artifact, bool) {
 func Compile(source []byte, opts CompileOptions) (Result, error) {
 	p, err := parse.Program(source)
 	if err != nil {
-		return Result{}, err
+		return Result{}, compileError(err)
 	}
 	return CompileProgram(p, opts)
 }
@@ -97,15 +97,15 @@ func CompileMaterial(p hir.Program, name string, opts CompileOptions) (Result, e
 func CompileProgram(p hir.Program, opts CompileOptions) (Result, error) {
 	idx, err := selectMaterial(p, opts.Material)
 	if err != nil {
-		return Result{}, err
+		return Result{}, compileError(err)
 	}
 	mod, layout, err := lower.LowerProgram(p, idx)
 	if err != nil {
-		return Result{}, fmt.Errorf("lower %s: %w", p.Materials[idx].Name, err)
+		return Result{}, compileError(fmt.Errorf("lower %s: %w", p.Materials[idx].Name, err))
 	}
 	artifacts, err := emitArtifacts(mod, opts.Targets)
 	if err != nil {
-		return Result{}, err
+		return Result{}, compileError(err)
 	}
 	return Result{
 		Program:   p,
