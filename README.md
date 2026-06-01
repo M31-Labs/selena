@@ -71,6 +71,9 @@ go run ./cmd/selena demo /tmp/selena-textured.html textured
 Open the generated demo HTML in Chrome to compare the WGSL/WebGPU path with the
 GLSL/WebGL path from the same `.sel` material.
 
+See [docs/language-guide.md](docs/language-guide.md) for copy-pasteable material
+patterns, supported types, defaults, host packing, and diagnostics.
+
 ## Use as a library
 
 ```go

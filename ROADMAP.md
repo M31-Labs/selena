@@ -18,8 +18,9 @@ The next phase should make the project easier to adopt and harder to misuse.
 - Expand parameter defaults beyond the first scalar/vector slice. `.sel`
   defaults now flow into the binding descriptor and the Go std140 packer for
   float, vec2, vec3/color, and vec4 uniforms.
-- Add a small language guide with copy-pasteable materials for color, texture,
-  tinting, lighting, and composition.
+- Keep expanding the language guide as new material features land. The first
+  guide now covers color, texture, lighting, composition, defaults, host
+  packing, and diagnostics.
 
 ## Completeness
 
