@@ -51,6 +51,13 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 	fail := func(format string, a ...any) (ir.Module, bindings.Layout, error) {
 		return ir.Module{}, bindings.Layout{}, fmt.Errorf(format, a...)
 	}
+	if m.Vertex != nil {
+		return ir.Module{}, bindings.Layout{}, diagnostic(
+			CodeUnsupportedFeat,
+			m.Vertex.Span,
+			"vertex hooks are not supported yet; Selena currently emits the default transform",
+		)
+	}
 
 	paramKind := map[string]hir.Type{}
 	for _, p := range m.Params {

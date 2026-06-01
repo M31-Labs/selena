@@ -1,6 +1,7 @@
 package lower
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -60,6 +61,33 @@ func TestLowerDirectionalDiffuse(t *testing.T) {
 		if !strings.Contains(src, want) {
 			t.Errorf("lowered WGSL missing %q\n--- got ---\n%s", want, src)
 		}
+	}
+}
+
+func TestLowerRejectsUnsupportedVertexHook(t *testing.T) {
+	_, _, err := Lower(hir.Material{
+		Name: "Bad",
+		Vertex: &hir.Func{
+			Span: hir.Span{Start: hir.Position{Line: 2, Column: 5}},
+			Geo:  "geo",
+		},
+		Surface: hir.Func{
+			Geo:    "geo",
+			Result: hir.Call{Func: "rgb", Args: []hir.Expr{hir.Lit{Value: 1}, hir.Lit{Value: 1}, hir.Lit{Value: 1}}},
+		},
+	})
+	if err == nil {
+		t.Fatal("Lower succeeded, want unsupported feature diagnostic")
+	}
+	var de *DiagnosticError
+	if !errors.As(err, &de) {
+		t.Fatalf("error type = %T, want *DiagnosticError", err)
+	}
+	if de.Code != CodeUnsupportedFeat {
+		t.Fatalf("diagnostic code = %s, want %s", de.Code, CodeUnsupportedFeat)
+	}
+	if !strings.Contains(de.Message, "vertex hooks are not supported yet") {
+		t.Fatalf("diagnostic message = %q", de.Message)
 	}
 }
 

@@ -91,6 +91,8 @@ func diagnosticHint(code, message string) string {
 		return "Use one of the currently supported parameter types: float, vec2, vec3, vec4, mat3, mat4, color, Sun, or texture2d."
 	case "SEL1004":
 		return "Choose a name that is not a shader keyword, generated binding, or Selena stdlib builtin."
+	case "SEL1005":
+		return "Keep custom vertex deformation out of this material until vertex-hook lowering and backend conformance land."
 	case "SEL2001":
 		return "Declare a material param or let binding with this name, or correct the identifier."
 	case "SEL2002":

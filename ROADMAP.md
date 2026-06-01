@@ -34,7 +34,9 @@ The next phase should make the project easier to adopt and harder to misuse.
   materials, not a forked material system. The public interop note now pins the
   current custom-material boundary and the intended `StandardLit` hook model.
 - Add vertex hooks to the parser and lowering path, with clear rules for which
-  geometry fields are mutable.
+  geometry fields are mutable. Programmatic HIR vertex hooks are now rejected
+  explicitly instead of being silently ignored; full parser/lowering support
+  remains the implementation target.
 - Add arrays, bools, and integer types only after the binding descriptor can
   express them consistently across WGSL, GLSL, Metal, and GLES.
 - Build a conformance corpus of `.sel` inputs and golden outputs for every

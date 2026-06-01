@@ -6,6 +6,7 @@ Selena lowers the surface once, then emits WGSL, WebGL GLSL, Metal, and GLES.
 Selena materials are currently complete custom shaders. Standard/PBR material
 hooks are planned separately; see
 [standard-material-interop.md](standard-material-interop.md).
+Vertex hooks are not part of the stable `.sel` surface yet.
 
 ## Solid Color
 

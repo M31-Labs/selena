@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"m31labs.dev/selena/hir"
 )
 
 func TestCompileDefaultsToAllTargets(t *testing.T) {
@@ -210,6 +212,37 @@ func TestCompileErrorRejectsReservedNames(t *testing.T) {
 	}
 	if !strings.Contains(d.Message, `param "var" is reserved for WGSL binding keyword`) {
 		t.Fatalf("diagnostic message = %q", d.Message)
+	}
+}
+
+func TestCompileProgramRejectsUnsupportedVertexHook(t *testing.T) {
+	_, err := CompileProgram(hir.Program{Materials: []hir.Material{{
+		Name: "Bad",
+		Vertex: &hir.Func{
+			Span: hir.Span{Start: hir.Position{Line: 2, Column: 5}},
+			Geo:  "geo",
+		},
+		Surface: hir.Func{
+			Geo:    "geo",
+			Result: hir.Call{Func: "rgb", Args: []hir.Expr{hir.Lit{Value: 1}, hir.Lit{Value: 1}, hir.Lit{Value: 1}}},
+		},
+	}}}, CompileOptions{Targets: []Target{}})
+	if err == nil {
+		t.Fatal("CompileProgram succeeded, want diagnostic error")
+	}
+	var ce *CompileError
+	if !errors.As(err, &ce) {
+		t.Fatalf("error type = %T, want *CompileError", err)
+	}
+	d := ce.Diagnostics[0]
+	if d.Code != "SEL1005" {
+		t.Fatalf("diagnostic code = %s, want SEL1005", d.Code)
+	}
+	if d.Range.Start.Line != 2 || d.Range.Start.Column != 5 {
+		t.Fatalf("range start = %d:%d, want 2:5", d.Range.Start.Line, d.Range.Start.Column)
+	}
+	if !strings.Contains(d.Hint, "vertex-hook lowering") {
+		t.Fatalf("diagnostic hint = %q", d.Hint)
 	}
 }
 

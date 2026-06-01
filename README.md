@@ -107,6 +107,8 @@ as annotated snippets with fix-oriented hints, and common syntax errors include
 expected-token context.
 Authored params and locals are rejected before emission when they collide with
 shader keywords, generated symbols, or Selena stdlib builtins.
+Programmatic HIR vertex hooks are also rejected explicitly until vertex-hook
+lowering lands, rather than being silently ignored.
 
 ## How it plugs into GoSX
 
