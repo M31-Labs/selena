@@ -1,6 +1,7 @@
 package parse
 
 import (
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -86,6 +87,59 @@ func TestParseParamDefaults(t *testing.T) {
 	}
 	if m.Params[0].Span.Start.Line != 2 {
 		t.Fatalf("param span start line = %d, want 2", m.Params[0].Span.Start.Line)
+	}
+}
+
+func TestParseSyntaxErrorsIncludeExpectedContext(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "missing closing brace",
+			src: `material Bad {
+    surface(geo) -> color { return rgb(1, 1, 1)
+`,
+			want: "expected `}`",
+		},
+		{
+			name: "bad param",
+			src: `material Bad {
+    param baseColor color
+    surface(geo) -> color { return baseColor }
+}`,
+			want: "expected `:` after the parameter name",
+		},
+		{
+			name: "bad statement",
+			src: `material Bad {
+    surface(geo) -> color {
+        baseColor
+        return rgb(1, 1, 1)
+    }
+}`,
+			want: "expected `let` or `return`",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Program([]byte(tc.src))
+			if err == nil {
+				t.Fatal("Program succeeded, want syntax error")
+			}
+			var pe *Error
+			if !errors.As(err, &pe) {
+				t.Fatalf("error type = %T, want *Error", err)
+			}
+			if !strings.Contains(pe.Message, tc.want) {
+				t.Fatalf("message = %q, want substring %q", pe.Message, tc.want)
+			}
+			if pe.Span.IsZero() {
+				t.Fatalf("syntax error span is zero")
+			}
+		})
 	}
 }
 

@@ -99,7 +99,8 @@ uniform block without hand-packing `vec3` tails or `mat3` column strides.
 descriptor defaults declared in `.sel`.
 Compile failures that can be tied to source return `*selena.CompileError` with
 diagnostic codes and 1-based line/column ranges. The CLI renders those ranges
-as annotated snippets with fix-oriented hints.
+as annotated snippets with fix-oriented hints, and common syntax errors include
+expected-token context.
 
 ## How it plugs into GoSX
 
@@ -170,7 +171,7 @@ registry now centralizes `Sun` fields, geometry producers, and builtin typing
 metadata; backend builtin emission goes through declarative per-target spelling
 tables; descriptors carry explicit schema/language versions; and descriptor
 defaults now feed the demo harness plus GoSX `CustomUniforms`. Next development
-work: parser expected-token diagnostics and broader material/PBR interop.
+work: reserved-name/name-mangling diagnostics and broader material/PBR interop.
 
 See [ROADMAP.md](ROADMAP.md) for the public next-step plan and
 [CONTRIBUTING.md](CONTRIBUTING.md) for development notes.

@@ -8,6 +8,7 @@ package parse
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 
 	gts "github.com/odvcencio/gotreesitter"
@@ -57,7 +58,7 @@ func Material(src []byte) (hir.Material, error) {
 	root := tree.RootNode()
 	w := &walker{lang: l, src: src}
 	if root.HasError() {
-		return hir.Material{}, &Error{Message: "syntax error in .sel source", Span: w.span(firstError(root))}
+		return hir.Material{}, syntaxError(w, root)
 	}
 	for i := 0; i < root.NamedChildCount(); i++ {
 		if c := root.NamedChild(i); w.typ(c) == "material" {
@@ -80,7 +81,7 @@ func Program(src []byte) (hir.Program, error) {
 	root := tree.RootNode()
 	w := &walker{lang: l, src: src}
 	if root.HasError() {
-		return hir.Program{}, &Error{Message: "syntax error in .sel source", Span: w.span(firstError(root))}
+		return hir.Program{}, syntaxError(w, root)
 	}
 	var p hir.Program
 	for i := 0; i < root.NamedChildCount(); i++ {
@@ -127,7 +128,7 @@ func firstError(n *gts.Node) *gts.Node {
 	if n == nil {
 		return nil
 	}
-	if n.IsError() || n.IsMissing() {
+	if n.IsMissing() {
 		return n
 	}
 	for i := 0; i < n.ChildCount(); i++ {
@@ -139,7 +140,161 @@ func firstError(n *gts.Node) *gts.Node {
 			return firstError(c)
 		}
 	}
-	return n
+	if n.IsError() || n.HasError() {
+		return n
+	}
+	return nil
+}
+
+func syntaxError(w *walker, root *gts.Node) *Error {
+	n := firstError(root)
+	if expected, span, ok := expectedFromSource(w.src); ok {
+		return &Error{Message: "syntax error in .sel source; expected " + expected, Span: span}
+	}
+	return &Error{Message: syntaxMessage(w, n), Span: w.span(n)}
+}
+
+func syntaxMessage(w *walker, n *gts.Node) string {
+	const prefix = "syntax error in .sel source"
+	if n == nil {
+		return prefix
+	}
+	if n.IsMissing() {
+		return prefix + "; expected " + readableExpected(w.typ(n))
+	}
+	if expected := expectedFromContext(w, n); expected != "" {
+		return prefix + "; expected " + expected
+	}
+	if near := strings.TrimSpace(w.text(n)); near != "" {
+		return fmt.Sprintf("%s near %q", prefix, near)
+	}
+	return prefix
+}
+
+func expectedFromContext(w *walker, n *gts.Node) string {
+	for cur := n; cur != nil; cur = cur.Parent() {
+		switch w.typ(cur) {
+		case "source_file":
+			return "a material or fn declaration"
+		case "material":
+			return "`param`, `surface`, or `}`"
+		case "member":
+			return "`param` or `surface`"
+		case "param":
+			return "`:` after the parameter name, a type, optional `= default`, or the next member"
+		case "surface":
+			return "`->`, a return type, and a surface body"
+		case "fn_decl":
+			return "`(`, parameters, `->`, a return type, and a function body"
+		case "fn_param":
+			return "`:` after the function parameter name"
+		case "block":
+			return "`let`, `return`, or `}`"
+		case "statement":
+			return "`let` or `return`"
+		case "let_stmt":
+			return "`=` and an expression"
+		case "return_stmt":
+			return "a return expression"
+		case "call", "arguments":
+			return "an argument expression or `)`"
+		case "super_call":
+			return "`super.<method>(...)`"
+		case "member_expression":
+			return "`.` and a field name"
+		case "binary_expression":
+			return "a right-hand expression"
+		case "paren_expression":
+			return "an expression and `)`"
+		}
+	}
+	return ""
+}
+
+func readableExpected(token string) string {
+	switch token {
+	case "{", "}", "(", ")", ":", "=", "->", ",", ".":
+		return "`" + token + "`"
+	case "identifier":
+		return "an identifier"
+	case "expression":
+		return "an expression"
+	case "block":
+		return "a `{ ... }` block"
+	default:
+		return "`" + token + "`"
+	}
+}
+
+func expectedFromSource(src []byte) (string, hir.Span, bool) {
+	text := string(src)
+	offset := 0
+	lineNo := 1
+	openBraces := 0
+	for _, line := range strings.SplitAfter(text, "\n") {
+		body := strings.TrimRight(line, "\r\n")
+		trimmed := strings.TrimSpace(body)
+		indent := firstNonSpace(body)
+		switch {
+		case strings.HasPrefix(trimmed, "param ") && !strings.Contains(trimmed, ":"):
+			return "`:` after the parameter name", spanAt(lineNo, offset+indent, indent+1, len(trimmed)), true
+		case strings.HasPrefix(trimmed, "surface") && !strings.Contains(trimmed, "->"):
+			return "`->` before the surface return type", spanAt(lineNo, offset+indent, indent+1, len(trimmed)), true
+		case looksLikeBareStatement(trimmed):
+			return "`let` or `return`", spanAt(lineNo, offset+indent, indent+1, len(trimmed)), true
+		}
+		for _, r := range body {
+			switch r {
+			case '{':
+				openBraces++
+			case '}':
+				if openBraces > 0 {
+					openBraces--
+				}
+			}
+		}
+		offset += len(line)
+		lineNo++
+	}
+	if openBraces > 0 {
+		return "`}`", spanAt(lineNo-1, len(src), 1, 1), true
+	}
+	return "", hir.Span{}, false
+}
+
+func firstNonSpace(s string) int {
+	for i := 0; i < len(s); i++ {
+		if s[i] != ' ' && s[i] != '\t' {
+			return i
+		}
+	}
+	return 0
+}
+
+func looksLikeBareStatement(s string) bool {
+	if s == "" || !isIdentStart(s[0]) {
+		return false
+	}
+	for _, prefix := range []string{"material ", "fn ", "param ", "surface", "let ", "return "} {
+		if strings.HasPrefix(s, prefix) {
+			return false
+		}
+	}
+	return true
+}
+
+func isIdentStart(b byte) bool {
+	return b == '_' || (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z')
+}
+
+func spanAt(lineNo, offset, column, width int) hir.Span {
+	if width < 1 {
+		width = 1
+	}
+	return hir.Span{
+		Start: hir.Position{Offset: offset, Line: lineNo, Column: column},
+		End:   hir.Position{Offset: offset + width, Line: lineNo, Column: column + width},
+	}
 }
 
 func (w *walker) material(n *gts.Node) (hir.Material, error) {

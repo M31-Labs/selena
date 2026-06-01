@@ -15,7 +15,8 @@ The next phase should make the project easier to adopt and harder to misuse.
   layout, target output, and descriptor review.
 - Improve diagnostic precision for inlined functions, `super.surface`, parser
   expected-token context, and backend emission failures. User function arity and
-  invalid `super.surface` calls now report source-anchored diagnostics.
+  invalid `super.surface` calls now report source-anchored diagnostics; parser
+  syntax errors include expected-token context for common malformed input.
 - Expand parameter defaults beyond the first scalar/vector slice. `.sel`
   defaults now flow into the binding descriptor and the Go std140 packer for
   float, vec2, vec3/color, vec4, mat3, and mat4 uniforms.
