@@ -47,6 +47,8 @@ The next phase should make the project easier to adopt and harder to misuse.
   Android GLES.
 - Version the `.sel` language and descriptor schema before downstream tools rely
   on them. Descriptor JSON now carries `schemaVersion` and `languageVersion`.
+- Reject authored names that collide with generated symbols, shader keywords,
+  and stdlib builtins before backend emission.
 - Publish a few complete GoSX examples that load real textures, pack uniforms
   and defaults through the descriptor, and switch between standard and Selena
   materials. The CLI demo harness and GoSX adapter now carry descriptor defaults.

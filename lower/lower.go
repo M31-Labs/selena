@@ -54,6 +54,9 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 
 	paramKind := map[string]hir.Type{}
 	for _, p := range m.Params {
+		if err := validateAuthorName("param", p.Name, p.Span); err != nil {
+			return ir.Module{}, bindings.Layout{}, err
+		}
 		if _, ok := paramKind[p.Name]; ok {
 			return ir.Module{}, bindings.Layout{}, diagnostic(CodeDuplicateParam, p.Span, "duplicate param %q", p.Name)
 		}
@@ -168,6 +171,9 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 	var fragBody []ir.Stmt
 	seenLocals := map[string]bool{}
 	for _, l := range m.Surface.Body {
+		if err := validateAuthorName("surface local", l.Name, l.Span); err != nil {
+			return ir.Module{}, bindings.Layout{}, err
+		}
 		if kind, ok := reserved[l.Name]; ok {
 			return ir.Module{}, bindings.Layout{}, diagnostic(CodeDuplicateLocal, l.Span, "surface local %q conflicts with %s", l.Name, kind)
 		}

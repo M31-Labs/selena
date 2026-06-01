@@ -187,6 +187,32 @@ func TestCompileErrorRejectsSuperWithoutExtends(t *testing.T) {
 	}
 }
 
+func TestCompileErrorRejectsReservedNames(t *testing.T) {
+	src := []byte(`material Bad {
+    param var : float
+    surface(geo) -> color { return rgb(var, var, var) }
+}`)
+
+	_, err := Compile(src, CompileOptions{Targets: []Target{}})
+	if err == nil {
+		t.Fatal("Compile succeeded, want diagnostic error")
+	}
+	var ce *CompileError
+	if !errors.As(err, &ce) {
+		t.Fatalf("error type = %T, want *CompileError", err)
+	}
+	d := ce.Diagnostics[0]
+	if d.Code != "SEL1004" {
+		t.Fatalf("diagnostic code = %s, want SEL1004", d.Code)
+	}
+	if d.Range.Start.Line != 2 || d.Range.Start.Column != 5 {
+		t.Fatalf("range start = %d:%d, want 2:5", d.Range.Start.Line, d.Range.Start.Column)
+	}
+	if !strings.Contains(d.Message, `param "var" is reserved for WGSL binding keyword`) {
+		t.Fatalf("diagnostic message = %q", d.Message)
+	}
+}
+
 func hasUniform(res Result, name string) bool {
 	for _, u := range res.Module.Uniforms {
 		if u.Name == name {

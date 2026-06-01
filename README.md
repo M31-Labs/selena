@@ -101,6 +101,8 @@ Compile failures that can be tied to source return `*selena.CompileError` with
 diagnostic codes and 1-based line/column ranges. The CLI renders those ranges
 as annotated snippets with fix-oriented hints, and common syntax errors include
 expected-token context.
+Authored params and locals are rejected before emission when they collide with
+shader keywords, generated symbols, or Selena stdlib builtins.
 
 ## How it plugs into GoSX
 
@@ -171,7 +173,7 @@ registry now centralizes `Sun` fields, geometry producers, and builtin typing
 metadata; backend builtin emission goes through declarative per-target spelling
 tables; descriptors carry explicit schema/language versions; and descriptor
 defaults now feed the demo harness plus GoSX `CustomUniforms`. Next development
-work: reserved-name/name-mangling diagnostics and broader material/PBR interop.
+work: compatibility notes, conformance corpus, and broader material/PBR interop.
 
 See [ROADMAP.md](ROADMAP.md) for the public next-step plan and
 [CONTRIBUTING.md](CONTRIBUTING.md) for development notes.

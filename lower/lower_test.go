@@ -167,13 +167,37 @@ func TestLowerRejectsInterfaceNameCollisions(t *testing.T) {
 			want: `duplicate param "baseColor"`,
 		},
 		{
+			name: "reserved param",
+			m: hir.Material{
+				Name:   "Bad",
+				Params: []hir.Param{{Name: "var", Type: hir.Float}},
+				Surface: hir.Func{
+					Geo:    "geo",
+					Result: hir.Ref{Name: "var"},
+				},
+			},
+			want: `param "var" is reserved for WGSL binding keyword`,
+		},
+		{
 			name: "uniform collides with implicit attribute",
 			m: hir.Material{
 				Name:    "Bad",
 				Params:  []hir.Param{{Name: "position", Type: hir.Color}},
 				Surface: hir.Func{Geo: "geo", Result: hir.Ref{Name: "position"}},
 			},
-			want: `attribute "position" conflicts with uniform`,
+			want: `param "position" is reserved for generated vertex position attribute`,
+		},
+		{
+			name: "reserved texture param",
+			m: hir.Material{
+				Name:   "Bad",
+				Params: []hir.Param{{Name: "texture", Type: hir.Texture2D}},
+				Surface: hir.Func{Geo: "geo", Result: hir.Member{E: hir.Call{Func: "sample", Args: []hir.Expr{
+					hir.Ref{Name: "texture"},
+					hir.Member{E: hir.Ref{Name: "geo"}, Field: "uv"},
+				}}, Field: "rgb"}},
+			},
+			want: `param "texture" is reserved for GLES builtin function`,
 		},
 		{
 			name: "texture sampler collides with uniform",
@@ -199,6 +223,20 @@ func TestLowerRejectsInterfaceNameCollisions(t *testing.T) {
 				},
 			},
 			want: `surface local "baseColor" conflicts with uniform`,
+		},
+		{
+			name: "reserved local",
+			m: hir.Material{
+				Name: "Bad",
+				Surface: hir.Func{
+					Geo: "geo",
+					Body: []hir.Let{
+						{Name: "fragColor", Value: hir.Call{Func: "rgb", Args: []hir.Expr{hir.Lit{Value: 1}, hir.Lit{Value: 0}, hir.Lit{Value: 0}}}},
+					},
+					Result: hir.Ref{Name: "fragColor"},
+				},
+			},
+			want: `surface local "fragColor" is reserved for generated GLES fragment output`,
 		},
 		{
 			name: "duplicate local",

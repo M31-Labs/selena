@@ -10,6 +10,7 @@ const (
 	CodeDuplicateParam  = "SEL1001"
 	CodeDuplicateLocal  = "SEL1002"
 	CodeUnsupportedType = "SEL1003"
+	CodeReservedName    = "SEL1004"
 	CodeUnknownName     = "SEL2001"
 	CodeInvalidMember   = "SEL2002"
 	CodeInvalidCall     = "SEL2003"
