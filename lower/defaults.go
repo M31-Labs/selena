@@ -40,8 +40,8 @@ func constExpr(e hir.Expr) (ir.Type, []float32, error) {
 				return ir.Vec4, values, nil
 			}
 			return ir.Vec3, values, nil
-		case "vec2", "vec3", "vec4":
-			want := map[string]int{"vec2": 2, "vec3": 3, "vec4": 4}[x.Func]
+		case "vec2", "vec3", "vec4", "mat3", "mat4":
+			want := map[string]int{"vec2": 2, "vec3": 3, "vec4": 4, "mat3": 9, "mat4": 16}[x.Func]
 			if len(x.Args) != want {
 				return "", nil, fmt.Errorf("%s default expects %d arguments, got %d", x.Func, want, len(x.Args))
 			}
@@ -54,8 +54,12 @@ func constExpr(e hir.Expr) (ir.Type, []float32, error) {
 				return ir.Vec2, values, nil
 			case "vec3":
 				return ir.Vec3, values, nil
-			default:
+			case "vec4":
 				return ir.Vec4, values, nil
+			case "mat3":
+				return ir.Mat3, values, nil
+			default:
+				return ir.Mat4, values, nil
 			}
 		default:
 			return "", nil, fmt.Errorf("call %q is not allowed in defaults", x.Func)

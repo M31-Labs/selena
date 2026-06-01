@@ -120,6 +120,8 @@ func TestLowerParamDefaults(t *testing.T) {
 	p, err := parse.Program([]byte(`material Defaults {
     param baseColor : color = rgb(0.25, 0.5, 0.75)
     param gain : float = 1.5
+    param basis : mat3 = mat3(1, 0, 0, 0, 1, 0, 0, 0, 1)
+    param tintMatrix : mat4 = mat4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.1, 0.2, 0.3, 1)
     surface(geo) -> color { return baseColor * gain }
 }`))
 	if err != nil {
@@ -129,14 +131,20 @@ func TestLowerParamDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(layout.UniformBlock.Defaults) != 2 {
-		t.Fatalf("defaults = %+v, want 2", layout.UniformBlock.Defaults)
+	if len(layout.UniformBlock.Defaults) != 4 {
+		t.Fatalf("defaults = %+v, want 4", layout.UniformBlock.Defaults)
 	}
 	if got := layout.UniformBlock.Defaults[0]; got.Name != "baseColor" || got.Type != "vec3" || got.Values[2] != 0.75 {
 		t.Fatalf("baseColor default = %+v", got)
 	}
 	if got := layout.UniformBlock.Defaults[1]; got.Name != "gain" || got.Type != "float" || got.Values[0] != 1.5 {
 		t.Fatalf("gain default = %+v", got)
+	}
+	if got := layout.UniformBlock.Defaults[2]; got.Name != "basis" || got.Type != "mat3" || len(got.Values) != 9 || got.Values[4] != 1 {
+		t.Fatalf("basis default = %+v", got)
+	}
+	if got := layout.UniformBlock.Defaults[3]; got.Name != "tintMatrix" || got.Type != "mat4" || len(got.Values) != 16 || got.Values[12] != 0.1 {
+		t.Fatalf("tintMatrix default = %+v", got)
 	}
 }
 

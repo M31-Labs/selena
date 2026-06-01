@@ -126,16 +126,18 @@ Params currently support:
 - `Sun`, expanded into uniforms
 - `texture2d`, emitted as backend-specific texture/sampler bindings
 
-Defaults currently support constant `float`, `vec2`, `vec3`, `vec4`, and
-`color` values:
+Defaults currently support constant `float`, `vec2`, `vec3`, `vec4`, `mat3`,
+`mat4`, and `color` values. Matrix values are written in column-major order, the
+same order accepted by the Go packer:
 
 ```selena
 param gain : float = 1.0
 param uvScale : vec2 = vec2(1.0, 1.0)
 param baseColor : color = rgb(0.78, 0.42, 0.98)
+param basis : mat3 = mat3(1, 0, 0, 0, 1, 0, 0, 0, 1)
 ```
 
-`Sun`, `texture2d`, and matrix defaults are intentionally rejected for now.
+`Sun` and `texture2d` defaults are intentionally rejected for now.
 
 ## Host Packing
 
