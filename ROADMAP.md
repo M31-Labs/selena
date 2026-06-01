@@ -16,7 +16,7 @@ The next phase should make the project easier to adopt and harder to misuse.
 - Add source ranges to parse and lowering errors so diagnostics can point at the
   exact param, expression, or function call.
 - Add parameter defaults and generated host-side default values in the binding
-  descriptor.
+  descriptor. The Go std140 packer exists; defaults should feed it directly.
 - Add a small language guide with copy-pasteable materials for color, texture,
   tinting, lighting, and composition.
 
@@ -41,6 +41,6 @@ The next phase should make the project easier to adopt and harder to misuse.
   Android GLES.
 - Version the `.sel` language and descriptor schema before downstream tools rely
   on them.
-- Publish a few complete GoSX examples that load real textures, set uniforms
-  from the descriptor, and switch between standard and Selena materials.
+- Publish a few complete GoSX examples that load real textures, pack uniforms
+  through the descriptor, and switch between standard and Selena materials.
 - Add benchmark coverage for parser generation/cache behavior and compile time.

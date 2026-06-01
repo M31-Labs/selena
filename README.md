@@ -88,6 +88,8 @@ fmt.Println(res.Layout.UniformBlock.Size, len(wgsl.Source))
 `CompileOptions{}` emits WGSL, GLSL, Metal, and GLES in a deterministic order.
 Set `Material` to choose a named material from a file, or pass
 `Targets: []selena.Target{}` to parse and lower without emitting shader source.
+Use `bindings.PackUniforms(res.Layout, values)` to fill the generated std140
+uniform block without hand-packing `vec3` tails or `mat3` column strides.
 
 ## How it plugs into GoSX
 
@@ -144,8 +146,9 @@ will resolve them):
 
 Vertical slice online. Selena now parses `.sel` files, lowers typed HIR into the
 neutral shader IR, computes host binding layouts, emits WGSL / GLSL / Metal /
-GLSL-ES, exposes a root `Compile` API, adapts into GoSX `scene.IRMaterial`, and
-compile-checks emitted WGSL and GLSL-ES where offline validators are installed.
+GLSL-ES, exposes a root `Compile` API, packs host uniform blocks from the
+descriptor, adapts into GoSX `scene.IRMaterial`, and compile-checks emitted WGSL
+and GLSL-ES where offline validators are installed.
 
 Current compiler coverage includes directional diffuse materials, texture
 sampling, reusable functions, material inheritance via `extends` /
