@@ -163,10 +163,11 @@ Current compiler coverage includes directional diffuse materials, texture
 sampling, reusable functions, material inheritance via `extends` /
 `super.surface`, deterministic binding descriptors with scalar/vector defaults,
 CLI inspectability, and source-aware semantic validation with annotated CLI
-snippets before backend shader emission. The first stdlib registry slice now
-centralizes `Sun` fields and geometry producers. Next development work: richer
-default coverage, builtin typing in the registry, and broader material/PBR
-interop.
+snippets before backend shader emission. Function inlining and invalid
+`super.surface` usage now also report call-site diagnostics. The stdlib registry
+now centralizes `Sun` fields, geometry producers, and builtin typing metadata.
+Next development work: richer default coverage, backend builtin spellings in the
+registry, and broader material/PBR interop.
 
 See [ROADMAP.md](ROADMAP.md) for the public next-step plan and
 [CONTRIBUTING.md](CONTRIBUTING.md) for development notes.

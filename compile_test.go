@@ -130,6 +130,63 @@ func TestCompileErrorCarriesSourceRange(t *testing.T) {
 	}
 }
 
+func TestCompileErrorCarriesInlineCallRange(t *testing.T) {
+	src := []byte(`fn tint(c: color) -> color {
+    return c
+}
+material Bad {
+    surface(geo) -> color {
+        return tint()
+    }
+}`)
+
+	_, err := Compile(src, CompileOptions{Targets: []Target{}})
+	if err == nil {
+		t.Fatal("Compile succeeded, want diagnostic error")
+	}
+	var ce *CompileError
+	if !errors.As(err, &ce) {
+		t.Fatalf("error type = %T, want *CompileError", err)
+	}
+	d := ce.Diagnostics[0]
+	if d.Code != "SEL2003" {
+		t.Fatalf("diagnostic code = %s, want SEL2003", d.Code)
+	}
+	if d.Range.Start.Line != 6 || d.Range.Start.Column != 16 {
+		t.Fatalf("range start = %d:%d, want 6:16", d.Range.Start.Line, d.Range.Start.Column)
+	}
+	if !strings.Contains(d.Message, "fn tint expects 1 args, got 0") {
+		t.Fatalf("diagnostic message = %q", d.Message)
+	}
+}
+
+func TestCompileErrorRejectsSuperWithoutExtends(t *testing.T) {
+	src := []byte(`material Bad {
+    surface(geo) -> color {
+        return super.surface(geo)
+    }
+}`)
+
+	_, err := Compile(src, CompileOptions{Targets: []Target{}})
+	if err == nil {
+		t.Fatal("Compile succeeded, want diagnostic error")
+	}
+	var ce *CompileError
+	if !errors.As(err, &ce) {
+		t.Fatalf("error type = %T, want *CompileError", err)
+	}
+	d := ce.Diagnostics[0]
+	if d.Code != "SEL2003" {
+		t.Fatalf("diagnostic code = %s, want SEL2003", d.Code)
+	}
+	if d.Range.Start.Line != 3 || d.Range.Start.Column != 16 {
+		t.Fatalf("range start = %d:%d, want 3:16", d.Range.Start.Line, d.Range.Start.Column)
+	}
+	if !strings.Contains(d.Message, "super.surface used in a material with no parent") {
+		t.Fatalf("diagnostic message = %q", d.Message)
+	}
+}
+
 func hasUniform(res Result, name string) bool {
 	for _, u := range res.Module.Uniforms {
 		if u.Name == name {

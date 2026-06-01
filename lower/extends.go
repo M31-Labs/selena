@@ -37,7 +37,7 @@ func resolveExtends(m hir.Material, all []hir.Material) (hir.Material, error) {
 		if err != nil {
 			return m, err
 		}
-		surf.Body = append(surf.Body, hir.Let{Name: l.Name, Value: v})
+		surf.Body = append(surf.Body, hir.Let{Name: l.Name, Value: v, Span: l.Span})
 	}
 	r, err := in.expr(m.Surface.Result, nil)
 	if err != nil {

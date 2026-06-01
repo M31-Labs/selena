@@ -14,7 +14,8 @@ The next phase should make the project easier to adopt and harder to misuse.
 - Keep expanding `selena inspect` as the debug surface for HIR, IR, interface
   layout, target output, and descriptor review.
 - Improve diagnostic precision for inlined functions, `super.surface`, parser
-  expected-token context, and backend emission failures.
+  expected-token context, and backend emission failures. User function arity and
+  invalid `super.surface` calls now report source-anchored diagnostics.
 - Expand parameter defaults beyond the first scalar/vector slice. `.sel`
   defaults now flow into the binding descriptor and the Go std140 packer for
   float, vec2, vec3/color, and vec4 uniforms.
@@ -25,8 +26,8 @@ The next phase should make the project easier to adopt and harder to misuse.
 ## Completeness
 
 - Continue replacing hardcoded stdlib knowledge with registry entries. `Sun`
-  record fields and geometry producers now live in the first registry slice;
-  functions and backend spellings still need to move.
+  record fields, geometry producers, and builtin typing metadata now live in
+  the registry; backend spellings still need to move.
 - Define the material/PBR interop boundary: extension hooks for standard lit
   materials, not a forked material system.
 - Add vertex hooks to the parser and lowering path, with clear rules for which

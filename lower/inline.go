@@ -12,9 +12,6 @@ import (
 // non-recursive, so this terminates and needs no backend function support — the
 // LIR and all emitters are untouched.
 func inlineFuncs(m hir.Material, funcs []hir.FuncDecl) (hir.Material, error) {
-	if len(funcs) == 0 {
-		return m, nil
-	}
 	fm := make(map[string]hir.FuncDecl, len(funcs))
 	for _, f := range funcs {
 		fm[f.Name] = f
@@ -28,7 +25,7 @@ func inlineFuncs(m hir.Material, funcs []hir.FuncDecl) (hir.Material, error) {
 		if err != nil {
 			return m, err
 		}
-		out.Surface.Body = append(out.Surface.Body, hir.Let{Name: l.Name, Value: v})
+		out.Surface.Body = append(out.Surface.Body, hir.Let{Name: l.Name, Value: v, Span: l.Span})
 	}
 	r, err := in.expr(m.Surface.Result, nil)
 	if err != nil {
@@ -86,11 +83,11 @@ func (in *inliner) expr(e hir.Expr, env map[string]hir.Expr) (hir.Expr, error) {
 			return hir.Call{Func: x.Func, Args: args, Span: x.Span}, nil // builtin / stdlib
 		}
 		if len(args) != len(fn.Params) {
-			return nil, fmt.Errorf("fn %s expects %d args, got %d", fn.Name, len(fn.Params), len(args))
+			return nil, diagnostic(CodeInvalidCall, x.Span, "fn %s expects %d args, got %d", fn.Name, len(fn.Params), len(args))
 		}
 		in.depth++
 		if in.depth > 64 {
-			return nil, fmt.Errorf("fn inlining too deep (recursive call to %s?)", fn.Name)
+			return nil, diagnostic(CodeInvalidCall, x.Span, "fn inlining too deep (recursive call to %s?)", fn.Name)
 		}
 		env2 := make(map[string]hir.Expr, len(fn.Params)+len(fn.Body))
 		for i, p := range fn.Params {
@@ -109,13 +106,13 @@ func (in *inliner) expr(e hir.Expr, env map[string]hir.Expr) (hir.Expr, error) {
 		return res, err
 	case hir.SuperCall:
 		if in.parent == nil {
-			return nil, fmt.Errorf("super used in a material with no parent (extends)")
+			return nil, diagnostic(CodeInvalidCall, x.Span, "super.%s used in a material with no parent (extends)", x.Method)
 		}
 		if x.Method != "surface" {
-			return nil, fmt.Errorf("super.%s is not supported (only super.surface)", x.Method)
+			return nil, diagnostic(CodeInvalidCall, x.Span, "super.%s is not supported (only super.surface)", x.Method)
 		}
 		if len(x.Args) != 1 {
-			return nil, fmt.Errorf("super.surface expects 1 argument (the geometry)")
+			return nil, diagnostic(CodeInvalidCall, x.Span, "super.surface expects 1 argument (the geometry), got %d", len(x.Args))
 		}
 		geoArg, err := in.expr(x.Args[0], env)
 		if err != nil {

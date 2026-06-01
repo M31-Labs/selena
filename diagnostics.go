@@ -94,7 +94,7 @@ func diagnosticHint(code, message string) string {
 	case "SEL2002":
 		return "Check the record field name; available geometry fields are currently position, normal, uv, and worldNormal."
 	case "SEL2003":
-		return "Check the function name and argument count."
+		return "Check the function name, argument count, and whether super.surface is only used in an extends material."
 	case "SEL2004":
 		return "Use only components that exist on the vector, and do not mix xyzw with rgba in one swizzle."
 	case "SEL2005":
