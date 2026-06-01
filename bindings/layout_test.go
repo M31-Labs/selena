@@ -1,6 +1,7 @@
 package bindings
 
 import (
+	"strings"
 	"testing"
 
 	"m31labs.dev/selena/ir"
@@ -45,5 +46,24 @@ func TestVec3PackingAndStructAlign(t *testing.T) {
 	}
 	if b.Size != 16 {
 		t.Fatalf("size = %d want 16 (struct aligned to 16)", b.Size)
+	}
+}
+
+func TestLayoutJSONIncludesVersions(t *testing.T) {
+	layout := Layout{
+		Material:     "Versioned",
+		UniformBlock: ComputeUniformBlock(nil),
+	}
+	got, err := layout.JSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`"schemaVersion": "selena.descriptor.v1"`,
+		`"languageVersion": "selena.lang.v1"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("descriptor JSON missing %s\n%s", want, got)
+		}
 	}
 }

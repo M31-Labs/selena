@@ -166,8 +166,9 @@ matrix defaults, CLI inspectability, and source-aware semantic validation with
 annotated CLI snippets before backend shader emission. Function inlining and
 invalid `super.surface` usage now also report call-site diagnostics. The stdlib
 registry now centralizes `Sun` fields, geometry producers, and builtin typing
-metadata. Next development work: backend builtin spellings in the registry and
-broader material/PBR interop.
+metadata, and descriptors carry explicit schema/language versions. Next
+development work: backend builtin spellings in the registry and broader
+material/PBR interop.
 
 See [ROADMAP.md](ROADMAP.md) for the public next-step plan and
 [CONTRIBUTING.md](CONTRIBUTING.md) for development notes.

@@ -11,14 +11,23 @@ import (
 	"m31labs.dev/selena/ir"
 )
 
+const (
+	// DescriptorSchemaVersion identifies the JSON binding descriptor contract.
+	DescriptorSchemaVersion = "selena.descriptor.v1"
+	// LanguageVersion identifies the authored .sel language contract.
+	LanguageVersion = "selena.lang.v1"
+)
+
 // Layout is the complete host descriptor for one material.
 type Layout struct {
-	Material     string       `json:"material"`
-	UniformBlock UniformBlock `json:"uniformBlock"`
-	Attributes   []Attribute  `json:"attributes"`
-	Textures     []Texture    `json:"textures"`
-	WGSL         WGSLBinding  `json:"wgsl"`
-	Metal        MetalBinding `json:"metal"`
+	SchemaVersion   string       `json:"schemaVersion"`
+	LanguageVersion string       `json:"languageVersion"`
+	Material        string       `json:"material"`
+	UniformBlock    UniformBlock `json:"uniformBlock"`
+	Attributes      []Attribute  `json:"attributes"`
+	Textures        []Texture    `json:"textures"`
+	WGSL            WGSLBinding  `json:"wgsl"`
+	Metal           MetalBinding `json:"metal"`
 }
 
 // UniformBlock is the packed std140 uniform block.
@@ -165,4 +174,17 @@ func (l Layout) JSON() (string, error) {
 		return "", err
 	}
 	return string(b), nil
+}
+
+// MarshalJSON fills version metadata for hand-built Layout values too.
+func (l Layout) MarshalJSON() ([]byte, error) {
+	type layout Layout
+	out := layout(l)
+	if out.SchemaVersion == "" {
+		out.SchemaVersion = DescriptorSchemaVersion
+	}
+	if out.LanguageVersion == "" {
+		out.LanguageVersion = LanguageVersion
+	}
+	return json.Marshal(out)
 }

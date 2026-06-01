@@ -261,6 +261,8 @@ func printBindings(label string, bindings []ir.Binding) {
 
 func printLayoutSummary(layout bindings.Layout) {
 	fmt.Println("layout:")
+	fmt.Printf("  schema: %s\n", layout.SchemaVersion)
+	fmt.Printf("  language: %s\n", layout.LanguageVersion)
 	fmt.Printf("  uniform block: %d bytes\n", layout.UniformBlock.Size)
 	for _, f := range layout.UniformBlock.Fields {
 		fmt.Printf("    %s: %s offset=%d size=%d\n", f.Name, f.Type, f.Offset, f.Size)

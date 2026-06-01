@@ -143,7 +143,9 @@ param basis : mat3 = mat3(1, 0, 0, 0, 1, 0, 0, 0, 1)
 
 The descriptor is the source of truth for uniform packing. In Go, use
 `bindings.PackUniformsWithDefaults` so omitted values can come from `.sel`
-defaults:
+defaults. Descriptor JSON includes `schemaVersion` (`selena.descriptor.v1`) and
+`languageVersion` (`selena.lang.v1`) so hosts can reject incompatible artifacts
+before binding them:
 
 ```go
 packed, err := bindings.PackUniformsWithDefaults(res.Layout, map[string]any{

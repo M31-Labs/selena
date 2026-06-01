@@ -224,12 +224,14 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 		Fragment:   ir.Stage{Body: fragBody, Output: fragOut},
 	}
 	layout := bindings.Layout{
-		Material:     m.Name,
-		UniformBlock: bindings.ComputeUniformBlock(uniforms),
-		Attributes:   toAttrs(attributes),
-		Textures:     bindings.ComputeTextures(textures),
-		WGSL:         bindings.WGSLBinding{Group: 0, Binding: 0},
-		Metal:        bindings.MetalBinding{Buffer: 0},
+		SchemaVersion:   bindings.DescriptorSchemaVersion,
+		LanguageVersion: bindings.LanguageVersion,
+		Material:        m.Name,
+		UniformBlock:    bindings.ComputeUniformBlock(uniforms),
+		Attributes:      toAttrs(attributes),
+		Textures:        bindings.ComputeTextures(textures),
+		WGSL:            bindings.WGSLBinding{Group: 0, Binding: 0},
+		Metal:           bindings.MetalBinding{Buffer: 0},
 	}
 	if layout.Textures == nil {
 		layout.Textures = []bindings.Texture{}

@@ -44,7 +44,7 @@ The next phase should make the project easier to adopt and harder to misuse.
 - Add public compatibility notes for WebGPU, WebGL1, WebGL2, SceneKit, and
   Android GLES.
 - Version the `.sel` language and descriptor schema before downstream tools rely
-  on them.
+  on them. Descriptor JSON now carries `schemaVersion` and `languageVersion`.
 - Publish a few complete GoSX examples that load real textures, pack uniforms
   and defaults through the descriptor, and switch between standard and Selena
   materials.
