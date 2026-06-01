@@ -8,6 +8,8 @@ correct shaders and binding descriptors for every GoSX rendering surface.
 - Add `.sel` examples that cover one material feature clearly.
 - Improve diagnostics with precise source locations and actionable wording.
 - Expand emitter conformance tests, especially for texture and uniform binding.
+- Add focused `.sel` cases under `testdata/conformance` when a language feature
+  should compile on every backend.
 - Add docs for host integration and material authoring patterns.
 - File compatibility reports for real WebGPU, WebGL, Metal, or GLES targets.
 
@@ -15,6 +17,7 @@ correct shaders and binding descriptors for every GoSX rendering surface.
 
 ```sh
 go test ./...
+go test -run '^$' -bench=. ./parse .
 go run ./cmd/selena check examples/textured.sel
 go run ./cmd/selena emit wgsl examples/directional-diffuse.sel
 go run ./cmd/selena demo /tmp/selena-textured.html textured

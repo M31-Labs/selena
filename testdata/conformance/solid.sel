@@ -1,0 +1,7 @@
+material Solid {
+    param baseColor : color
+
+    surface(geo) -> color {
+        return baseColor
+    }
+}

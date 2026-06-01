@@ -37,14 +37,17 @@ The next phase should make the project easier to adopt and harder to misuse.
 - Add arrays, bools, and integer types only after the binding descriptor can
   express them consistently across WGSL, GLSL, Metal, and GLES.
 - Build a conformance corpus of `.sel` inputs and golden outputs for every
-  backend.
+  backend. The first checked-in corpus now compiles core language patterns
+  across all targets; golden-output coverage is the next increment.
 
 ## Real-World Readiness
 
 - Exercise generated shaders in browser automation and native/mobile CI, not
   only string and offline compiler tests.
 - Add public compatibility notes for WebGPU, WebGL1, WebGL2, SceneKit, and
-  Android GLES.
+  Android GLES. Initial compatibility notes now document the shader shapes,
+  descriptor contract, binding coordinates, host responsibilities, and known
+  gaps.
 - Version the `.sel` language and descriptor schema before downstream tools rely
   on them. Descriptor JSON now carries `schemaVersion` and `languageVersion`.
 - Reject authored names that collide with generated symbols, shader keywords,
@@ -53,3 +56,5 @@ The next phase should make the project easier to adopt and harder to misuse.
   and defaults through the descriptor, and switch between standard and Selena
   materials. The CLI demo harness and GoSX adapter now carry descriptor defaults.
 - Add benchmark coverage for parser generation/cache behavior and compile time.
+  Initial parser cache, parse, lower-only compile, and all-target compile
+  benchmarks are now in the test suite.

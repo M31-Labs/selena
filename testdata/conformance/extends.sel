@@ -1,0 +1,17 @@
+material Base {
+    param baseColor : color
+    param light     : Sun
+
+    surface(geo) -> color {
+        let n = normalize(geo.worldNormal)
+        return baseColor * (light.ambient + max(dot(n, light.dir), 0))
+    }
+}
+
+material Tinted extends Base {
+    param tint : color = rgb(1, 0.8, 0.7)
+
+    surface(geo) -> color {
+        return super.surface(geo) * tint
+    }
+}
