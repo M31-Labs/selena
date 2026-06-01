@@ -1,6 +1,7 @@
 package gosx
 
 import (
+	"reflect"
 	"testing"
 
 	"m31labs.dev/gosx/scene/capability"
@@ -56,5 +57,22 @@ func TestTexturedAdapts(t *testing.T) {
 	}
 	if im.CustomFragmentWGSL == "" || im.CustomFragment == "" {
 		t.Fatalf("textured material slots not filled: %+v", im.Name)
+	}
+}
+
+func TestDefaultsPopulateCustomUniforms(t *testing.T) {
+	im, layout, err := Material(hir.Defaults(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(layout.UniformBlock.Defaults) != 2 {
+		t.Fatalf("descriptor defaults = %+v, want 2", layout.UniformBlock.Defaults)
+	}
+	if got := im.CustomUniforms["gain"]; got != float32(1) {
+		t.Fatalf("gain default = %#v, want float32(1)", got)
+	}
+	wantColor := []float32{0.78, 0.42, 0.98}
+	if got := im.CustomUniforms["baseColor"]; !reflect.DeepEqual(got, wantColor) {
+		t.Fatalf("baseColor default = %#v, want %#v", got, wantColor)
 	}
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -12,7 +13,7 @@ import (
 	"m31labs.dev/selena/lower"
 )
 
-// runDemo lowers a material (directional-diffuse | textured) through the full
+// runDemo lowers a material (directional-diffuse | textured | defaults) through the full
 // pipeline and bakes the emitted WGSL + GLSL ES 3.00 + GLSL ES 1.00 and the
 // generated binding descriptor into a self-contained WebGPU + WebGL render
 // harness. The harness packs uniforms and binds textures straight from the
@@ -26,8 +27,10 @@ func runDemo(out, material string) error {
 		m = hir.DirectionalDiffuse()
 	case "textured":
 		m = hir.Textured()
+	case "defaults":
+		m = hir.Defaults()
 	default:
-		return fmt.Errorf("unknown material %q (have: directional-diffuse, textured)", material)
+		return fmt.Errorf("unknown material %q (have: directional-diffuse, textured, defaults)", material)
 	}
 
 	mod, layout, err := lower.Lower(m)
@@ -50,16 +53,21 @@ func runDemo(out, material string) error {
 	if err != nil {
 		return fmt.Errorf("descriptor: %w", err)
 	}
+	materialUniforms, err := demoMaterialUniforms(mod.Name)
+	if err != nil {
+		return err
+	}
 
 	page := demoHTML
 	for ph, val := range map[string]string{
-		"__MATERIAL__":   mod.Name,
-		"__WGSL__":       strings.TrimSpace(wgslSrc),
-		"__GLES_VERT__":  strings.TrimSpace(glesVert),
-		"__GLES_FRAG__":  strings.TrimSpace(glesFrag),
-		"__GLSL_VERT__":  strings.TrimSpace(glslVert),
-		"__GLSL_FRAG__":  strings.TrimSpace(glslFrag),
-		"__DESCRIPTOR__": strings.TrimSpace(desc),
+		"__MATERIAL__":          mod.Name,
+		"__MATERIAL_UNIFORMS__": materialUniforms,
+		"__WGSL__":              strings.TrimSpace(wgslSrc),
+		"__GLES_VERT__":         strings.TrimSpace(glesVert),
+		"__GLES_FRAG__":         strings.TrimSpace(glesFrag),
+		"__GLSL_VERT__":         strings.TrimSpace(glslVert),
+		"__GLSL_FRAG__":         strings.TrimSpace(glslFrag),
+		"__DESCRIPTOR__":        strings.TrimSpace(desc),
 	} {
 		page = strings.ReplaceAll(page, ph, val)
 	}
@@ -69,6 +77,26 @@ func runDemo(out, material string) error {
 	}
 	fmt.Printf("wrote %s (%s) — open in Chrome (WebGPU needs Chrome 113+)\n", out, mod.Name)
 	return nil
+}
+
+func demoMaterialUniforms(name string) (string, error) {
+	values := map[string]any{}
+	switch name {
+	case "DirectionalDiffuse":
+		values["baseColor"] = []float32{0.78, 0.42, 0.98}
+		values["light_dir"] = []float32{0.4, 0.85, 0.6}
+		values["light_ambient"] = 0.16
+	case "Textured":
+		values["light_dir"] = []float32{0.4, 0.85, 0.6}
+		values["light_ambient"] = 0.16
+	case "Defaults":
+		// Material uniforms intentionally omitted: descriptor defaults fill them.
+	}
+	b, err := json.Marshal(values)
+	if err != nil {
+		return "", fmt.Errorf("demo material uniforms: %w", err)
+	}
+	return string(b), nil
 }
 
 const demoHTML = `<!doctype html>
@@ -145,8 +173,17 @@ $("show-desc").textContent = JSON.stringify(DESC, null, 2);
 $("show-wgsl").textContent = WGSL;
 var HAS_TEX = (DESC.textures || []).length > 0;
 
-var MATERIAL = { baseColor: [0.78, 0.42, 0.98], light_dir: [0.4, 0.85, 0.6], light_ambient: 0.16 };
+var MATERIAL = __MATERIAL_UNIFORMS__;
 function uniformValues(sc){ var v = { mvp: sc.mvp, normalMatrix: sc.nrm }; for (var k in MATERIAL) v[k] = MATERIAL[k]; return v; }
+var DEFAULTS = {};
+(DESC.uniformBlock.defaults || []).forEach(function(d){ DEFAULTS[d.name] = d.values; });
+function scalar(v){ return (Array.isArray(v) || ArrayBuffer.isView(v)) ? v[0] : v; }
+function uniformValue(values, field){
+  var v = values[field.name];
+  if (v === undefined) v = DEFAULTS[field.name];
+  if (v === undefined) throw new Error("missing uniform " + field.name);
+  return v;
+}
 
 function floatCount(t){ return {float:1, vec2:2, vec3:3, vec4:4, mat3:9, mat4:16}[t]; }
 function attrFloats(t){ return {vec2:2, vec3:3, vec4:4}[t]; }
@@ -155,8 +192,8 @@ function attrFloats(t){ return {vec2:2, vec3:3, vec4:4}[t]; }
 function packUniforms(desc, values){
   var f32 = new Float32Array(desc.uniformBlock.size / 4);
   desc.uniformBlock.fields.forEach(function(f){
-    var v = values[f.name], base = f.offset / 4;
-    if (f.type === "float") f32[base] = v;
+    var v = uniformValue(values, f), base = f.offset / 4;
+    if (f.type === "float") f32[base] = scalar(v);
     else if (f.type === "mat3") { for (var c=0;c<3;c++){ f32[base+c*4]=v[c*3]; f32[base+c*4+1]=v[c*3+1]; f32[base+c*4+2]=v[c*3+2]; } }
     else f32.set(v.slice(0, floatCount(f.type)), base);
   });
@@ -285,9 +322,10 @@ function initWebGL(){
     var vals=uniformValues(scene(now*0.001));
     gl.viewport(0,0,canvas.width,canvas.height); gl.clear(gl.COLOR_BUFFER_BIT); gl.useProgram(prog);
     DESC.uniformBlock.fields.forEach(function(f){
-      var loc=gl.getUniformLocation(prog,f.name), v=vals[f.name];
+      var loc=gl.getUniformLocation(prog,f.name), v=uniformValue(vals,f);
       if (f.type==="mat3") gl.uniformMatrix3fv(loc,false,v);
       else if (f.type==="mat4") gl.uniformMatrix4fv(loc,false,v);
+      else if (f.type==="float") gl.uniform1f(loc,scalar(v));
       else gl[setters[f.type]](loc,v);
     });
     gl.bindBuffer(gl.ARRAY_BUFFER,vbo);

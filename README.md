@@ -66,6 +66,7 @@ go run ./cmd/selena inspect examples/tinted.sel Tinted
 go run ./cmd/selena inspect examples/defaults.sel
 go run ./cmd/selena emit wgsl examples/directional-diffuse.sel
 go run ./cmd/selena demo /tmp/selena-textured.html textured
+go run ./cmd/selena demo /tmp/selena-defaults.html defaults
 ```
 
 Open the generated demo HTML in Chrome to compare the WGSL/WebGPU path with the
@@ -167,9 +168,9 @@ annotated CLI snippets before backend shader emission. Function inlining and
 invalid `super.surface` usage now also report call-site diagnostics. The stdlib
 registry now centralizes `Sun` fields, geometry producers, and builtin typing
 metadata; backend builtin emission goes through declarative per-target spelling
-tables; and descriptors carry explicit schema/language versions. Next
-development work: descriptor defaults in host examples/adapters and broader
-material/PBR interop.
+tables; descriptors carry explicit schema/language versions; and descriptor
+defaults now feed the demo harness plus GoSX `CustomUniforms`. Next development
+work: parser expected-token diagnostics and broader material/PBR interop.
 
 See [ROADMAP.md](ROADMAP.md) for the public next-step plan and
 [CONTRIBUTING.md](CONTRIBUTING.md) for development notes.

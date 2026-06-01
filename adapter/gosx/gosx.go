@@ -41,5 +41,22 @@ func Material(m hir.Material, funcs []hir.FuncDecl) (gscene.IRMaterial, bindings
 		CustomFragment:     glslFrag,
 		CustomVertexWGSL:   wgslSrc, // one WGSL module exposes vertexMain + fragmentMain
 		CustomFragmentWGSL: wgslSrc,
+		CustomUniforms:     DefaultUniforms(layout),
 	}, layout, nil
+}
+
+// DefaultUniforms returns descriptor defaults in GoSX's CustomUniforms shape.
+func DefaultUniforms(layout bindings.Layout) map[string]any {
+	if len(layout.UniformBlock.Defaults) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(layout.UniformBlock.Defaults))
+	for _, d := range layout.UniformBlock.Defaults {
+		if len(d.Values) == 1 {
+			out[d.Name] = d.Values[0]
+			continue
+		}
+		out[d.Name] = append([]float32(nil), d.Values...)
+	}
+	return out
 }

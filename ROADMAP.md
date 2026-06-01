@@ -48,5 +48,5 @@ The next phase should make the project easier to adopt and harder to misuse.
   on them. Descriptor JSON now carries `schemaVersion` and `languageVersion`.
 - Publish a few complete GoSX examples that load real textures, pack uniforms
   and defaults through the descriptor, and switch between standard and Selena
-  materials.
+  materials. The CLI demo harness and GoSX adapter now carry descriptor defaults.
 - Add benchmark coverage for parser generation/cache behavior and compile time.

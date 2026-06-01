@@ -91,3 +91,34 @@ func Textured() Material {
 		},
 	}
 }
+
+// Defaults is a small material that exercises descriptor-backed parameter
+// defaults without requiring host-provided material uniforms.
+//
+//	material Defaults {
+//	    param baseColor : color = rgb(0.78, 0.42, 0.98)
+//	    param gain : float = 1.0
+//	    surface(geo) -> color {
+//	        return baseColor * gain
+//	    }
+//	}
+func Defaults() Material {
+	return Material{
+		Name: "Defaults",
+		Params: []Param{
+			{Name: "baseColor", Type: Color, Default: Call{Func: "rgb", Args: []Expr{
+				Lit{Value: 0.78},
+				Lit{Value: 0.42},
+				Lit{Value: 0.98},
+			}}},
+			{Name: "gain", Type: Float, Default: Lit{Value: 1.0}},
+		},
+		Surface: Func{
+			Geo: "geo",
+			Result: Binary{Op: "*",
+				L: Ref{Name: "baseColor"},
+				R: Ref{Name: "gain"},
+			},
+		},
+	}
+}

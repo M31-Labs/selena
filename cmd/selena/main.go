@@ -27,11 +27,11 @@ usage:
   selena emit <target> <file.sel> [material]  emit a shader (target: wgsl|glsl|metal|gles)
   selena check <file.sel> [material]          parse + lower a material
   selena inspect <file.sel> [material]        print material interface + descriptor
-  selena demo <out.html> [material] render harness (material: directional-diffuse|textured)
+  selena demo <out.html> [material] render harness (material: directional-diffuse|textured|defaults)
   selena help                       show this help
 
 <file.sel> may also be a built-in material name: 'directional-diffuse' (or
-'sample') and 'textured'. Examples:
+'sample'), 'textured', or 'defaults'. Examples:
 
   selena emit wgsl examples/directional-diffuse.sel
   selena emit metal textured
@@ -92,7 +92,7 @@ func run(args []string) error {
 		return inspect(args[1], material)
 	case "demo":
 		if len(args) < 2 || len(args) > 3 {
-			return fmt.Errorf("usage: selena demo <out.html> [material]  (material: directional-diffuse|textured)")
+			return fmt.Errorf("usage: selena demo <out.html> [material]  (material: directional-diffuse|textured|defaults)")
 		}
 		mat := ""
 		if len(args) == 3 {
@@ -119,6 +119,8 @@ func resolveProgram(nameOrFile string) (resolvedProgram, error) {
 		return resolvedProgram{Program: hir.Program{Materials: []hir.Material{hir.DirectionalDiffuse()}}}, nil
 	case "textured":
 		return resolvedProgram{Program: hir.Program{Materials: []hir.Material{hir.Textured()}}}, nil
+	case "defaults":
+		return resolvedProgram{Program: hir.Program{Materials: []hir.Material{hir.Defaults()}}}, nil
 	default:
 		src, err := os.ReadFile(nameOrFile)
 		if err != nil {
