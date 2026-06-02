@@ -176,6 +176,34 @@ func TestLowerParamDefaults(t *testing.T) {
 	}
 }
 
+func TestLowerSunDefault(t *testing.T) {
+	p, err := parse.Program([]byte(`material SunDefault {
+    param light : Sun = sun(vec3(0.0, 1.0, 0.0), 0.25)
+    surface(geo) -> color {
+        let n = normalize(geo.worldNormal)
+        return rgb(1, 1, 1) * (light.ambient + max(dot(n, light.dir), 0))
+    }
+}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, layout, err := LowerProgram(p, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Sun expands to light_ambient (float) + light_dir (vec3), in sorted field
+	// order, each carrying a host-packable default from sun(dir, ambient).
+	if len(layout.UniformBlock.Defaults) != 2 {
+		t.Fatalf("defaults = %+v, want 2", layout.UniformBlock.Defaults)
+	}
+	if got := layout.UniformBlock.Defaults[0]; got.Name != "light_ambient" || got.Type != "float" || got.Values[0] != 0.25 {
+		t.Fatalf("light_ambient default = %+v", got)
+	}
+	if got := layout.UniformBlock.Defaults[1]; got.Name != "light_dir" || got.Type != "vec3" || len(got.Values) != 3 || got.Values[1] != 1.0 {
+		t.Fatalf("light_dir default = %+v", got)
+	}
+}
+
 func TestLowerRejectsInterfaceNameCollisions(t *testing.T) {
 	cases := []struct {
 		name string

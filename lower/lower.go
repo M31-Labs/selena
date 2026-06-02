@@ -94,8 +94,13 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 	for _, p := range m.Params {
 		switch p.Type {
 		case hir.Sun:
+			var sunFields map[string][]float32
 			if p.Default != nil {
-				return ir.Module{}, bindings.Layout{}, diagnostic(CodeInvalidDefault, hir.ExprSpan(p.Default), "param %q: defaults for Sun records are not supported yet", p.Name)
+				fields, err := sunDefault(p.Default)
+				if err != nil {
+					return ir.Module{}, bindings.Layout{}, diagnostic(CodeInvalidDefault, hir.ExprSpan(p.Default), "param %q default: %v", p.Name, err)
+				}
+				sunFields = fields
 			}
 			for _, f := range sortedKeys(stdlib.recordFields(string(hir.Sun))) {
 				un := p.Name + "_" + f
@@ -104,6 +109,9 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 					return fail("param %q: %w", p.Name, err)
 				}
 				uniformOf[p.Name+"."+f] = un
+				if sunFields != nil {
+					defaults = append(defaults, bindings.DefaultValue{Name: un, Type: string(ft), Values: sunFields[f]})
+				}
 			}
 		case hir.Texture2D:
 			if p.Default != nil {

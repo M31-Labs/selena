@@ -22,6 +22,35 @@ func constDefault(e hir.Expr, want hir.Type) ([]float32, error) {
 	return values, nil
 }
 
+// sunDefault evaluates a constant Sun-record default of the form
+// sun(dir, ambient), where dir is a constant vec3 and ambient a constant float.
+// It returns the host-packable component values keyed by Sun field name, so the
+// lowerer can attach one descriptor default per expanded Sun uniform.
+func sunDefault(e hir.Expr) (map[string][]float32, error) {
+	call, ok := e.(hir.Call)
+	if !ok || call.Func != "sun" {
+		return nil, fmt.Errorf("Sun default must be sun(dir, ambient)")
+	}
+	if len(call.Args) != 2 {
+		return nil, fmt.Errorf("sun(dir, ambient) expects 2 arguments, got %d", len(call.Args))
+	}
+	dirType, dir, err := constExpr(call.Args[0])
+	if err != nil {
+		return nil, err
+	}
+	if dirType != ir.Vec3 {
+		return nil, fmt.Errorf("sun: dir must be vec3, got %s", dirType)
+	}
+	ambType, amb, err := constExpr(call.Args[1])
+	if err != nil {
+		return nil, err
+	}
+	if ambType != ir.Float {
+		return nil, fmt.Errorf("sun: ambient must be float, got %s", ambType)
+	}
+	return map[string][]float32{"dir": dir, "ambient": amb}, nil
+}
+
 func constExpr(e hir.Expr) (ir.Type, []float32, error) {
 	switch x := e.(type) {
 	case hir.Lit:
