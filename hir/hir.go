@@ -128,6 +128,13 @@ type Binary struct {
 	Span Span
 }
 
+// Unary is a prefix operator: -x (negation).
+type Unary struct {
+	Op   string
+	E    Expr
+	Span Span
+}
+
 // SuperCall is super.<Method>(args) — calls the parent material's method (only
 // surface in v1). Resolved during lowering by inlining the parent's surface.
 type SuperCall struct {
@@ -141,6 +148,7 @@ func (Lit) isExpr()       {}
 func (Member) isExpr()    {}
 func (Call) isExpr()      {}
 func (Binary) isExpr()    {}
+func (Unary) isExpr()     {}
 func (SuperCall) isExpr() {}
 
 // ExprSpan returns source information for an expression when it came from
@@ -156,6 +164,8 @@ func ExprSpan(e Expr) Span {
 	case Call:
 		return x.Span
 	case Binary:
+		return x.Span
+	case Unary:
 		return x.Span
 	case SuperCall:
 		return x.Span

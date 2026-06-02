@@ -69,6 +69,12 @@ func (in *inliner) expr(e hir.Expr, env map[string]hir.Expr) (hir.Expr, error) {
 			return nil, err
 		}
 		return hir.Binary{Op: x.Op, L: l, R: r, Span: x.Span}, nil
+	case hir.Unary:
+		e, err := in.expr(x.E, env)
+		if err != nil {
+			return nil, err
+		}
+		return hir.Unary{Op: x.Op, E: e, Span: x.Span}, nil
 	case hir.Call:
 		args := make([]hir.Expr, len(x.Args))
 		for i, a := range x.Args {

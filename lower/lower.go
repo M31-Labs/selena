@@ -339,6 +339,12 @@ func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
 			return nil, err
 		}
 		return ir.Binary{Op: x.Op, L: l, R: rr}, nil
+	case hir.Unary:
+		e, err := r.expr(x.E)
+		if err != nil {
+			return nil, err
+		}
+		return ir.Unary{Op: x.Op, E: e}, nil
 	}
 	return nil, fmt.Errorf("unsupported expression %T", e)
 }
@@ -406,6 +412,8 @@ func (t *typer) typeOf(e hir.Expr) (ir.Type, error) {
 		return t.callType(x)
 	case hir.Binary:
 		return t.binaryType(x)
+	case hir.Unary:
+		return t.typeOf(x.E)
 	}
 	return "", fmt.Errorf("unsupported expression %T", e)
 }
@@ -613,6 +621,8 @@ func collectGeo(e hir.Expr, geo string, used map[string]bool) {
 	case hir.Binary:
 		collectGeo(x.L, geo, used)
 		collectGeo(x.R, geo, used)
+	case hir.Unary:
+		collectGeo(x.E, geo, used)
 	}
 }
 

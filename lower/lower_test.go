@@ -204,6 +204,32 @@ func TestLowerSunDefault(t *testing.T) {
 	}
 }
 
+func TestLowerUnaryMinus(t *testing.T) {
+	p, err := parse.Program([]byte(`material Neg {
+    param dir : vec3 = vec3(0.0, -1.0, 0.0)
+    param k : float = -0.5
+    surface(geo) -> color {
+        let n = normalize(geo.worldNormal)
+        return rgb(1, 1, 1) * (max(dot(n, -dir), 0) - k)
+    }
+}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Lowering succeeds (the surface uses -dir, exercising resolver/typer/
+	// inliner), and negation in defaults carries the sign to the descriptor.
+	_, layout, err := LowerProgram(p, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := layout.UniformBlock.Defaults[0]; got.Name != "dir" || got.Values[1] != -1.0 {
+		t.Fatalf("dir default = %+v, want y = -1", got)
+	}
+	if got := layout.UniformBlock.Defaults[1]; got.Name != "k" || got.Values[0] != -0.5 {
+		t.Fatalf("k default = %+v, want -0.5", got)
+	}
+}
+
 func TestLowerRejectsInterfaceNameCollisions(t *testing.T) {
 	cases := []struct {
 		name string

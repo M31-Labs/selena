@@ -89,6 +89,12 @@ type Binary struct {
 	L, R Expr
 }
 
+// Unary is a prefix operator: -x. Spelled identically in every backend.
+type Unary struct {
+	Op string
+	E  Expr
+}
+
 // Swizzle selects components, e.g. position.xyz or color.rgb.
 type Swizzle struct {
 	E     Expr
@@ -107,6 +113,7 @@ func (Lit) isExpr()       {}
 func (Construct) isExpr() {}
 func (Call) isExpr()      {}
 func (Binary) isExpr()    {}
+func (Unary) isExpr()     {}
 func (Swizzle) isExpr()   {}
 func (Sample) isExpr()    {}
 
@@ -139,6 +146,8 @@ func Print(e Expr, d Dialect) string {
 		return d.Call(x.Func, printArgs(x.Args, d))
 	case Binary:
 		return "(" + Print(x.L, d) + " " + x.Op + " " + Print(x.R, d) + ")"
+	case Unary:
+		return "(" + x.Op + Print(x.E, d) + ")"
 	case Swizzle:
 		return Print(x.E, d) + "." + x.Field
 	case Sample:

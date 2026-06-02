@@ -96,6 +96,19 @@ func constExpr(e hir.Expr) (ir.Type, []float32, error) {
 	case hir.Binary:
 		t, values, err := constBinary(x)
 		return t, values, err
+	case hir.Unary:
+		if x.Op != "-" {
+			return "", nil, fmt.Errorf("unsupported unary operator %q in default", x.Op)
+		}
+		t, values, err := constExpr(x.E)
+		if err != nil {
+			return "", nil, err
+		}
+		out := make([]float32, len(values))
+		for i, v := range values {
+			out[i] = -v
+		}
+		return t, out, nil
 	default:
 		return "", nil, fmt.Errorf("%T is not a constant default expression", e)
 	}

@@ -454,6 +454,12 @@ func (w *walker) expr(n *gts.Node) (hir.Expr, error) {
 			return nil, err
 		}
 		return hir.Binary{Op: w.text(w.field(n, "operator")), L: l, R: r, Span: w.span(n)}, nil
+	case "unary_expression":
+		e, err := w.expr(w.field(n, "operand"))
+		if err != nil {
+			return nil, err
+		}
+		return hir.Unary{Op: "-", E: e, Span: w.span(n)}, nil
 	case "call":
 		var args []hir.Expr
 		for i := 0; i < n.NamedChildCount(); i++ {

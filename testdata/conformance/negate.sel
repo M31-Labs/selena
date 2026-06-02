@@ -1,0 +1,11 @@
+material Negate {
+    param baseColor : color
+    param light     : Sun = sun(vec3(0.0, -1.0, 0.0), 0.15)
+    param cutoff    : float
+
+    surface(geo) -> color {
+        let n = normalize(geo.worldNormal)
+        let lambert = max(dot(n, -light.dir), -cutoff)
+        return baseColor * (light.ambient + lambert)
+    }
+}

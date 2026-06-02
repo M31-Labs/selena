@@ -85,6 +85,7 @@ func SelenaGrammar() *grammargen.Grammar {
 	// appears directly wherever an expression is expected.
 	g.Define("expression", grammargen.Choice(
 		sym("binary_expression"),
+		sym("unary_expression"),
 		sym("member_expression"),
 		sym("super_call"),
 		sym("call"),
@@ -113,6 +114,13 @@ func SelenaGrammar() *grammargen.Grammar {
 			field("right", sym("expression")),
 		)),
 	))
+
+	// Prefix negation. Binds tighter than * / (prec 2) but looser than member
+	// access (prec 5), so -a.b is -(a.b) and -a * b is (-a) * b.
+	g.Define("unary_expression", grammargen.PrecLeft(4, seq(
+		s("-"),
+		field("operand", sym("expression")),
+	)))
 
 	g.Define("member_expression", grammargen.PrecLeft(5, seq(
 		field("object", sym("expression")),
