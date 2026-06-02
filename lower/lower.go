@@ -496,6 +496,40 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 		return t.typeOf(c.Args[0])
 	case builtinSameOrScalar:
 		return t.sameOrScalarCall(c.Func, c.Args, spec.arity, c.Span)
+	case builtinCross:
+		if len(c.Args) != spec.arity {
+			return "", diagnostic(CodeInvalidCall, c.Span, "%s expects %d arguments, got %d", c.Func, spec.arity, len(c.Args))
+		}
+		a, err := t.typeOf(c.Args[0])
+		if err != nil {
+			return "", err
+		}
+		b, err := t.typeOf(c.Args[1])
+		if err != nil {
+			return "", err
+		}
+		if a != ir.Vec3 || b != ir.Vec3 {
+			return "", diagnostic(CodeTypeMismatch, c.Span, "cross arguments must both be vec3, got %s and %s", a, b)
+		}
+		return ir.Vec3, nil
+	case builtinStep:
+		if len(c.Args) != spec.arity {
+			return "", diagnostic(CodeInvalidCall, c.Span, "%s expects %d arguments, got %d", c.Func, spec.arity, len(c.Args))
+		}
+		last, err := t.typeOf(c.Args[len(c.Args)-1])
+		if err != nil {
+			return "", err
+		}
+		for i := 0; i < len(c.Args)-1; i++ {
+			at, err := t.typeOf(c.Args[i])
+			if err != nil {
+				return "", err
+			}
+			if at != last && at != ir.Float {
+				return "", diagnostic(CodeTypeMismatch, c.Span, "%s argument %d must be %s or float, got %s", c.Func, i+1, last, at)
+			}
+		}
+		return last, nil
 	default:
 		return "", diagnostic(CodeInvalidCall, c.Span, "builtin %q has unsupported registry kind %q", c.Func, spec.kind)
 	}

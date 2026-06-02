@@ -31,6 +31,8 @@ const (
 	builtinRGB          builtinKind = "rgb"
 	builtinUnarySame    builtinKind = "unary_same"
 	builtinSameOrScalar builtinKind = "same_or_scalar"
+	builtinCross        builtinKind = "cross"
+	builtinStep         builtinKind = "step"
 )
 
 type builtinSpec struct {
@@ -90,6 +92,26 @@ var stdlib = stdlibRegistry{
 		"pow":       {kind: builtinSameOrScalar, arity: 2},
 		"clamp":     {kind: builtinSameOrScalar, arity: 3},
 		"mix":       {kind: builtinSameOrScalar, arity: 3},
+		// Component-wise unary math: float->float, vecN->vecN.
+		"sin":   {kind: builtinUnarySame, arity: 1},
+		"cos":   {kind: builtinUnarySame, arity: 1},
+		"tan":   {kind: builtinUnarySame, arity: 1},
+		"sqrt":  {kind: builtinUnarySame, arity: 1},
+		"floor": {kind: builtinUnarySame, arity: 1},
+		"ceil":  {kind: builtinUnarySame, arity: 1},
+		"fract": {kind: builtinUnarySame, arity: 1},
+		"sign":  {kind: builtinUnarySame, arity: 1},
+		"exp":   {kind: builtinUnarySame, arity: 1},
+		"log":   {kind: builtinUnarySame, arity: 1},
+		"exp2":  {kind: builtinUnarySame, arity: 1},
+		"log2":  {kind: builtinUnarySame, arity: 1},
+		// reflect(I, N) -> same vector as I.
+		"reflect": {kind: builtinSameOrScalar, arity: 2},
+		// cross(a, b): vec3 x vec3 -> vec3.
+		"cross": {kind: builtinCross, arity: 2},
+		// step(edge, x) / smoothstep(e0, e1, x): result is the last argument's type.
+		"step":       {kind: builtinStep, arity: 2},
+		"smoothstep": {kind: builtinStep, arity: 3},
 	},
 }
 
