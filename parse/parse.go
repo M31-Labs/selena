@@ -9,19 +9,12 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 
 	gts "github.com/odvcencio/gotreesitter"
-	"github.com/odvcencio/gotreesitter/grammargen"
+	"github.com/odvcencio/gotreesitter/taproot"
 
 	"m31labs.dev/selena/grammar"
 	"m31labs.dev/selena/hir"
-)
-
-var (
-	langOnce sync.Once
-	lang     *gts.Language
-	langErr  error
 )
 
 // Error is a parser error that can be anchored back to source.
@@ -39,10 +32,7 @@ func (e *Error) Error() string {
 
 // language generates (and caches) the Selena tree-sitter language.
 func language() (*gts.Language, error) {
-	langOnce.Do(func() {
-		lang, _, langErr = grammargen.GenerateLanguageAndBlob(grammar.SelenaGrammar())
-	})
-	return lang, langErr
+	return taproot.Language("selena", grammar.SelenaGrammar)
 }
 
 // Material parses src and returns the first material it declares.
@@ -56,12 +46,12 @@ func Material(src []byte) (hir.Material, error) {
 		return hir.Material{}, fmt.Errorf("parse: %w", err)
 	}
 	root := tree.RootNode()
-	w := &walker{lang: l, src: src}
+	w := &walker{Walker: taproot.NewWalker(l, src)}
 	if root.HasError() {
 		return hir.Material{}, syntaxError(w, root)
 	}
 	for i := 0; i < root.NamedChildCount(); i++ {
-		if c := root.NamedChild(i); w.typ(c) == "material" {
+		if c := root.NamedChild(i); w.Type(c) == "material" {
 			return w.material(c)
 		}
 	}
@@ -79,14 +69,14 @@ func Program(src []byte) (hir.Program, error) {
 		return hir.Program{}, fmt.Errorf("parse: %w", err)
 	}
 	root := tree.RootNode()
-	w := &walker{lang: l, src: src}
+	w := &walker{Walker: taproot.NewWalker(l, src)}
 	if root.HasError() {
 		return hir.Program{}, syntaxError(w, root)
 	}
 	var p hir.Program
 	for i := 0; i < root.NamedChildCount(); i++ {
 		c := root.NamedChild(i)
-		switch w.typ(c) {
+		switch w.Type(c) {
 		case "material":
 			m, err := w.material(c)
 			if err != nil {
@@ -105,21 +95,17 @@ func Program(src []byte) (hir.Program, error) {
 }
 
 type walker struct {
-	lang *gts.Language
-	src  []byte
+	*taproot.Walker
 }
 
-func (w *walker) typ(n *gts.Node) string                { return n.Type(w.lang) }
-func (w *walker) text(n *gts.Node) string               { return n.Text(w.src) }
-func (w *walker) field(n *gts.Node, f string) *gts.Node { return n.ChildByFieldName(f, w.lang) }
 func (w *walker) span(n *gts.Node) hir.Span {
 	if n == nil {
 		return hir.Span{}
 	}
-	start := n.StartPoint()
+	startLine, startCol := w.Pos(n)
 	end := n.EndPoint()
 	return hir.Span{
-		Start: hir.Position{Offset: int(n.StartByte()), Line: int(start.Row) + 1, Column: int(start.Column) + 1},
+		Start: hir.Position{Offset: int(n.StartByte()), Line: startLine, Column: startCol},
 		End:   hir.Position{Offset: int(n.EndByte()), Line: int(end.Row) + 1, Column: int(end.Column) + 1},
 	}
 }
@@ -148,7 +134,7 @@ func firstError(n *gts.Node) *gts.Node {
 
 func syntaxError(w *walker, root *gts.Node) *Error {
 	n := firstError(root)
-	if expected, span, ok := expectedFromSource(w.src); ok {
+	if expected, span, ok := expectedFromSource(w.Src); ok {
 		return &Error{Message: "syntax error in .sel source; expected " + expected, Span: span}
 	}
 	return &Error{Message: syntaxMessage(w, n), Span: w.span(n)}
@@ -160,12 +146,12 @@ func syntaxMessage(w *walker, n *gts.Node) string {
 		return prefix
 	}
 	if n.IsMissing() {
-		return prefix + "; expected " + readableExpected(w.typ(n))
+		return prefix + "; expected " + readableExpected(w.Type(n))
 	}
 	if expected := expectedFromContext(w, n); expected != "" {
 		return prefix + "; expected " + expected
 	}
-	if near := strings.TrimSpace(w.text(n)); near != "" {
+	if near := strings.TrimSpace(w.Text(n)); near != "" {
 		return fmt.Sprintf("%s near %q", prefix, near)
 	}
 	return prefix
@@ -173,7 +159,7 @@ func syntaxMessage(w *walker, n *gts.Node) string {
 
 func expectedFromContext(w *walker, n *gts.Node) string {
 	for cur := n; cur != nil; cur = cur.Parent() {
-		switch w.typ(cur) {
+		switch w.Type(cur) {
 		case "source_file":
 			return "a material or fn declaration"
 		case "material":
@@ -298,17 +284,17 @@ func spanAt(lineNo, offset, column, width int) hir.Span {
 }
 
 func (w *walker) material(n *gts.Node) (hir.Material, error) {
-	m := hir.Material{Name: w.text(w.field(n, "name")), Span: w.span(n)}
-	if p := w.field(n, "parent"); p != nil {
-		m.Extends = w.text(p)
+	m := hir.Material{Name: w.Text(w.Field(n, "name")), Span: w.span(n)}
+	if p := w.Field(n, "parent"); p != nil {
+		m.Extends = w.Text(p)
 	}
 	for i := 0; i < n.NamedChildCount(); i++ {
 		c := n.NamedChild(i)
-		if w.typ(c) != "member" {
+		if w.Type(c) != "member" {
 			continue
 		}
 		inner := c.NamedChild(0)
-		switch w.typ(inner) {
+		switch w.Type(inner) {
 		case "param":
 			p, err := w.param(inner)
 			if err != nil {
@@ -331,11 +317,11 @@ func (w *walker) material(n *gts.Node) (hir.Material, error) {
 
 func (w *walker) param(n *gts.Node) (hir.Param, error) {
 	p := hir.Param{
-		Name: w.text(w.field(n, "name")),
-		Type: hir.Type(w.text(w.field(n, "type"))),
+		Name: w.Text(w.Field(n, "name")),
+		Type: hir.Type(w.Text(w.Field(n, "type"))),
 		Span: w.span(n),
 	}
-	if d := w.field(n, "default"); d != nil {
+	if d := w.Field(n, "default"); d != nil {
 		e, err := w.expr(d)
 		if err != nil {
 			return p, err
@@ -346,23 +332,23 @@ func (w *walker) param(n *gts.Node) (hir.Param, error) {
 }
 
 func (w *walker) fn(n *gts.Node) (hir.Func, error) {
-	f := hir.Func{Geo: w.text(w.field(n, "geo")), Span: w.span(n)}
-	body := w.field(n, "body")
+	f := hir.Func{Geo: w.Text(w.Field(n, "geo")), Span: w.span(n)}
+	body := w.Field(n, "body")
 	for i := 0; i < body.NamedChildCount(); i++ {
 		st := body.NamedChild(i)
-		if w.typ(st) != "statement" {
+		if w.Type(st) != "statement" {
 			continue
 		}
 		s := st.NamedChild(0)
-		switch w.typ(s) {
+		switch w.Type(s) {
 		case "let_stmt":
-			e, err := w.expr(w.field(s, "value"))
+			e, err := w.expr(w.Field(s, "value"))
 			if err != nil {
 				return f, err
 			}
-			f.Body = append(f.Body, hir.Let{Name: w.text(w.field(s, "name")), Value: e, Span: w.span(s)})
+			f.Body = append(f.Body, hir.Let{Name: w.Text(w.Field(s, "name")), Value: e, Span: w.span(s)})
 		case "return_stmt":
-			e, err := w.expr(w.field(s, "value"))
+			e, err := w.expr(w.Field(s, "value"))
 			if err != nil {
 				return f, err
 			}
@@ -377,43 +363,43 @@ func (w *walker) fn(n *gts.Node) (hir.Func, error) {
 
 func (w *walker) funcDecl(n *gts.Node) (hir.FuncDecl, error) {
 	fd := hir.FuncDecl{
-		Name:    w.text(w.field(n, "name")),
+		Name:    w.Text(w.Field(n, "name")),
 		Span:    w.span(n),
-		Returns: hir.Type(w.text(w.field(n, "returns"))),
+		Returns: hir.Type(w.Text(w.Field(n, "returns"))),
 	}
 	for i := 0; i < n.NamedChildCount(); i++ {
 		c := n.NamedChild(i)
-		if w.typ(c) != "fn_params" {
+		if w.Type(c) != "fn_params" {
 			continue
 		}
 		for j := 0; j < c.NamedChildCount(); j++ {
 			p := c.NamedChild(j)
-			if w.typ(p) != "fn_param" {
+			if w.Type(p) != "fn_param" {
 				continue
 			}
 			fd.Params = append(fd.Params, hir.Param{
-				Name: w.text(w.field(p, "name")),
-				Type: hir.Type(w.text(w.field(p, "type"))),
+				Name: w.Text(w.Field(p, "name")),
+				Type: hir.Type(w.Text(w.Field(p, "type"))),
 				Span: w.span(p),
 			})
 		}
 	}
-	body := w.field(n, "body")
+	body := w.Field(n, "body")
 	for i := 0; i < body.NamedChildCount(); i++ {
 		st := body.NamedChild(i)
-		if w.typ(st) != "statement" {
+		if w.Type(st) != "statement" {
 			continue
 		}
 		s := st.NamedChild(0)
-		switch w.typ(s) {
+		switch w.Type(s) {
 		case "let_stmt":
-			e, err := w.expr(w.field(s, "value"))
+			e, err := w.expr(w.Field(s, "value"))
 			if err != nil {
 				return fd, err
 			}
-			fd.Body = append(fd.Body, hir.Let{Name: w.text(w.field(s, "name")), Value: e, Span: w.span(s)})
+			fd.Body = append(fd.Body, hir.Let{Name: w.Text(w.Field(s, "name")), Value: e, Span: w.span(s)})
 		case "return_stmt":
-			e, err := w.expr(w.field(s, "value"))
+			e, err := w.expr(w.Field(s, "value"))
 			if err != nil {
 				return fd, err
 			}
@@ -427,35 +413,35 @@ func (w *walker) funcDecl(n *gts.Node) (hir.FuncDecl, error) {
 }
 
 func (w *walker) expr(n *gts.Node) (hir.Expr, error) {
-	switch w.typ(n) {
+	switch w.Type(n) {
 	case "number":
-		v, err := strconv.ParseFloat(w.text(n), 64)
+		v, err := strconv.ParseFloat(w.Text(n), 64)
 		if err != nil {
-			return nil, fmt.Errorf("bad number %q: %w", w.text(n), err)
+			return nil, fmt.Errorf("bad number %q: %w", w.Text(n), err)
 		}
 		return hir.Lit{Value: v, Span: w.span(n)}, nil
 	case "identifier":
-		return hir.Ref{Name: w.text(n), Span: w.span(n)}, nil
+		return hir.Ref{Name: w.Text(n), Span: w.span(n)}, nil
 	case "paren_expression":
 		return w.expr(n.NamedChild(0))
 	case "member_expression":
-		obj, err := w.expr(w.field(n, "object"))
+		obj, err := w.expr(w.Field(n, "object"))
 		if err != nil {
 			return nil, err
 		}
-		return hir.Member{E: obj, Field: w.text(w.field(n, "field")), Span: w.span(n)}, nil
+		return hir.Member{E: obj, Field: w.Text(w.Field(n, "field")), Span: w.span(n)}, nil
 	case "binary_expression":
-		l, err := w.expr(w.field(n, "left"))
+		l, err := w.expr(w.Field(n, "left"))
 		if err != nil {
 			return nil, err
 		}
-		r, err := w.expr(w.field(n, "right"))
+		r, err := w.expr(w.Field(n, "right"))
 		if err != nil {
 			return nil, err
 		}
-		return hir.Binary{Op: w.text(w.field(n, "operator")), L: l, R: r, Span: w.span(n)}, nil
+		return hir.Binary{Op: w.Text(w.Field(n, "operator")), L: l, R: r, Span: w.span(n)}, nil
 	case "unary_expression":
-		e, err := w.expr(w.field(n, "operand"))
+		e, err := w.expr(w.Field(n, "operand"))
 		if err != nil {
 			return nil, err
 		}
@@ -464,7 +450,7 @@ func (w *walker) expr(n *gts.Node) (hir.Expr, error) {
 		var args []hir.Expr
 		for i := 0; i < n.NamedChildCount(); i++ {
 			c := n.NamedChild(i)
-			if w.typ(c) != "arguments" {
+			if w.Type(c) != "arguments" {
 				continue
 			}
 			for j := 0; j < c.NamedChildCount(); j++ {
@@ -475,12 +461,12 @@ func (w *walker) expr(n *gts.Node) (hir.Expr, error) {
 				args = append(args, a)
 			}
 		}
-		return hir.Call{Func: w.text(w.field(n, "callee")), Args: args, Span: w.span(n)}, nil
+		return hir.Call{Func: w.Text(w.Field(n, "callee")), Args: args, Span: w.span(n)}, nil
 	case "super_call":
 		var args []hir.Expr
 		for i := 0; i < n.NamedChildCount(); i++ {
 			c := n.NamedChild(i)
-			if w.typ(c) != "arguments" {
+			if w.Type(c) != "arguments" {
 				continue
 			}
 			for j := 0; j < c.NamedChildCount(); j++ {
@@ -491,7 +477,7 @@ func (w *walker) expr(n *gts.Node) (hir.Expr, error) {
 				args = append(args, a)
 			}
 		}
-		return hir.SuperCall{Method: w.text(w.field(n, "method")), Args: args, Span: w.span(n)}, nil
+		return hir.SuperCall{Method: w.Text(w.Field(n, "method")), Args: args, Span: w.span(n)}, nil
 	}
-	return nil, fmt.Errorf("unexpected expression node %q", w.typ(n))
+	return nil, fmt.Errorf("unexpected expression node %q", w.Type(n))
 }

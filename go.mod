@@ -14,3 +14,5 @@ require (
 )
 
 replace m31labs.dev/prism => ../prism
+
+replace github.com/odvcencio/gotreesitter => ../gotreesitter
