@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	"m31labs.dev/selena/emit/internal/spell"
+	"m31labs.dev/prism/dialect"
+	"m31labs.dev/prism/gputype"
 	"m31labs.dev/selena/ir"
 )
+
+var prismDialect = dialect.Metal{}
 
 // Emit renders m as a single Metal Shading Language source with vertexMain and
 // fragmentMain, for the iOS SceneKit backend consumed by gosx-native. Structure
@@ -84,10 +87,10 @@ func newScope(m ir.Module, fragment bool) scope {
 	}
 }
 
-func (s scope) TypeName(t ir.Type) string { return typeName(t) }
+func (s scope) TypeName(t ir.Type) string { return prismDialect.TypeName(selenaTypeToGPU(t)) }
 
 func (s scope) Call(name string, args []string) string {
-	return spell.Call(name, args, builtinSpellings)
+	return prismDialect.Builtin(name, args)
 }
 
 func (s scope) Ref(name string) string {
@@ -105,26 +108,28 @@ func (s scope) Ref(name string) string {
 
 // Sample uses Metal's texture.sample(sampler, uv); the sampler is a separate
 // function argument bound at [[sampler(i)]].
-func (s scope) Sample(tex, uv string) string {
-	return tex + ".sample(" + tex + "Sampler, " + uv + ")"
-}
+func (s scope) Sample(tex, uv string) string { return prismDialect.Sample(tex, uv) }
 
-func typeName(t ir.Type) string {
+// typeName spells an ir.Type in Metal, delegating to prism/dialect.
+func typeName(t ir.Type) string { return prismDialect.TypeName(selenaTypeToGPU(t)) }
+
+// selenaTypeToGPU maps a Selena ir.Type to a prism gputype.Type.
+func selenaTypeToGPU(t ir.Type) gputype.Type {
 	switch t {
 	case ir.Float:
-		return "float"
+		return gputype.F32
 	case ir.Vec2:
-		return "float2"
+		return gputype.Vec{N: 2, Elem: gputype.F32}
 	case ir.Vec3:
-		return "float3"
+		return gputype.Vec{N: 3, Elem: gputype.F32}
 	case ir.Vec4:
-		return "float4"
+		return gputype.Vec{N: 4, Elem: gputype.F32}
 	case ir.Mat3:
-		return "float3x3"
+		return gputype.Mat{Cols: 3, Rows: 3, Elem: gputype.F32}
 	case ir.Mat4:
-		return "float4x4"
+		return gputype.Mat{Cols: 4, Rows: 4, Elem: gputype.F32}
 	default:
-		return "float"
+		return gputype.F32
 	}
 }
 
@@ -134,33 +139,4 @@ func nameSet(bs []ir.Binding) map[string]bool {
 		m[b.Name] = true
 	}
 	return m
-}
-
-var builtinSpellings = spell.Builtins{
-	"abs":        "abs",
-	"clamp":      "clamp",
-	"distance":   "distance",
-	"dot":        "dot",
-	"length":     "length",
-	"max":        "max",
-	"min":        "min",
-	"mix":        "mix",
-	"normalize":  "normalize",
-	"pow":        "pow",
-	"sin":        "sin",
-	"cos":        "cos",
-	"tan":        "tan",
-	"sqrt":       "sqrt",
-	"floor":      "floor",
-	"ceil":       "ceil",
-	"fract":      "fract",
-	"sign":       "sign",
-	"exp":        "exp",
-	"log":        "log",
-	"exp2":       "exp2",
-	"log2":       "log2",
-	"cross":      "cross",
-	"reflect":    "reflect",
-	"step":       "step",
-	"smoothstep": "smoothstep",
 }

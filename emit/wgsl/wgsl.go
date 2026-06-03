@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	"m31labs.dev/selena/emit/internal/spell"
+	"m31labs.dev/prism/dialect"
+	"m31labs.dev/prism/gputype"
 	"m31labs.dev/selena/ir"
 )
+
+var prismDialect = dialect.WGSL{}
 
 // Emit renders m as a single WGSL source string exposing vertexMain and
 // fragmentMain, for the WebGPU backend (browser + GoSX desktop via Chromium).
@@ -84,10 +87,10 @@ func newScope(m ir.Module, fragment bool) scope {
 	}
 }
 
-func (s scope) TypeName(t ir.Type) string { return typeName(t) }
+func (s scope) TypeName(t ir.Type) string { return prismDialect.TypeName(selenaTypeToGPU(t)) }
 
 func (s scope) Call(name string, args []string) string {
-	return spell.Call(name, args, builtinSpellings)
+	return prismDialect.Builtin(name, args)
 }
 
 func (s scope) Ref(name string) string {
@@ -103,26 +106,28 @@ func (s scope) Ref(name string) string {
 	}
 }
 
-func (s scope) Sample(tex, uv string) string {
-	return "textureSample(" + tex + ", " + tex + "Sampler, " + uv + ")"
-}
+func (s scope) Sample(tex, uv string) string { return prismDialect.Sample(tex, uv) }
 
-func typeName(t ir.Type) string {
+// typeName spells an ir.Type in WGSL, delegating to prism/dialect.
+func typeName(t ir.Type) string { return prismDialect.TypeName(selenaTypeToGPU(t)) }
+
+// selenaTypeToGPU maps a Selena ir.Type to a prism gputype.Type.
+func selenaTypeToGPU(t ir.Type) gputype.Type {
 	switch t {
 	case ir.Float:
-		return "f32"
+		return gputype.F32
 	case ir.Vec2:
-		return "vec2<f32>"
+		return gputype.Vec{N: 2, Elem: gputype.F32}
 	case ir.Vec3:
-		return "vec3<f32>"
+		return gputype.Vec{N: 3, Elem: gputype.F32}
 	case ir.Vec4:
-		return "vec4<f32>"
+		return gputype.Vec{N: 4, Elem: gputype.F32}
 	case ir.Mat3:
-		return "mat3x3<f32>"
+		return gputype.Mat{Cols: 3, Rows: 3, Elem: gputype.F32}
 	case ir.Mat4:
-		return "mat4x4<f32>"
+		return gputype.Mat{Cols: 4, Rows: 4, Elem: gputype.F32}
 	default:
-		return "f32"
+		return gputype.F32
 	}
 }
 
@@ -132,33 +137,4 @@ func nameSet(bs []ir.Binding) map[string]bool {
 		m[b.Name] = true
 	}
 	return m
-}
-
-var builtinSpellings = spell.Builtins{
-	"abs":        "abs",
-	"clamp":      "clamp",
-	"distance":   "distance",
-	"dot":        "dot",
-	"length":     "length",
-	"max":        "max",
-	"min":        "min",
-	"mix":        "mix",
-	"normalize":  "normalize",
-	"pow":        "pow",
-	"sin":        "sin",
-	"cos":        "cos",
-	"tan":        "tan",
-	"sqrt":       "sqrt",
-	"floor":      "floor",
-	"ceil":       "ceil",
-	"fract":      "fract",
-	"sign":       "sign",
-	"exp":        "exp",
-	"log":        "log",
-	"exp2":       "exp2",
-	"log2":       "log2",
-	"cross":      "cross",
-	"reflect":    "reflect",
-	"step":       "step",
-	"smoothstep": "smoothstep",
 }

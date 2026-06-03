@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	"m31labs.dev/selena/emit/internal/spell"
+	"m31labs.dev/prism/dialect"
+	"m31labs.dev/prism/gputype"
 	"m31labs.dev/selena/ir"
 )
+
+var prismDialect = dialect.GLES{}
 
 // Emit renders m as GLSL ES 3.00 vertex and fragment sources for the Android
 // GLSurfaceView backend consumed by gosx-native. Like the WebGL GLSL emitter it
@@ -67,28 +70,32 @@ type bare struct{}
 func (bare) TypeName(t ir.Type) string { return typeName(t) }
 func (bare) Ref(name string) string    { return name }
 func (bare) Call(name string, args []string) string {
-	return spell.Call(name, args, builtinSpellings)
+	return prismDialect.Builtin(name, args)
 }
 
 // Sample uses GLSL ES 3.00's texture (combined sampler2D).
-func (bare) Sample(tex, uv string) string { return "texture(" + tex + ", " + uv + ")" }
+func (bare) Sample(tex, uv string) string { return prismDialect.Sample(tex, uv) }
 
-func typeName(t ir.Type) string {
+// typeName spells an ir.Type in GLSL ES, delegating to prism/dialect.
+func typeName(t ir.Type) string { return prismDialect.TypeName(selenaTypeToGPU(t)) }
+
+// selenaTypeToGPU maps a Selena ir.Type to a prism gputype.Type.
+func selenaTypeToGPU(t ir.Type) gputype.Type {
 	switch t {
 	case ir.Float:
-		return "float"
+		return gputype.F32
 	case ir.Vec2:
-		return "vec2"
+		return gputype.Vec{N: 2, Elem: gputype.F32}
 	case ir.Vec3:
-		return "vec3"
+		return gputype.Vec{N: 3, Elem: gputype.F32}
 	case ir.Vec4:
-		return "vec4"
+		return gputype.Vec{N: 4, Elem: gputype.F32}
 	case ir.Mat3:
-		return "mat3"
+		return gputype.Mat{Cols: 3, Rows: 3, Elem: gputype.F32}
 	case ir.Mat4:
-		return "mat4"
+		return gputype.Mat{Cols: 4, Rows: 4, Elem: gputype.F32}
 	default:
-		return "float"
+		return gputype.F32
 	}
 }
 
@@ -98,33 +105,4 @@ func nameSet(bs []ir.Binding) map[string]bool {
 		m[b.Name] = true
 	}
 	return m
-}
-
-var builtinSpellings = spell.Builtins{
-	"abs":        "abs",
-	"clamp":      "clamp",
-	"distance":   "distance",
-	"dot":        "dot",
-	"length":     "length",
-	"max":        "max",
-	"min":        "min",
-	"mix":        "mix",
-	"normalize":  "normalize",
-	"pow":        "pow",
-	"sin":        "sin",
-	"cos":        "cos",
-	"tan":        "tan",
-	"sqrt":       "sqrt",
-	"floor":      "floor",
-	"ceil":       "ceil",
-	"fract":      "fract",
-	"sign":       "sign",
-	"exp":        "exp",
-	"log":        "log",
-	"exp2":       "exp2",
-	"log2":       "log2",
-	"cross":      "cross",
-	"reflect":    "reflect",
-	"step":       "step",
-	"smoothstep": "smoothstep",
 }
