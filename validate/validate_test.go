@@ -8,10 +8,9 @@
 package validate
 
 import (
-	"os"
-	"os/exec"
-	"path/filepath"
 	"testing"
+
+	prismvalidate "m31labs.dev/prism/validate"
 
 	"m31labs.dev/selena/emit/gles"
 	"m31labs.dev/selena/emit/wgsl"
@@ -28,11 +27,6 @@ func materials(t *testing.T) map[string]hir.Material {
 }
 
 func TestGLESCompilesWithGlslang(t *testing.T) {
-	gv, err := exec.LookPath("glslangValidator")
-	if err != nil {
-		t.Skip("glslangValidator not installed; skipping GLSL ES compile-check")
-	}
-	dir := t.TempDir()
 	for name, m := range materials(t) {
 		mod, _, err := lower.Lower(m)
 		if err != nil {
@@ -42,24 +36,16 @@ func TestGLESCompilesWithGlslang(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for ext, src := range map[string]string{"vert": vert, "frag": frag} {
-			f := filepath.Join(dir, name+"."+ext)
-			if err := os.WriteFile(f, []byte(src), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			if out, err := exec.Command(gv, f).CombinedOutput(); err != nil {
-				t.Errorf("glslang rejected %s.%s:\n%s", name, ext, out)
-			}
-		}
+		t.Run(name+".vert", func(t *testing.T) {
+			prismvalidate.Shader(t, "glslangValidator", vert, ".vert", nil)
+		})
+		t.Run(name+".frag", func(t *testing.T) {
+			prismvalidate.Shader(t, "glslangValidator", frag, ".frag", nil)
+		})
 	}
 }
 
 func TestWGSLCompilesWithNaga(t *testing.T) {
-	naga, err := exec.LookPath("naga")
-	if err != nil {
-		t.Skip("naga not installed; skipping WGSL compile-check")
-	}
-	dir := t.TempDir()
 	for name, m := range materials(t) {
 		mod, _, err := lower.Lower(m)
 		if err != nil {
@@ -69,12 +55,8 @@ func TestWGSLCompilesWithNaga(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		f := filepath.Join(dir, name+".wgsl")
-		if err := os.WriteFile(f, []byte(src), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if out, err := exec.Command(naga, f).CombinedOutput(); err != nil {
-			t.Errorf("naga rejected %s WGSL:\n%s", name, out)
-		}
+		t.Run(name, func(t *testing.T) {
+			prismvalidate.Shader(t, "naga", src, ".wgsl", nil)
+		})
 	}
 }
