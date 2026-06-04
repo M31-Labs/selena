@@ -32,7 +32,7 @@ func (e *Error) Error() string {
 
 // language generates (and caches) the Selena tree-sitter language.
 func language() (*gts.Language, error) {
-	return taproot.Language("selena", grammar.SelenaGrammar)
+	return taproot.LanguageFromBlob("selena", grammarBlob, grammar.SelenaGrammar)
 }
 
 // Material parses src and returns the first material it declares.
