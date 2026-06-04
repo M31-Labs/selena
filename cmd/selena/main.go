@@ -3,6 +3,9 @@
 //	selena emit <target> <file.sel> [material]  # target: wgsl | glsl | metal | gles
 //	selena check <file.sel> [material]          # parse + lower (front-end check)
 //	selena inspect <file.sel> [material]        # print interface + descriptor
+//	selena graph [--format json|dot] <file.sel> [material]
+//	selena shaders [--target wgsl|glsl|metal|gles] [--out dir] [--validate] <file.sel> [material]
+//	selena compile --bundle dir [--validate-shaders] <file.sel> [material]
 //	selena demo  <out.html> [material]
 //
 // emit/check parse a .sel file through the full pipeline (parse -> HIR -> lower
@@ -27,6 +30,10 @@ usage:
   selena emit <target> <file.sel> [material]  emit a shader (target: wgsl|glsl|metal|gles)
   selena check <file.sel> [material]          parse + lower a material
   selena inspect <file.sel> [material]        print material interface + descriptor
+  selena graph [--format json|dot] <file.sel> [material]
+  selena shaders [--target wgsl|glsl|metal|gles] [--out dir] [--validate] <file.sel> [material]
+  selena compile --bundle dir [--validate-shaders] <file.sel> [material]
+  selena doctor                     print local compiler/runtime facts
   selena demo <out.html> [material] render harness (material: directional-diffuse|textured|defaults)
   selena help                       show this help
 
@@ -90,6 +97,14 @@ func run(args []string) error {
 			material = args[2]
 		}
 		return inspect(args[1], material)
+	case "graph":
+		return graph(args[1:])
+	case "shaders":
+		return shaders(args[1:])
+	case "compile":
+		return compileBundle(args[1:])
+	case "doctor":
+		return doctor(args[1:])
 	case "demo":
 		if len(args) < 2 || len(args) > 3 {
 			return fmt.Errorf("usage: selena demo <out.html> [material]  (material: directional-diffuse|textured|defaults)")

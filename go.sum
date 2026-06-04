@@ -8,3 +8,5 @@ m31labs.dev/gosx v0.24.0 h1:+6T5kY+TXc3Uya3oNGs5BFHoNVQrVBbG3rRmInzkBQU=
 m31labs.dev/gosx v0.24.0/go.mod h1:xgxWPp775oAzLUBl8FamVdeHrqh2DumaOndU65MbjTE=
 m31labs.dev/prism v0.1.0 h1:5KRsHuLH4qQvVaYtUn2VIwGZ0/VjbVscxJ5/xkEQWe0=
 m31labs.dev/prism v0.1.0/go.mod h1:y3Eg5GDXRB6G0rNIPOOnmFXpmZGjy4eOjyDMORyWHf8=
+m31labs.dev/prism v0.1.1 h1:YdCtvTCI7stHub7UzZHAp2DlS1uQWT4GjC26VNLkWb0=
+m31labs.dev/prism v0.1.1/go.mod h1:y3Eg5GDXRB6G0rNIPOOnmFXpmZGjy4eOjyDMORyWHf8=
