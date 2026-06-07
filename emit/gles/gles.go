@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"m31labs.dev/prism/dialect"
-	"m31labs.dev/prism/gputype"
+	"m31labs.dev/selena/emit/internal"
 	"m31labs.dev/selena/ir"
 )
 
@@ -31,16 +31,17 @@ func emitVertex(m ir.Module) string {
 	for _, v := range m.Varyings {
 		fmt.Fprintf(&b, "out %s %s;\n", typeName(v.Type), v.Name)
 	}
-	vary := nameSet(m.Varyings)
+	vary := internal.NameSet(m.Varyings)
+	res := internal.NewBare(prismDialect)
 	b.WriteString("\nvoid main() {\n")
 	for _, s := range m.Vertex.Body {
 		if vary[s.Target] {
-			fmt.Fprintf(&b, "  %s = %s;\n", s.Target, ir.Print(s.Value, bare{}))
+			fmt.Fprintf(&b, "  %s = %s;\n", s.Target, ir.Print(s.Value, res))
 		} else {
-			fmt.Fprintf(&b, "  %s %s = %s;\n", typeName(s.Type), s.Target, ir.Print(s.Value, bare{}))
+			fmt.Fprintf(&b, "  %s %s = %s;\n", typeName(s.Type), s.Target, ir.Print(s.Value, res))
 		}
 	}
-	fmt.Fprintf(&b, "  gl_Position = %s;\n}\n", ir.Print(m.Vertex.Output, bare{}))
+	fmt.Fprintf(&b, "  gl_Position = %s;\n}\n", ir.Print(m.Vertex.Output, res))
 	return b.String()
 }
 
@@ -56,53 +57,14 @@ func emitFragment(m ir.Module) string {
 	for _, t := range m.Textures {
 		fmt.Fprintf(&b, "uniform sampler2D %s;\n", t.Name)
 	}
+	res := internal.NewBare(prismDialect)
 	b.WriteString("out vec4 fragColor;\n\nvoid main() {\n")
 	for _, s := range m.Fragment.Body {
-		fmt.Fprintf(&b, "  %s %s = %s;\n", typeName(s.Type), s.Target, ir.Print(s.Value, bare{}))
+		fmt.Fprintf(&b, "  %s %s = %s;\n", typeName(s.Type), s.Target, ir.Print(s.Value, res))
 	}
-	fmt.Fprintf(&b, "  fragColor = %s;\n}\n", ir.Print(m.Fragment.Output, bare{}))
+	fmt.Fprintf(&b, "  fragColor = %s;\n}\n", ir.Print(m.Fragment.Output, res))
 	return b.String()
 }
 
-// bare implements ir.Dialect for GLSL ES, where every reference is a bare global.
-type bare struct{}
-
-func (bare) TypeName(t ir.Type) string { return typeName(t) }
-func (bare) Ref(name string) string    { return name }
-func (bare) Call(name string, args []string) string {
-	return prismDialect.Builtin(name, args)
-}
-
-// Sample uses GLSL ES 3.00's texture (combined sampler2D).
-func (bare) Sample(tex, uv string) string { return prismDialect.Sample(tex, uv) }
-
 // typeName spells an ir.Type in GLSL ES, delegating to prism/dialect.
-func typeName(t ir.Type) string { return prismDialect.TypeName(selenaTypeToGPU(t)) }
-
-// selenaTypeToGPU maps a Selena ir.Type to a prism gputype.Type.
-func selenaTypeToGPU(t ir.Type) gputype.Type {
-	switch t {
-	case ir.Float:
-		return gputype.F32
-	case ir.Vec2:
-		return gputype.Vec{N: 2, Elem: gputype.F32}
-	case ir.Vec3:
-		return gputype.Vec{N: 3, Elem: gputype.F32}
-	case ir.Vec4:
-		return gputype.Vec{N: 4, Elem: gputype.F32}
-	case ir.Mat3:
-		return gputype.Mat{Cols: 3, Rows: 3, Elem: gputype.F32}
-	case ir.Mat4:
-		return gputype.Mat{Cols: 4, Rows: 4, Elem: gputype.F32}
-	default:
-		return gputype.F32
-	}
-}
-
-func nameSet(bs []ir.Binding) map[string]bool {
-	m := make(map[string]bool, len(bs))
-	for _, b := range bs {
-		m[b.Name] = true
-	}
-	return m
-}
+func typeName(t ir.Type) string { return prismDialect.TypeName(internal.TypeToGPU(t)) }

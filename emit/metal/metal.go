@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"m31labs.dev/prism/dialect"
-	"m31labs.dev/prism/gputype"
+	"m31labs.dev/selena/emit/internal"
 	"m31labs.dev/selena/ir"
 )
 
@@ -44,10 +44,10 @@ func Emit(m ir.Module) (string, error) {
 	}
 	b.WriteString("};\n\n")
 
-	vs := newScope(m, false)
+	vs := internal.NewQualified(prismDialect, m, false)
 	b.WriteString("vertex VertexOut vertexMain(VertexIn in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {\n  VertexOut out;\n")
 	for _, s := range m.Vertex.Body {
-		if vs.varyings[s.Target] {
+		if vs.Varyings[s.Target] {
 			fmt.Fprintf(&b, "  out.%s = %s;\n", s.Target, ir.Print(s.Value, vs))
 		} else {
 			fmt.Fprintf(&b, "  %s %s = %s;\n", typeName(s.Type), s.Target, ir.Print(s.Value, vs))
@@ -55,7 +55,7 @@ func Emit(m ir.Module) (string, error) {
 	}
 	fmt.Fprintf(&b, "  out.position = %s;\n  return out;\n}\n\n", ir.Print(m.Vertex.Output, vs))
 
-	fs := newScope(m, true)
+	fs := internal.NewQualified(prismDialect, m, true)
 	fragSig := "fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]"
 	for i, t := range m.Textures {
 		fragSig += fmt.Sprintf(", texture2d<float> %s [[texture(%d)]], sampler %sSampler [[sampler(%d)]]", t.Name, i, t.Name, i)
@@ -69,74 +69,5 @@ func Emit(m ir.Module) (string, error) {
 	return b.String(), nil
 }
 
-// scope resolves references to Metal's struct-qualified form (u.x for the
-// uniform buffer, in.x for stage inputs). Same shape as the WGSL scope.
-type scope struct {
-	uniforms   map[string]bool
-	attributes map[string]bool
-	varyings   map[string]bool
-	fragment   bool
-}
-
-func newScope(m ir.Module, fragment bool) scope {
-	return scope{
-		uniforms:   nameSet(m.Uniforms),
-		attributes: nameSet(m.Attributes),
-		varyings:   nameSet(m.Varyings),
-		fragment:   fragment,
-	}
-}
-
-func (s scope) TypeName(t ir.Type) string { return prismDialect.TypeName(selenaTypeToGPU(t)) }
-
-func (s scope) Call(name string, args []string) string {
-	return prismDialect.Builtin(name, args)
-}
-
-func (s scope) Ref(name string) string {
-	switch {
-	case s.uniforms[name]:
-		return "u." + name
-	case !s.fragment && s.attributes[name]:
-		return "in." + name
-	case s.fragment && s.varyings[name]:
-		return "in." + name
-	default:
-		return name
-	}
-}
-
-// Sample uses Metal's texture.sample(sampler, uv); the sampler is a separate
-// function argument bound at [[sampler(i)]].
-func (s scope) Sample(tex, uv string) string { return prismDialect.Sample(tex, uv) }
-
 // typeName spells an ir.Type in Metal, delegating to prism/dialect.
-func typeName(t ir.Type) string { return prismDialect.TypeName(selenaTypeToGPU(t)) }
-
-// selenaTypeToGPU maps a Selena ir.Type to a prism gputype.Type.
-func selenaTypeToGPU(t ir.Type) gputype.Type {
-	switch t {
-	case ir.Float:
-		return gputype.F32
-	case ir.Vec2:
-		return gputype.Vec{N: 2, Elem: gputype.F32}
-	case ir.Vec3:
-		return gputype.Vec{N: 3, Elem: gputype.F32}
-	case ir.Vec4:
-		return gputype.Vec{N: 4, Elem: gputype.F32}
-	case ir.Mat3:
-		return gputype.Mat{Cols: 3, Rows: 3, Elem: gputype.F32}
-	case ir.Mat4:
-		return gputype.Mat{Cols: 4, Rows: 4, Elem: gputype.F32}
-	default:
-		return gputype.F32
-	}
-}
-
-func nameSet(bs []ir.Binding) map[string]bool {
-	m := make(map[string]bool, len(bs))
-	for _, b := range bs {
-		m[b.Name] = true
-	}
-	return m
-}
+func typeName(t ir.Type) string { return prismDialect.TypeName(internal.TypeToGPU(t)) }
