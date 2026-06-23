@@ -15,11 +15,27 @@ const (
 	Mat4  Type = "mat4"
 )
 
+// Kind identifies which surface pipeline a Module targets.
+type Kind string
+
+const (
+	// KindMesh is the default: vertex+fragment stages for triangle meshes.
+	KindMesh Kind = "mesh"
+	// KindPoints is a billboard quad point/particle appearance surface.
+	// The emitter bakes billboard quad expansion and the engine point
+	// uniforms; the author-body runs inside the fragment stage.
+	KindPoints Kind = "points"
+	// KindPost is a fullscreen post-process pass. The emitter generates a
+	// fullscreen triangle vertex stage; the author-body is the fragment.
+	KindPost Kind = "post"
+)
+
 // Module is a complete material shader: a declared interface (uniforms,
 // per-vertex attributes, vertex->fragment varyings, sampled textures) plus the
 // two stages.
 type Module struct {
 	Name       string
+	Kind       Kind      // KindMesh / KindPoints / KindPost; zero == KindMesh
 	Uniforms   []Binding // shared constants (mvp, color, light, ...)
 	Attributes []Binding // per-vertex inputs (position, normal, uv, ...)
 	Varyings   []Binding // interpolated vertex -> fragment values
@@ -108,14 +124,24 @@ type Sample struct {
 	UV      Expr
 }
 
-func (Ref) isExpr()       {}
-func (Lit) isExpr()       {}
-func (Construct) isExpr() {}
-func (Call) isExpr()      {}
-func (Binary) isExpr()    {}
-func (Unary) isExpr()     {}
-func (Swizzle) isExpr()   {}
-func (Sample) isExpr()    {}
+// SceneSample samples one of the engine-provided post-pass textures at UV.
+// Name is "sceneColor" or "sceneDepth". These are NOT in Module.Textures —
+// they are at fixed engine binding slots the post emitter knows. The return
+// type of sceneColor is vec4; sceneDepth is float (depth buffer read).
+type SceneSample struct {
+	Name string // "sceneColor" or "sceneDepth"
+	UV   Expr
+}
+
+func (Ref) isExpr()         {}
+func (Lit) isExpr()         {}
+func (Construct) isExpr()   {}
+func (Call) isExpr()        {}
+func (Binary) isExpr()      {}
+func (Unary) isExpr()       {}
+func (Swizzle) isExpr()     {}
+func (Sample) isExpr()      {}
+func (SceneSample) isExpr() {}
 
 // Dialect spells the backend-specific parts of expression printing: how a type
 // name renders (vec4 vs vec4<f32>) and how a reference renders in the current
@@ -131,6 +157,10 @@ type Dialect interface {
 	// already-rendered UV expression (WGSL: textureSample(t, tSampler, uv);
 	// GLSL ES3: texture(t, uv); Metal: t.sample(tSampler, uv)).
 	Sample(tex, uv string) string
+	// SceneSample renders an engine-provided post-pass scene texture sample.
+	// name is "sceneColor" or "sceneDepth"; each backend uses its own fixed
+	// binding names for these engine-provided textures.
+	SceneSample(name, uv string) string
 }
 
 // Print renders e using d for the backend-specific spellings.
@@ -152,6 +182,8 @@ func Print(e Expr, d Dialect) string {
 		return Print(x.E, d) + "." + x.Field
 	case Sample:
 		return d.Sample(x.Texture, Print(x.UV, d))
+	case SceneSample:
+		return d.SceneSample(x.Name, Print(x.UV, d))
 	default:
 		return "/* unknown expr */"
 	}

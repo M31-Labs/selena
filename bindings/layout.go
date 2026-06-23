@@ -18,11 +18,35 @@ const (
 	LanguageVersion = "selena.lang.v1"
 )
 
+// SurfaceKind identifies which pipeline the compiled material targets.
+type SurfaceKind string
+
+const (
+	SurfaceKindMesh   SurfaceKind = "mesh"
+	SurfaceKindPoints SurfaceKind = "points"
+	SurfaceKindPost   SurfaceKind = "post"
+)
+
+// EntryPoints names the shader entry functions in the emitted source.
+// For WGSL the vertex+fragment entries are in the same source file; for GLSL/GLES
+// the same names apply in the respective split files.
+//
+// VertexStorage is non-empty only for points WGSL modules, where a second vertex
+// entry point ("vertexStorageMain") reads particle data from a storage buffer
+// instead of vertex attributes. GLSL/GLES emit only the attribute variant.
+type EntryPoints struct {
+	Vertex        string `json:"vertex"`
+	Fragment      string `json:"fragment"`
+	VertexStorage string `json:"vertexStorage,omitempty"`
+}
+
 // Layout is the complete host descriptor for one material.
 type Layout struct {
 	SchemaVersion   string       `json:"schemaVersion"`
 	LanguageVersion string       `json:"languageVersion"`
 	Material        string       `json:"material"`
+	Kind            SurfaceKind  `json:"kind"`
+	EntryPoints     EntryPoints  `json:"entryPoints"`
 	UniformBlock    UniformBlock `json:"uniformBlock"`
 	Attributes      []Attribute  `json:"attributes"`
 	Textures        []Texture    `json:"textures"`

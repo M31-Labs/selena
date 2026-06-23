@@ -27,3 +27,6 @@ func (testDialect) Call(name string, args []string) string {
 func (testDialect) Sample(tex, uv string) string {
 	return "sample(" + tex + ", " + uv + ")"
 }
+func (testDialect) SceneSample(name, uv string) string {
+	return "sceneSample(" + name + ", " + uv + ")"
+}

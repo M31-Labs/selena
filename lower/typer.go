@@ -10,9 +10,13 @@ import (
 
 // typer infers the IR type of a HIR expression within one material surface.
 type typer struct {
-	paramKind map[string]hir.Type
-	geo       string
-	locals    map[string]ir.Type
+	paramKind        map[string]hir.Type
+	geo              string
+	locals           map[string]ir.Type
+	// geoFields is the geometry registry for this kind. Nil means mesh stdlib.
+	geoFields        map[string]geometrySpec
+	// allowSceneSample enables sceneColor/sceneDepth (post kind only).
+	allowSceneSample bool
 }
 
 func (t *typer) typeOf(e hir.Expr) (ir.Type, error) {
@@ -33,6 +37,12 @@ func (t *typer) typeOf(e hir.Expr) (ir.Type, error) {
 	case hir.Member:
 		if base, ok := x.E.(hir.Ref); ok {
 			if base.Name == t.geo {
+				if t.geoFields != nil {
+					if gf, ok := t.geoFields[x.Field]; ok {
+						return gf.typ, nil
+					}
+					return "", diagnostic(CodeInvalidMember, x.Span, "unknown geometry field geo.%s", x.Field)
+				}
 				if gf, ok := stdlib.geometryField(x.Field); ok {
 					return gf.typ, nil
 				}
@@ -65,6 +75,27 @@ func (t *typer) typeOf(e hir.Expr) (ir.Type, error) {
 }
 
 func (t *typer) callType(c hir.Call) (ir.Type, error) {
+	// Handle scene samplers before the general stdlib lookup.
+	if c.Func == "sceneColor" || c.Func == "sceneDepth" {
+		if !t.allowSceneSample {
+			return "", diagnostic(CodeInvalidCall, c.Span, "%s is only available in post-kind materials", c.Func)
+		}
+		if len(c.Args) != 1 {
+			return "", diagnostic(CodeInvalidCall, c.Span, "%s(uv) takes 1 argument", c.Func)
+		}
+		uvt, err := t.typeOf(c.Args[0])
+		if err != nil {
+			return "", err
+		}
+		if uvt != ir.Vec2 {
+			return "", diagnostic(CodeTypeMismatch, c.Span, "%s: argument must be vec2 uv, got %s", c.Func, uvt)
+		}
+		if c.Func == "sceneDepth" {
+			return ir.Float, nil
+		}
+		return ir.Vec4, nil
+	}
+
 	spec, ok := stdlib.builtin(c.Func)
 	if !ok {
 		if len(c.Args) == 0 {
@@ -151,6 +182,20 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 			return ir.Vec4, nil
 		}
 		return ir.Vec3, nil
+	case builtinVec2:
+		if len(c.Args) != 2 {
+			return "", diagnostic(CodeInvalidCall, c.Span, "vec2f expects 2 arguments, got %d", len(c.Args))
+		}
+		for i, a := range c.Args {
+			at, err := t.typeOf(a)
+			if err != nil {
+				return "", err
+			}
+			if at != ir.Float {
+				return "", diagnostic(CodeTypeMismatch, c.Span, "vec2f argument %d must be float, got %s", i+1, at)
+			}
+		}
+		return ir.Vec2, nil
 	case builtinUnarySame:
 		if len(c.Args) != spec.arity {
 			return "", diagnostic(CodeInvalidCall, c.Span, "%s expects %d arguments, got %d", c.Func, spec.arity, len(c.Args))

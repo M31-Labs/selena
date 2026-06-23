@@ -1,0 +1,26 @@
+material GravitationalLens kind post {
+    param lensCenterX : float = 0.5
+    param lensCenterY : float = 0.5
+    param strength    : float = 0.08
+    param softening   : float = 0.02
+    param maxBend     : float = 0.3
+
+    surface(post) -> color {
+        let lensCenter  = vec2f(lensCenterX, lensCenterY)
+        let delta       = post.uv - lensCenter
+        let r2          = dot(delta, delta) + softening * softening
+        let bend        = strength / r2
+        let bendClamped = clamp(bend, 0.0, maxBend)
+        let disp        = delta * bendClamped
+        let dispR       = disp * 1.15
+        let dispB       = disp * 0.85
+        let colorR      = sceneColor(post.uv - dispR)
+        let colorG      = sceneColor(post.uv - disp)
+        let colorB      = sceneColor(post.uv - dispB)
+        let lensed      = rgb(colorR.r, colorG.g, colorB.b, 1.0)
+        let rawColor    = sceneColor(post.uv)
+        let distCenter  = length(delta)
+        let blendEdge   = smoothstep(0.0, softening * 4.0, distCenter)
+        return mix(rawColor, lensed, blendEdge)
+    }
+}

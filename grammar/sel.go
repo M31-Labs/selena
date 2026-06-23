@@ -45,6 +45,7 @@ func SelenaGrammar() *grammargen.Grammar {
 		s("material"),
 		field("name", sym("identifier")),
 		grammargen.Optional(seq(s("extends"), field("parent", sym("identifier")))),
+		grammargen.Optional(seq(s("kind"), field("kind", sym("identifier")))),
 		s("{"),
 		grammargen.Repeat(sym("member")),
 		s("}"),

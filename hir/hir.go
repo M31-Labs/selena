@@ -58,9 +58,22 @@ type FuncDecl struct {
 	Returns Type
 }
 
+// Kind identifies which surface pipeline a material targets.
+type Kind string
+
+const (
+	// KindMesh is the default mesh/triangle pipeline (vertex + fragment stages).
+	KindMesh Kind = "mesh"
+	// KindPoints is a billboard point/particle appearance surface.
+	KindPoints Kind = "points"
+	// KindPost is a fullscreen post-process pass.
+	KindPost Kind = "post"
+)
+
 // Material is one authored material.
 type Material struct {
 	Name    string
+	Kind    Kind   // defaults to KindMesh when unset
 	Extends string // parent material name, or "" — resolved during lowering
 	Span    Span
 	Params  []Param

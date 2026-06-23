@@ -288,6 +288,19 @@ func (w *walker) material(n *gts.Node) (hir.Material, error) {
 	if p := w.Field(n, "parent"); p != nil {
 		m.Extends = w.Text(p)
 	}
+	if k := w.Field(n, "kind"); k != nil {
+		kindVal := w.Text(k)
+		switch kindVal {
+		case "points":
+			m.Kind = hir.KindPoints
+		case "post":
+			m.Kind = hir.KindPost
+		case "mesh":
+			m.Kind = hir.KindMesh
+		default:
+			return m, fmt.Errorf("material %q: unknown kind %q (expected mesh, points, or post)", m.Name, kindVal)
+		}
+	}
 	for i := 0; i < n.NamedChildCount(); i++ {
 		c := n.NamedChild(i)
 		if w.Type(c) != "member" {

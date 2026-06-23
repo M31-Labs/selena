@@ -1,0 +1,15 @@
+material GlowPoints kind points {
+    param fogColor : vec3 = rgb(0, 0, 0)
+
+    surface(pt) -> color {
+        let centered  = pt.pointUV - vec2f(0.5, 0.5)
+        let radial    = length(centered) * 2.0
+        let sizeFocus = clamp((pt.pointSize - 4.0) / 48.0, 0.0, 1.0)
+        let falloff   = mix(4.2, 3.2, sizeFocus)
+        let core      = exp(-(radial * radial * falloff))
+        let edge      = 1.0 - smoothstep(0.78, 1.0, radial)
+        let a         = core * edge * pt.alpha
+        let foggedRGB = mix(fogColor, pt.color, pt.fogFactor)
+        return rgb(foggedRGB.r, foggedRGB.g, foggedRGB.b, a)
+    }
+}

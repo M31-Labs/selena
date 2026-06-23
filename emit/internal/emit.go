@@ -56,12 +56,15 @@ func NameSet(bs []ir.Binding) map[string]bool {
 // The name sets and Fragment flag drive the qualified case and are ignored when
 // Qualified is false.
 type Resolver struct {
-	Dialect    dialect.Dialect
-	Uniforms   map[string]bool
-	Attributes map[string]bool
-	Varyings   map[string]bool
-	Fragment   bool
-	Qualified  bool
+	Dialect       dialect.Dialect
+	Uniforms      map[string]bool
+	Attributes    map[string]bool
+	Varyings      map[string]bool
+	Fragment      bool
+	Qualified     bool
+	// SceneSampleFn renders a SceneSample expression. When nil, SceneSample
+	// falls back to a dummy expression. Each post-emitter sets this.
+	SceneSampleFn func(name, uv string) string
 }
 
 // NewQualified builds a struct-qualified resolver (WGSL/Metal) for one stage.
@@ -89,6 +92,14 @@ func (r Resolver) Call(name string, args []string) string { return r.Dialect.Bui
 
 // Sample renders a texture sample.
 func (r Resolver) Sample(tex, uv string) string { return r.Dialect.Sample(tex, uv) }
+
+// SceneSample renders a post-pass engine scene texture sample.
+func (r Resolver) SceneSample(name, uv string) string {
+	if r.SceneSampleFn != nil {
+		return r.SceneSampleFn(name, uv)
+	}
+	return "vec4<f32>(0.0)" // unreachable in valid programs; guard only
+}
 
 // Ref resolves a reference in the current stage scope.
 func (r Resolver) Ref(name string) string {

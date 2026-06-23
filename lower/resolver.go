@@ -9,10 +9,15 @@ import (
 
 // resolver lowers HIR expressions into backend-neutral IR expressions.
 type resolver struct {
-	paramKind map[string]hir.Type
-	uniformOf map[string]string
-	varyingOf map[string]string
-	geo       string
+	paramKind        map[string]hir.Type
+	uniformOf        map[string]string
+	varyingOf        map[string]string
+	geo              string
+	// geoFields is the geometry registry used for this kind. When nil the
+	// default mesh geometry (stdlib.geometry) is used.
+	geoFields        map[string]geometrySpec
+	// allowSceneSample enables sceneColor/sceneDepth calls (post kind only).
+	allowSceneSample bool
 }
 
 func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
@@ -41,12 +46,27 @@ func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
 				return ir.Ref{Name: un}, nil
 			}
 		}
+		// Swizzle on a scene sample result: lower the inner expression first.
+		_ = 0 // fall through to default member handling below
 		inner, err := r.expr(x.E)
 		if err != nil {
 			return nil, err
 		}
 		return ir.Swizzle{E: inner, Field: x.Field}, nil
 	case hir.Call:
+		if x.Func == "sceneColor" || x.Func == "sceneDepth" {
+			if !r.allowSceneSample {
+				return nil, diagnostic(CodeInvalidCall, x.Span, "%s is only available in post-kind materials", x.Func)
+			}
+			if len(x.Args) != 1 {
+				return nil, diagnostic(CodeInvalidCall, x.Span, "%s(uv) takes 1 argument", x.Func)
+			}
+			uv, err := r.expr(x.Args[0])
+			if err != nil {
+				return nil, err
+			}
+			return ir.SceneSample{Name: x.Func, UV: uv}, nil
+		}
 		if x.Func == "sample" {
 			if len(x.Args) != 2 {
 				return nil, diagnostic(CodeInvalidCall, x.Span, "sample(texture, uv) takes 2 arguments")
@@ -71,6 +91,9 @@ func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
 				t = ir.Vec4
 			}
 			return ir.Construct{Type: t, Args: args}, nil
+		}
+		if x.Func == "vec2f" {
+			return ir.Construct{Type: ir.Vec2, Args: args}, nil
 		}
 		return ir.Call{Func: x.Func, Args: args}, nil
 	case hir.Binary:

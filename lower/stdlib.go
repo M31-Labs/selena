@@ -33,11 +33,69 @@ const (
 	builtinSameOrScalar builtinKind = "same_or_scalar"
 	builtinCross        builtinKind = "cross"
 	builtinStep         builtinKind = "step"
+	// builtinVec2: vec2f(x, y) constructs a vec2 from two floats.
+	builtinVec2 builtinKind = "vec2f"
+	// builtinSceneSample: post-pass engine samplers sceneColor(uv) and
+	// sceneDepth(uv). These sample engine-provided textures bound at fixed
+	// group/binding slots; the author calls them as regular functions.
+	builtinSceneSample builtinKind = "scene_sample"
 )
 
 type builtinSpec struct {
 	kind  builtinKind
 	arity int
+}
+
+// pointGeometry lists the geometry field names available inside a points surface.
+// These map to the values plumbed through by the engine billboard quad emitter.
+var pointGeometry = map[string]geometrySpec{
+	// pointUV: vec2 in [0,1]x[0,1] across the billboard quad face.
+	"pointUV": {
+		typ:     ir.Vec2,
+		varying: "v_pointCoord",
+		attrs:   nil,
+		build:   func() ir.Expr { return ir.Ref{Name: "v_pointCoord"} },
+	},
+	// color: rgb base color passed from the point buffer.
+	"color": {
+		typ:     ir.Vec3,
+		varying: "v_color",
+		attrs:   nil,
+		build:   func() ir.Expr { return ir.Ref{Name: "v_color"} },
+	},
+	// alpha: per-point alpha, pre-multiplied by material opacity.
+	"alpha": {
+		typ:     ir.Float,
+		varying: "v_alpha",
+		attrs:   nil,
+		build:   func() ir.Expr { return ir.Ref{Name: "v_alpha"} },
+	},
+	// pointSize: computed pixel size of this billboard.
+	"pointSize": {
+		typ:     ir.Float,
+		varying: "v_pointSize",
+		attrs:   nil,
+		build:   func() ir.Expr { return ir.Ref{Name: "v_pointSize"} },
+	},
+	// fogFactor: precomputed exponential fog factor in [0,1].
+	"fogFactor": {
+		typ:     ir.Float,
+		varying: "v_fogFactor",
+		attrs:   nil,
+		build:   func() ir.Expr { return ir.Ref{Name: "v_fogFactor"} },
+	},
+}
+
+// postGeometry lists the geometry field names available inside a post surface.
+// These are the screen-space inputs a post-process author can read.
+var postGeometry = map[string]geometrySpec{
+	// uv: vec2 screen UV [0,1]x[0,1].
+	"uv": {
+		typ:     ir.Vec2,
+		varying: "v_uv",
+		attrs:   nil,
+		build:   func() ir.Expr { return ir.Ref{Name: "v_uv"} },
+	},
 }
 
 var stdlib = stdlibRegistry{
@@ -85,6 +143,8 @@ var stdlib = stdlibRegistry{
 		"distance":  {kind: builtinDistance, arity: 2},
 		"sample":    {kind: builtinSample, arity: 2},
 		"rgb":       {kind: builtinRGB},
+		// vec2(x, y) constructs a vec2 from two floats.
+		"vec2f":     {kind: builtinVec2, arity: 2},
 		"normalize": {kind: builtinUnarySame, arity: 1},
 		"abs":       {kind: builtinUnarySame, arity: 1},
 		"max":       {kind: builtinSameOrScalar, arity: 2},
@@ -112,6 +172,10 @@ var stdlib = stdlibRegistry{
 		// step(edge, x) / smoothstep(e0, e1, x): result is the last argument's type.
 		"step":       {kind: builtinStep, arity: 2},
 		"smoothstep": {kind: builtinStep, arity: 3},
+		// Engine-provided post-pass samplers. sceneColor(uv)->vec4,
+		// sceneDepth(uv)->float. Only valid inside a post-kind surface.
+		"sceneColor": {kind: builtinSceneSample, arity: 1},
+		"sceneDepth": {kind: builtinSceneSample, arity: 1},
 	},
 }
 
