@@ -1,8 +1,10 @@
 // Package parse turns .sel source into the high-level material model (hir).
-// It generates the Selena tree-sitter language from grammar.SelenaGrammar via
-// grammargen (the same engine as .gsx), parses the source, and walks the tree
-// into a hir.Material. This is the front-end: with it, materials are authored
-// as .sel files rather than hand-built HIR.
+// It loads the Selena tree-sitter language from the embedded pre-generated parse
+// table (grammar.bin) via taproot/walk, parses the source, and walks the tree
+// into a hir.Material. Loading the blob keeps this package grammar-free (no
+// grammargen / grammars registry); the grammar DSL used to regenerate the blob
+// lives in the selena/grammar subpackage. This is the front-end: with it,
+// materials are authored as .sel files rather than hand-built HIR.
 package parse
 
 import (
@@ -11,9 +13,8 @@ import (
 	"strings"
 
 	gts "github.com/odvcencio/gotreesitter"
-	"github.com/odvcencio/gotreesitter/taproot"
+	walk "github.com/odvcencio/gotreesitter/taproot/walk"
 
-	"m31labs.dev/selena/grammar"
 	"m31labs.dev/selena/hir"
 )
 
@@ -30,9 +31,10 @@ func (e *Error) Error() string {
 	return e.Message
 }
 
-// language generates (and caches) the Selena tree-sitter language.
+// language loads (and caches) the Selena tree-sitter language from the embedded
+// pre-generated parse table. Grammar-free: no grammargen fallback.
 func language() (*gts.Language, error) {
-	return taproot.LanguageFromBlob("selena", grammarBlob, grammar.SelenaGrammar)
+	return walk.LanguageFromBlob("selena", grammarBlob)
 }
 
 // Material parses src and returns the first material it declares.
@@ -46,7 +48,7 @@ func Material(src []byte) (hir.Material, error) {
 		return hir.Material{}, fmt.Errorf("parse: %w", err)
 	}
 	root := tree.RootNode()
-	w := &walker{Walker: taproot.NewWalker(l, src)}
+	w := &walker{Walker: walk.NewWalker(l, src)}
 	if root.HasError() {
 		return hir.Material{}, syntaxError(w, root)
 	}
@@ -69,7 +71,7 @@ func Program(src []byte) (hir.Program, error) {
 		return hir.Program{}, fmt.Errorf("parse: %w", err)
 	}
 	root := tree.RootNode()
-	w := &walker{Walker: taproot.NewWalker(l, src)}
+	w := &walker{Walker: walk.NewWalker(l, src)}
 	if root.HasError() {
 		return hir.Program{}, syntaxError(w, root)
 	}
@@ -95,7 +97,7 @@ func Program(src []byte) (hir.Program, error) {
 }
 
 type walker struct {
-	*taproot.Walker
+	*walk.Walker
 }
 
 func (w *walker) span(n *gts.Node) hir.Span {
