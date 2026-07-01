@@ -4,11 +4,11 @@ using namespace metal;
 struct Uniforms {
   float4x4 mvp;
   float3x3 normalMatrix;
-  float3 lightDir;
   float poolHeight;
   float4 baseColor;
   float isTexturePass;
   float texturePassMode;
+  float3 lightDir;
 };
 
 struct StateGrid {

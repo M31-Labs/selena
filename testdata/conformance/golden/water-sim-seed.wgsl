@@ -7,8 +7,8 @@ struct GridUniforms {
 @group(0) @binding(2) var<storage, read_write> outState : array<vec4<f32>>;
 
 struct UserUniforms {
-  dropCount : f32,
   dropRadius : f32,
+  dropCount : f32,
   drops : array<vec4<f32>, 64>,
 };
 @group(0) @binding(3) var<uniform> u : UserUniforms;

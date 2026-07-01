@@ -2,11 +2,11 @@
 precision highp float;
 uniform mat4 mvp;
 uniform mat3 normalMatrix;
-uniform vec3 lightDir;
 uniform float poolHeight;
 uniform vec4 baseColor;
 uniform float isTexturePass;
 uniform float texturePassMode;
+uniform vec3 lightDir;
 uniform highp sampler2D stateTex;
 in vec3 worldPos;
 in vec2 vUv;

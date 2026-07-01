@@ -10,12 +10,15 @@
 //
 // The uv varying is named vUv to avoid colliding with the "uv" vertex attribute.
 material WaterDuckMaterial {
-    param lightDir        : vec3
     param poolHeight      : float = 0.3
     param baseColor       : vec4
     param isTexturePass   : float = 0.0
     param texturePassMode : float = 0.0
     param modelTexture    : texture2d
+
+    context {
+        lightDir : vec3
+    }
 
     state water
 

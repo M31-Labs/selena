@@ -6,14 +6,14 @@
 struct UserUniforms {
   objectKind : f32,
   objectEnabled : f32,
-  lightDir : vec3<f32>,
   poolWidth : f32,
   poolLength : f32,
-  objectCenterX : f32,
-  objectCenterZ : f32,
   objectRadius : f32,
   objectHalfX : f32,
   objectHalfZ : f32,
+  lightDir : vec3<f32>,
+  objectCenterX : f32,
+  objectCenterZ : f32,
 };
 @group(0) @binding(4) var<uniform> u : UserUniforms;
 

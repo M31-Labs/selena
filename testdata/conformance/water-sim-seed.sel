@@ -9,9 +9,17 @@
 // Selena gap noted: integer bitwise AND (&) is not a supported operator; the
 // original per-drop polarity is expressed as a signed strength in the array.
 material WaterSimSeed kind feedback {
-    param drops      : array<vec4, 64>
-    param dropCount  : float
     param dropRadius : float = 0.05
+
+    // NOTE: declare scalar context fields BEFORE array fields. Selena's emitters
+    // render all scalars first then arrays, but the layout descriptor packs in
+    // declaration order — so a scalar declared after an array desyncs the
+    // descriptor offsets from the emitted WGSL struct (the WebGPU host packs by
+    // descriptor offset). Keeping scalars-first makes all three orderings agree.
+    context {
+        dropCount : float
+        drops     : array<vec4, 64>
+    }
     state water
 
     feedback(cell) -> vec4 {

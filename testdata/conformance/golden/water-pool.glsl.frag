@@ -4,6 +4,8 @@ uniform mat3 normalMatrix;
 uniform float poolWidth;
 uniform float poolLength;
 uniform float poolHeight;
+uniform float cornerRadius;
+uniform float poolShape;
 uniform vec3 lightDir;
 uniform highp sampler2D stateTex;
 varying vec3 vWorldPos;

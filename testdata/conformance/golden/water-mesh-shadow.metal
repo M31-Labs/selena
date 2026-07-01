@@ -4,9 +4,9 @@ using namespace metal;
 struct Uniforms {
   float4x4 mvp;
   float3x3 normalMatrix;
-  float3 lightDir;
   float poolHalfW;
   float poolHalfL;
+  float3 lightDir;
 };
 
 struct VertexIn {

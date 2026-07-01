@@ -5,9 +5,9 @@ struct UserUniforms {
   float sphereCount;
   float objectEnabled;
   float objectTop;
-  float3 lightDir;
   float poolWidth;
   float poolLength;
+  float3 lightDir;
   float objectCenterX;
   float objectCenterZ;
   float4 spheres[32];

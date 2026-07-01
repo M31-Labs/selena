@@ -6,14 +6,14 @@ uniform sampler2D _sceneColor;
 uniform sampler2D _sceneDepth;
 uniform float objectKind;
 uniform float objectEnabled;
-uniform vec3 lightDir;
 uniform float poolWidth;
 uniform float poolLength;
-uniform float objectCenterX;
-uniform float objectCenterZ;
 uniform float objectRadius;
 uniform float objectHalfX;
 uniform float objectHalfZ;
+uniform vec3 lightDir;
+uniform float objectCenterX;
+uniform float objectCenterZ;
 out vec4 fragColor;
 
 void main() {

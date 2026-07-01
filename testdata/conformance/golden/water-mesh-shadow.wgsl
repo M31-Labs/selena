@@ -1,9 +1,9 @@
 struct Uniforms {
   mvp : mat4x4<f32>,
   normalMatrix : mat3x3<f32>,
-  lightDir : vec3<f32>,
   poolHalfW : f32,
   poolHalfL : f32,
+  lightDir : vec3<f32>,
 };
 @group(0) @binding(0) var<uniform> u : Uniforms;
 

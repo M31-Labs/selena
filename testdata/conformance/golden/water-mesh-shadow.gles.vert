@@ -2,9 +2,9 @@
 in vec3 position;
 uniform mat4 mvp;
 uniform mat3 normalMatrix;
-uniform vec3 lightDir;
 uniform float poolHalfW;
 uniform float poolHalfL;
+uniform vec3 lightDir;
 
 void main() {
   vec3 pos = position;

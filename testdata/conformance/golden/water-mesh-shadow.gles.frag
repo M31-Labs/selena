@@ -2,9 +2,9 @@
 precision highp float;
 uniform mat4 mvp;
 uniform mat3 normalMatrix;
-uniform vec3 lightDir;
 uniform float poolHalfW;
 uniform float poolHalfL;
+uniform vec3 lightDir;
 out vec4 fragColor;
 
 void main() {

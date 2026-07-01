@@ -4,8 +4,8 @@ in vec2 vUV;
 
 uniform highp sampler2D stateTex;
 uniform vec2 texelSize;
-uniform float dropCount;
 uniform float dropRadius;
+uniform float dropCount;
 uniform vec4 drops[64];
 out vec4 fragColor;
 

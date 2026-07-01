@@ -13,15 +13,18 @@
 // `if (i >= sphereCount) { break; }`). Each sphere accumulates max() into the
 // mask/core footprint, exactly as the raw compound branch does.
 material WaterCompoundShadow kind post {
-    param spheres       : array<vec4, 32>
     param sphereCount   : float = 0.0
     param objectEnabled : float = 1.0
     param objectTop     : float = 1.0
-    param lightDir      : vec3
     param poolWidth     : float = 1.5
     param poolLength    : float = 1.5
-    param objectCenterX : float = 0.0
-    param objectCenterZ : float = 0.0
+
+    context {
+        lightDir      : vec3
+        objectCenterX : float = 0.0
+        objectCenterZ : float = 0.0
+        spheres       : array<vec4, 32>
+    }
 
     surface(geo) -> color {
         let lnorm  = normalize(lightDir)

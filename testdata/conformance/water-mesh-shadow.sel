@@ -11,9 +11,12 @@
 // Fragment stage: trivial -- returns solid white (the shadow alpha is baked
 // into the blend state; colour is irrelevant in a shadow-only RTT pass).
 material WaterMeshShadow {
-    param lightDir  : vec3
     param poolHalfW : float = 1.5
     param poolHalfL : float = 1.5
+
+    context {
+        lightDir : vec3
+    }
 
     vertex(geo) -> vec4 {
         let pos   = geo.position

@@ -87,17 +87,18 @@ material WaterCaustics {
     param poolLength  : float = 1.5
     param poolHeight  : float = 0.3
     param normalScale : float = 1.0
-    param resolution  : float = 64.0
-    param time        : float = 0.0
-    param objectKind  : float = 0.0
-    param objectCount : float = 0.0
     param opticsEnable: float = 1.0
 
-    param lightDir        : vec3
-    param objectCenter    : vec3
-    param objectHalfRadius: vec4
-
-    param spheres     : array<vec4, 32>
+    context {
+        resolution      : float = 64.0
+        time            : float = 0.0
+        objectKind      : float = 0.0
+        objectCount     : float = 0.0
+        lightDir        : vec3
+        objectCenter    : vec3
+        objectHalfRadius: vec4
+        spheres         : array<vec4, 32>
+    }
 
     state height
 

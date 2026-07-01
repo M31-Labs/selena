@@ -228,25 +228,26 @@ material WaterSurface {
     param poolLength    : float = 1.5
     param poolHeight    : float = 0.3
     param normalScale   : float = 1.0
-    param gridResolution: float = 64.0
-    param objectKind    : float = 0.0
-    param objectSubtype : float = 0.0
-    param objectCount   : float = 0.0
     param objectRadius  : float = 0.3
-    param opticsEnable  : float = 1.0
     param opticsCaustic : float = 1.0
     param meshTextureEnable : float = 0.0
 
-    param lightDir      : vec3
-    param cameraPos     : vec3
     param waterColor    : vec3
-    param objectCenter  : vec3
-    param objectHalf    : vec3
 
-    param refractionMatrix : mat4
-    param reflectionMatrix : mat4
-
-    param spheres       : array<vec4, 32>
+    context {
+        gridResolution: float = 64.0
+        objectKind    : float = 0.0
+        objectSubtype : float = 0.0
+        objectCount   : float = 0.0
+        opticsEnable  : float = 1.0
+        lightDir      : vec3
+        cameraPos     : vec3
+        objectCenter  : vec3
+        objectHalf    : vec3
+        refractionMatrix : mat4
+        reflectionMatrix : mat4
+        spheres       : array<vec4, 32>
+    }
 
     param tileTexture   : texture2d
     param causticTexture: texture2d

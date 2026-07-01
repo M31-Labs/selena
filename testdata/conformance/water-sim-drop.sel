@@ -6,9 +6,11 @@
 // UV [0,1] as center = dropCenter * 0.5 + 0.5.  cell.uv is the current cell's
 // normalised [0,1]x[0,1] grid coordinate.
 material WaterSimDrop kind feedback {
-    param dropCenter   : vec2
-    param dropRadius   : float = 0.05
-    param dropStrength : float = 0.05
+    context {
+        dropCenter   : vec2
+        dropRadius   : float = 0.05
+        dropStrength : float = 0.05
+    }
     state water
 
     feedback(cell) -> vec4 {

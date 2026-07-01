@@ -4,14 +4,14 @@ using namespace metal;
 struct UserUniforms {
   float objectKind;
   float objectEnabled;
-  float3 lightDir;
   float poolWidth;
   float poolLength;
-  float objectCenterX;
-  float objectCenterZ;
   float objectRadius;
   float objectHalfX;
   float objectHalfZ;
+  float3 lightDir;
+  float objectCenterX;
+  float objectCenterZ;
 };
 
 struct PostOut {

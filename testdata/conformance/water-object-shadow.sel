@@ -14,14 +14,17 @@
 material WaterObjectShadow kind post {
     param objectKind    : float = 0.0
     param objectEnabled : float = 1.0
-    param lightDir      : vec3
     param poolWidth     : float = 1.5
     param poolLength    : float = 1.5
-    param objectCenterX : float = 0.0
-    param objectCenterZ : float = 0.0
     param objectRadius  : float = 0.1
     param objectHalfX   : float = 0.1
     param objectHalfZ   : float = 0.1
+
+    context {
+        lightDir      : vec3
+        objectCenterX : float = 0.0
+        objectCenterZ : float = 0.0
+    }
 
     surface(geo) -> color {
         let lnorm     = normalize(lightDir)

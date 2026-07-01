@@ -8,11 +8,11 @@ struct Uniforms {
   float poolLength;
   float poolHeight;
   float normalScale;
+  float opticsEnable;
   float resolution;
   float time;
   float objectKind;
   float objectCount;
-  float opticsEnable;
   float3 lightDir;
   float3 objectCenter;
   float4 objectHalfRadius;

@@ -42,14 +42,16 @@ fn volumeInCube(uv: vec2, center: vec3, half: vec3, scale: float) -> float {
 }
 
 material WaterSimDisplace kind feedback {
-    param objectKind        : float
-    param displacementScale : float
-    param objectCenter      : vec3
-    param objectPrevCenter  : vec3
-    param objectRadius      : float
-    param objectHalfSize    : vec3
-    param sphereCount       : float
-    param spheres           : array<vec4, 32>
+    context {
+        objectKind        : float
+        displacementScale : float
+        objectCenter      : vec3
+        objectPrevCenter  : vec3
+        objectRadius      : float
+        objectHalfSize    : vec3
+        sphereCount       : float
+        spheres           : array<vec4, 32>
+    }
     state water
 
     feedback(cell) -> vec4 {

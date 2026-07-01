@@ -8,13 +8,13 @@ struct Uniforms {
   float poolLength;
   float poolHeight;
   float normalScale;
+  float objectRadius;
+  float opticsCaustic;
   float gridResolution;
   float objectKind;
   float objectSubtype;
   float objectCount;
-  float objectRadius;
   float opticsEnable;
-  float opticsCaustic;
   float3 lightDir;
   float3 cameraPos;
   float3 objectCenter;

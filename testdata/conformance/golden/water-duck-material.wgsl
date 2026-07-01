@@ -1,11 +1,11 @@
 struct Uniforms {
   mvp : mat4x4<f32>,
   normalMatrix : mat3x3<f32>,
-  lightDir : vec3<f32>,
   poolHeight : f32,
   baseColor : vec4<f32>,
   isTexturePass : f32,
   texturePassMode : f32,
+  lightDir : vec3<f32>,
 };
 @group(0) @binding(0) var<uniform> u : Uniforms;
 

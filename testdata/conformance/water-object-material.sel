@@ -21,11 +21,14 @@
 // an attribute). Body comments are kept out of statement position: a selena `//`
 // comment is only parsed reliably before `material`, after `{`, or after `}`.
 material WaterObjectMaterial {
-    param lightDir        : vec3
     param poolHeight      : float = 0.3
     param baseColor       : vec4
     param isTexturePass   : float = 0.0
     param texturePassMode : float = 0.0
+
+    context {
+        lightDir : vec3
+    }
 
     state water
 
