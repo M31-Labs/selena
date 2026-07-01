@@ -1,0 +1,18 @@
+material Ops {
+    param a : float
+    param b : float
+
+    surface(geo) -> color {
+        let lt   = a < b
+        let gt   = a > b
+        let le   = a <= b
+        let ge   = a >= b
+        let eq   = a == b
+        let ne   = a != b
+        let both = lt && gt
+        let any  = le || ge
+        let notv = !eq
+        let sel  = ne ? a : b
+        return rgb(sel, 0.0, 0.0)
+    }
+}

@@ -167,7 +167,15 @@ func expectedFromContext(w *walker, n *gts.Node) string {
 		case "material":
 			return "`param`, `surface`, or `}`"
 		case "member":
-			return "`param` or `surface`"
+			return "`param`, `surface`, `vertex`, `varying`, `feedback`, `state`, or `}`"
+		case "vertex":
+			return "`->`, a return type, and a vertex body"
+		case "varying_decl":
+			return "`:` after the varying name, then a type"
+		case "feedback":
+			return "`->`, a return type, and a feedback body"
+		case "statefield":
+			return "a statefield name after `state`"
 		case "param":
 			return "`:` after the parameter name, a type, optional `= default`, or the next member"
 		case "surface":
@@ -177,11 +185,19 @@ func expectedFromContext(w *walker, n *gts.Node) string {
 		case "fn_param":
 			return "`:` after the function parameter name"
 		case "block":
-			return "`let`, `return`, or `}`"
+			return "`let`, `var`, `return`, `if`, `for`, or `}`"
 		case "statement":
-			return "`let` or `return`"
+			return "`let`, `var`, `return`, `if`, `for`, or an assignment"
 		case "let_stmt":
 			return "`=` and an expression"
+		case "var_stmt":
+			return "`=` and an expression"
+		case "assign_stmt":
+			return "`=` and an expression"
+		case "if_stmt":
+			return "`(`, a condition, `)`, and a `{ ... }` block"
+		case "for_stmt":
+			return "`(var`, loop variable, condition, update, `)`, and a `{ ... }` block"
 		case "return_stmt":
 			return "a return expression"
 		case "call", "arguments":
@@ -263,7 +279,7 @@ func looksLikeBareStatement(s string) bool {
 	if s == "" || !isIdentStart(s[0]) {
 		return false
 	}
-	for _, prefix := range []string{"material ", "fn ", "param ", "surface", "let ", "return "} {
+	for _, prefix := range []string{"material ", "fn ", "param ", "surface", "let ", "return ", "var ", "if ", "if(", "for ", "for("} {
 		if strings.HasPrefix(s, prefix) {
 			return false
 		}
@@ -297,10 +313,12 @@ func (w *walker) material(n *gts.Node) (hir.Material, error) {
 			m.Kind = hir.KindPoints
 		case "post":
 			m.Kind = hir.KindPost
+		case "feedback":
+			m.Kind = hir.KindFeedback
 		case "mesh":
 			m.Kind = hir.KindMesh
 		default:
-			return m, fmt.Errorf("material %q: unknown kind %q (expected mesh, points, or post)", m.Name, kindVal)
+			return m, fmt.Errorf("material %q: unknown kind %q (expected mesh, points, post, or feedback)", m.Name, kindVal)
 		}
 	}
 	for i := 0; i < n.NamedChildCount(); i++ {
@@ -316,18 +334,95 @@ func (w *walker) material(n *gts.Node) (hir.Material, error) {
 				return m, err
 			}
 			m.Params = append(m.Params, p)
+		case "param_array":
+			p, err := w.paramArray(inner)
+			if err != nil {
+				return m, err
+			}
+			m.Params = append(m.Params, p)
 		case "surface":
 			sf, err := w.fn(inner)
 			if err != nil {
 				return m, err
 			}
 			m.Surface = sf
+		case "feedback":
+			sf, err := w.feedbackFn(inner)
+			if err != nil {
+				return m, err
+			}
+			m.Surface = sf
+		case "statefield":
+			m.States = append(m.States, hir.StateField{
+				Name: w.Text(w.Field(inner, "name")),
+				Span: w.span(inner),
+			})
+		case "vertex":
+			vf, err := w.vertexFn(inner)
+			if err != nil {
+				return m, err
+			}
+			m.Vertex = &vf
+		case "varying_decl":
+			m.Varyings = append(m.Varyings, hir.Varying{
+				Name: w.Text(w.Field(inner, "name")),
+				Type: hir.Type(w.Text(w.Field(inner, "type"))),
+				Span: w.span(inner),
+			})
+		case "context_block":
+			cfs, err := w.contextBlock(inner)
+			if err != nil {
+				return m, err
+			}
+			m.Context = append(m.Context, cfs...)
 		}
 	}
 	if m.Surface.Geo == "" {
+		if m.Kind == hir.KindFeedback {
+			return m, fmt.Errorf("material %q has no feedback entry", m.Name)
+		}
 		return m, fmt.Errorf("material %q has no surface", m.Name)
 	}
 	return m, nil
+}
+
+// feedbackFn parses a `feedback(cell) -> vec4 { ... }` entry. It mirrors fn but
+// reads the "cell" field (the current-cell handle binding) instead of "geo".
+func (w *walker) feedbackFn(n *gts.Node) (hir.Func, error) {
+	f := hir.Func{Geo: w.Text(w.Field(n, "cell")), Span: w.span(n)}
+	body := w.Field(n, "body")
+	stmts, result, err := w.blockBody(body)
+	if err != nil {
+		return f, err
+	}
+	f.Body = stmts
+	f.Result = result
+	if f.Result == nil {
+		return f, fmt.Errorf("feedback has no return")
+	}
+	return f, nil
+}
+
+// vertexFn parses a `vertex() -> vec4 { ... }` or `vertex(geo) -> vec4 { ... }`
+// entry. It mirrors fn but the geometry binding is optional: when the parens are
+// empty, Geo is "" (procedural geometry from vertexIndex, no attributes). The
+// result expression is the clip-space position. B4.
+func (w *walker) vertexFn(n *gts.Node) (hir.Func, error) {
+	f := hir.Func{Span: w.span(n)}
+	if g := w.Field(n, "geo"); g != nil {
+		f.Geo = w.Text(g)
+	}
+	body := w.Field(n, "body")
+	stmts, result, err := w.blockBody(body)
+	if err != nil {
+		return f, err
+	}
+	f.Body = stmts
+	f.Result = result
+	if f.Result == nil {
+		return f, fmt.Errorf("vertex() has no return (must return the clip-space position)")
+	}
+	return f, nil
 }
 
 func (w *walker) param(n *gts.Node) (hir.Param, error) {
@@ -346,11 +441,121 @@ func (w *walker) param(n *gts.Node) (hir.Param, error) {
 	return p, nil
 }
 
+// paramArray parses a `param name : array<T, N>` member (B3.2). The array_type
+// sub-node carries the element type identifier and the size number literal.
+func (w *walker) paramArray(n *gts.Node) (hir.Param, error) {
+	typNode := w.Field(n, "typ")
+	elemText := w.Text(w.Field(typNode, "elem"))
+	sizeText := w.Text(w.Field(typNode, "size"))
+	sz, err := strconv.Atoi(sizeText)
+	if err != nil || sz <= 0 {
+		return hir.Param{}, &Error{
+			Message: fmt.Sprintf("array size must be a positive integer, got %q", sizeText),
+			Span:    w.span(n),
+		}
+	}
+	return hir.Param{
+		Name:      w.Text(w.Field(n, "name")),
+		Type:      hir.Type(elemText),
+		IsArray:   true,
+		ArraySize: sz,
+		Span:      w.span(n),
+	}, nil
+}
+
+// contextBlock parses a `context { field... }` member (the context-uniform
+// design §3.1). Each repeated context_member child wraps one of two shapes —
+// context_field (scalar/vector/matrix) or context_field_array (fixed-size
+// array, B3.2-style) — mirroring how `member` wraps param vs param_array.
+// Fields are collected into hir.ContextField in declaration order.
+func (w *walker) contextBlock(n *gts.Node) ([]hir.ContextField, error) {
+	var fields []hir.ContextField
+	for i := 0; i < n.NamedChildCount(); i++ {
+		c := n.NamedChild(i)
+		if w.Type(c) != "context_member" {
+			continue
+		}
+		inner := c.NamedChild(0)
+		switch w.Type(inner) {
+		case "context_field":
+			cf, err := w.contextField(inner)
+			if err != nil {
+				return nil, err
+			}
+			fields = append(fields, cf)
+		case "context_field_array":
+			cf, err := w.contextFieldArray(inner)
+			if err != nil {
+				return nil, err
+			}
+			fields = append(fields, cf)
+		}
+	}
+	return fields, nil
+}
+
+// contextField parses one scalar/vector/matrix `name : type [= default]`
+// entry inside a context block. Structurally mirrors param (:422).
+func (w *walker) contextField(n *gts.Node) (hir.ContextField, error) {
+	cf := hir.ContextField{
+		Name: w.Text(w.Field(n, "name")),
+		Type: hir.Type(w.Text(w.Field(n, "type"))),
+		Span: w.span(n),
+	}
+	if d := w.Field(n, "default"); d != nil {
+		e, err := w.expr(d)
+		if err != nil {
+			return hir.ContextField{}, err
+		}
+		cf.Default = e
+	}
+	return cf, nil
+}
+
+// contextFieldArray parses a `name : array<T, N>` entry inside a context
+// block. Structurally mirrors paramArray (:440); the array type sub-node
+// (context_array_type) carries the element type identifier and size literal.
+func (w *walker) contextFieldArray(n *gts.Node) (hir.ContextField, error) {
+	typNode := w.Field(n, "typ")
+	elemText := w.Text(w.Field(typNode, "elem"))
+	sizeText := w.Text(w.Field(typNode, "size"))
+	sz, err := strconv.Atoi(sizeText)
+	if err != nil || sz <= 0 {
+		return hir.ContextField{}, &Error{
+			Message: fmt.Sprintf("array size must be a positive integer, got %q", sizeText),
+			Span:    w.span(n),
+		}
+	}
+	return hir.ContextField{
+		Name:      w.Text(w.Field(n, "name")),
+		IsArray:   true,
+		ArraySize: sz,
+		Type:      hir.Type(elemText),
+		Span:      w.span(n),
+	}, nil
+}
+
 func (w *walker) fn(n *gts.Node) (hir.Func, error) {
 	f := hir.Func{Geo: w.Text(w.Field(n, "geo")), Span: w.span(n)}
 	body := w.Field(n, "body")
-	for i := 0; i < body.NamedChildCount(); i++ {
-		st := body.NamedChild(i)
+	stmts, result, err := w.blockBody(body)
+	if err != nil {
+		return f, err
+	}
+	f.Body = stmts
+	f.Result = result
+	if f.Result == nil {
+		return f, fmt.Errorf("surface has no return")
+	}
+	return f, nil
+}
+
+// blockBody parses the statements inside a block node into (HIR body stmts, return expr).
+// return_stmt sets the result expression; all other statement kinds go into stmts.
+// Sub-blocks (inside if/for) call subBlock which wraps blockBody and errors on return_stmt.
+func (w *walker) blockBody(block *gts.Node) (stmts []hir.Stmt, result hir.Expr, err error) {
+	for i := 0; i < block.NamedChildCount(); i++ {
+		st := block.NamedChild(i)
 		if w.Type(st) != "statement" {
 			continue
 		}
@@ -359,21 +564,132 @@ func (w *walker) fn(n *gts.Node) (hir.Func, error) {
 		case "let_stmt":
 			e, err := w.expr(w.Field(s, "value"))
 			if err != nil {
-				return f, err
+				return nil, nil, err
 			}
-			f.Body = append(f.Body, hir.Let{Name: w.Text(w.Field(s, "name")), Value: e, Span: w.span(s)})
+			stmts = append(stmts, hir.Let{Name: w.Text(w.Field(s, "name")), Value: e, Span: w.span(s)})
+		case "var_stmt":
+			e, err := w.expr(w.Field(s, "value"))
+			if err != nil {
+				return nil, nil, err
+			}
+			stmts = append(stmts, hir.VarDecl{Name: w.Text(w.Field(s, "name")), Value: e, Span: w.span(s)})
+		case "var_typed_stmt":
+			typNode := w.Field(s, "typ")
+			elemIdent := w.Text(w.Field(typNode, "elem"))
+			sizeText := w.Text(w.Field(typNode, "size"))
+			sz, err := strconv.Atoi(sizeText)
+			if err != nil || sz <= 0 {
+				return nil, nil, &Error{Message: fmt.Sprintf("array size must be a positive integer, got %q", sizeText), Span: w.span(s)}
+			}
+			stmts = append(stmts, hir.VarArrayDecl{
+				Name:     w.Text(w.Field(s, "name")),
+				ElemType: hir.Type(elemIdent),
+				Size:     sz,
+				Span:     w.span(s),
+			})
+		case "assign_stmt":
+			e, err := w.expr(w.Field(s, "value"))
+			if err != nil {
+				return nil, nil, err
+			}
+			stmts = append(stmts, hir.Assign{Name: w.Text(w.Field(s, "name")), Value: e, Span: w.span(s)})
+		case "index_assign_stmt":
+			idx, err := w.expr(w.Field(s, "index"))
+			if err != nil {
+				return nil, nil, err
+			}
+			val, err := w.expr(w.Field(s, "value"))
+			if err != nil {
+				return nil, nil, err
+			}
+			stmts = append(stmts, hir.IndexAssign{
+				Name:  w.Text(w.Field(s, "name")),
+				Index: idx,
+				Value: val,
+				Span:  w.span(s),
+			})
+		case "if_stmt":
+			stmt, err := w.ifStmt(s)
+			if err != nil {
+				return nil, nil, err
+			}
+			stmts = append(stmts, stmt)
+		case "for_stmt":
+			stmt, err := w.forStmt(s)
+			if err != nil {
+				return nil, nil, err
+			}
+			stmts = append(stmts, stmt)
 		case "return_stmt":
 			e, err := w.expr(w.Field(s, "value"))
 			if err != nil {
-				return f, err
+				return nil, nil, err
 			}
-			f.Result = e
+			result = e
+		case "discard_stmt":
+			stmts = append(stmts, hir.Discard{Span: w.span(s)})
 		}
 	}
-	if f.Result == nil {
-		return f, fmt.Errorf("surface has no return")
+	return stmts, result, nil
+}
+
+// subBlock parses an if/for body block; errors if a return_stmt is found.
+func (w *walker) subBlock(block *gts.Node) ([]hir.Stmt, error) {
+	stmts, result, err := w.blockBody(block)
+	if err != nil {
+		return nil, err
 	}
-	return f, nil
+	if result != nil {
+		return nil, &Error{Message: "return statement is not allowed inside if/for body (B2a limitation)", Span: w.span(block)}
+	}
+	return stmts, nil
+}
+
+func (w *walker) ifStmt(n *gts.Node) (hir.If, error) {
+	cond, err := w.expr(w.Field(n, "cond"))
+	if err != nil {
+		return hir.If{}, err
+	}
+	then, err := w.subBlock(w.Field(n, "then"))
+	if err != nil {
+		return hir.If{}, err
+	}
+	var els []hir.Stmt
+	if altBlock := w.Field(n, "alt"); altBlock != nil {
+		els, err = w.subBlock(altBlock)
+		if err != nil {
+			return hir.If{}, err
+		}
+	}
+	return hir.If{Cond: cond, Then: then, Else: els, Span: w.span(n)}, nil
+}
+
+func (w *walker) forStmt(n *gts.Node) (hir.For, error) {
+	initVal, err := w.expr(w.Field(n, "init_val"))
+	if err != nil {
+		return hir.For{}, err
+	}
+	cond, err := w.expr(w.Field(n, "cond"))
+	if err != nil {
+		return hir.For{}, err
+	}
+	updateVal, err := w.expr(w.Field(n, "update_val"))
+	if err != nil {
+		return hir.For{}, err
+	}
+	body, err := w.subBlock(w.Field(n, "body"))
+	if err != nil {
+		return hir.For{}, err
+	}
+	return hir.For{
+		InitName:  w.Text(w.Field(n, "init_name")),
+		InitValue: initVal,
+		Cond:      cond,
+		PostName:  w.Text(w.Field(n, "update_name")),
+		PostValue: updateVal,
+		Body:      body,
+		Span:      w.span(n),
+	}, nil
 }
 
 func (w *walker) funcDecl(n *gts.Node) (hir.FuncDecl, error) {
@@ -435,6 +751,22 @@ func (w *walker) expr(n *gts.Node) (hir.Expr, error) {
 			return nil, fmt.Errorf("bad number %q: %w", w.Text(n), err)
 		}
 		return hir.Lit{Value: v, Span: w.span(n)}, nil
+	case "int_literal":
+		// Strip trailing 'i' suffix then parse as int64.
+		text := w.Text(n)
+		v, err := strconv.ParseInt(text[:len(text)-1], 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("bad int literal %q: %w", text, err)
+		}
+		return hir.IntLit{Value: v, Span: w.span(n)}, nil
+	case "uint_literal":
+		// Strip trailing 'u' suffix then parse as uint64.
+		text := w.Text(n)
+		v, err := strconv.ParseUint(text[:len(text)-1], 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("bad uint literal %q: %w", text, err)
+		}
+		return hir.UintLit{Value: v, Span: w.span(n)}, nil
 	case "identifier":
 		return hir.Ref{Name: w.Text(n), Span: w.span(n)}, nil
 	case "paren_expression":
@@ -455,12 +787,27 @@ func (w *walker) expr(n *gts.Node) (hir.Expr, error) {
 			return nil, err
 		}
 		return hir.Binary{Op: w.Text(w.Field(n, "operator")), L: l, R: r, Span: w.span(n)}, nil
-	case "unary_expression":
+	case "unary_expression", "unary_not_expression":
 		e, err := w.expr(w.Field(n, "operand"))
 		if err != nil {
 			return nil, err
 		}
-		return hir.Unary{Op: "-", E: e, Span: w.span(n)}, nil
+		op := w.Text(w.Field(n, "operator"))
+		return hir.Unary{Op: op, E: e, Span: w.span(n)}, nil
+	case "conditional_expression":
+		cond, err := w.expr(w.Field(n, "cond"))
+		if err != nil {
+			return nil, err
+		}
+		then, err := w.expr(w.Field(n, "then"))
+		if err != nil {
+			return nil, err
+		}
+		alt, err := w.expr(w.Field(n, "alt"))
+		if err != nil {
+			return nil, err
+		}
+		return hir.Conditional{Cond: cond, Then: then, Alt: alt, Span: w.span(n)}, nil
 	case "call":
 		var args []hir.Expr
 		for i := 0; i < n.NamedChildCount(); i++ {
@@ -493,6 +840,16 @@ func (w *walker) expr(n *gts.Node) (hir.Expr, error) {
 			}
 		}
 		return hir.SuperCall{Method: w.Text(w.Field(n, "method")), Args: args, Span: w.span(n)}, nil
+	case "index_expression":
+		obj, err := w.expr(w.Field(n, "object"))
+		if err != nil {
+			return nil, err
+		}
+		idx, err := w.expr(w.Field(n, "index"))
+		if err != nil {
+			return nil, err
+		}
+		return hir.IndexExpr{Arr: obj, Index: idx, Span: w.span(n)}, nil
 	}
 	return nil, fmt.Errorf("unexpected expression node %q", w.Type(n))
 }

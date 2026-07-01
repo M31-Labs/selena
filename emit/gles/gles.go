@@ -21,10 +21,133 @@ func Emit(m ir.Module) (vertex, fragment string, err error) {
 		return emitPointsVertex(m), emitPointsFragment(m), nil
 	case ir.KindPost:
 		return emitPostVertex(m), emitPostFragment(m), nil
+	case ir.KindFeedback:
+		return emitFeedbackVertex(m), emitFeedbackFragment(m), nil
 	default:
+		if m.VertexAuthored {
+			return emitVertexAuthored(m), emitFragmentAuthored(m), nil
+		}
 		return emitVertex(m), emitFragment(m), nil
 	}
 }
+
+// emitVertexAuthored emits the GLES3 (GLSL ES 3.00) vertex shader for a material
+// that authors its own vertex() stage (B4). Unlike WebGL1, GLES3 has gl_VertexID,
+// so the vertexIndex builtin aliases to it directly (no host attribute needed).
+func emitVertexAuthored(m ir.Module) string {
+	var b strings.Builder
+	b.WriteString("#version 300 es\n")
+	for _, a := range m.Attributes {
+		fmt.Fprintf(&b, "in %s %s;\n", typeName(a.Type), a.Name)
+	}
+	for _, u := range m.Uniforms {
+		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
+	}
+	for _, au := range m.ArrayUniforms {
+		fmt.Fprintf(&b, "uniform %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
+	}
+	if m.StateField != "" {
+		b.WriteString("uniform highp sampler2D stateTex;\n")
+	}
+	for _, v := range m.Varyings {
+		fmt.Fprintf(&b, "out %s %s;\n", typeName(v.Type), v.Name)
+	}
+	res := internal.NewBare(prismDialect)
+	res.Varyings = internal.NameSet(m.Varyings)
+	res.StateSampleUVFn = func(uv string) string { return fmt.Sprintf("textureLod(stateTex, %s, 0.0)", uv) }
+	b.WriteString("\nvoid main() {\n")
+	if m.UsesVertexIndex {
+		b.WriteString("  uint vertexIndex = uint(gl_VertexID);\n")
+	}
+	internal.EmitStmtList(&b, m.Vertex.Body, res, "  ", false)
+	fmt.Fprintf(&b, "  gl_Position = %s;\n}\n", ir.Print(m.Vertex.Output, res))
+	return b.String()
+}
+
+// emitFragmentAuthored emits the GLES3 fragment shader for an authored-vertex
+// material. It reads author varyings via `in` and supports stateAt(uv) (sampling
+// stateTex) when the material declares a statefield.
+func emitFragmentAuthored(m ir.Module) string {
+	var b strings.Builder
+	b.WriteString("#version 300 es\nprecision highp float;\n")
+	for _, u := range m.Uniforms {
+		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
+	}
+	for _, au := range m.ArrayUniforms {
+		fmt.Fprintf(&b, "uniform %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
+	}
+	if m.StateField != "" {
+		b.WriteString("uniform highp sampler2D stateTex;\n")
+	}
+	for _, v := range m.Varyings {
+		fmt.Fprintf(&b, "in %s %s;\n", typeName(v.Type), v.Name)
+	}
+	for _, t := range m.Textures {
+		if t.Cube {
+			fmt.Fprintf(&b, "uniform samplerCube %s;\n", t.Name)
+		} else {
+			fmt.Fprintf(&b, "uniform sampler2D %s;\n", t.Name)
+		}
+	}
+	res := internal.NewBare(prismDialect)
+	res.StateSampleUVFn = func(uv string) string { return fmt.Sprintf("texture(stateTex, %s)", uv) }
+	b.WriteString("out vec4 fragColor;\n\nvoid main() {\n")
+	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
+	fmt.Fprintf(&b, "  fragColor = %s;\n}\n", ir.Print(m.Fragment.Output, res))
+	return b.String()
+}
+
+// emitFeedbackVertex emits a GLES3 fullscreen-triangle vertex for a feedback
+// ping-pong pass, passing vUV (the cell's [0,1] grid coordinate) to the fragment.
+func emitFeedbackVertex(m ir.Module) string {
+	var b strings.Builder
+	b.WriteString("#version 300 es\n\n")
+	b.WriteString("out vec2 vUV;\n\n")
+	b.WriteString("void main() {\n")
+	b.WriteString("  const vec2[3] positions = vec2[3](\n")
+	b.WriteString("    vec2(-1.0, -1.0), vec2(3.0, -1.0), vec2(-1.0, 3.0)\n")
+	b.WriteString("  );\n")
+	b.WriteString("  vUV = positions[gl_VertexID] * 0.5 + 0.5;\n")
+	b.WriteString("  gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);\n")
+	b.WriteString("}\n")
+	return b.String()
+}
+
+// emitFeedbackFragment emits the GLES3 feedback fragment. state(dx, dy) reads
+// the previous-state highp sampler2D (stateTex) stepped by texelSize; the next
+// state is written to the bound float FBO via fragColor (the host ping-pongs
+// which texture/FBO is in/out each step).
+func emitFeedbackFragment(m ir.Module) string {
+	var b strings.Builder
+	b.WriteString("#version 300 es\nprecision highp float;\n")
+	b.WriteString("in vec2 vUV;\n\n")
+	b.WriteString("uniform highp sampler2D stateTex;\n")
+	b.WriteString("uniform vec2 texelSize;\n")
+	for _, u := range m.Uniforms {
+		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
+	}
+	for _, au := range m.ArrayUniforms {
+		fmt.Fprintf(&b, "uniform %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
+	}
+	b.WriteString("out vec4 fragColor;\n\n")
+	res := internal.Resolver{
+		Dialect: prismDialect,
+		StateSampleFn: func(dx, dy int64) string {
+			if dx == 0 && dy == 0 {
+				return "texture(stateTex, vUV)"
+			}
+			return fmt.Sprintf("texture(stateTex, vUV + vec2(%s, %s) * texelSize)", glFloatLit(dx), glFloatLit(dy))
+		},
+		CellUVFn: func() string { return "vUV" },
+	}
+	b.WriteString("void main() {\n")
+	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
+	fmt.Fprintf(&b, "  fragColor = %s;\n}\n", ir.Print(m.Fragment.Output, res))
+	return b.String()
+}
+
+// glFloatLit renders an integer cell offset as a GLSL float literal (1 -> 1.0).
+func glFloatLit(v int64) string { return fmt.Sprintf("%d.0", v) }
 
 func emitVertex(m ir.Module) string {
 	var b strings.Builder
@@ -34,6 +157,9 @@ func emitVertex(m ir.Module) string {
 	}
 	for _, u := range m.Uniforms {
 		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
+	}
+	for _, au := range m.ArrayUniforms {
+		fmt.Fprintf(&b, "uniform %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
 	}
 	for _, v := range m.Varyings {
 		fmt.Fprintf(&b, "out %s %s;\n", typeName(v.Type), v.Name)
@@ -54,21 +180,26 @@ func emitVertex(m ir.Module) string {
 
 func emitFragment(m ir.Module) string {
 	var b strings.Builder
-	b.WriteString("#version 300 es\nprecision mediump float;\n")
+	b.WriteString("#version 300 es\nprecision highp float;\n")
 	for _, u := range m.Uniforms {
 		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
+	}
+	for _, au := range m.ArrayUniforms {
+		fmt.Fprintf(&b, "uniform %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
 	}
 	for _, v := range m.Varyings {
 		fmt.Fprintf(&b, "in %s %s;\n", typeName(v.Type), v.Name)
 	}
 	for _, t := range m.Textures {
-		fmt.Fprintf(&b, "uniform sampler2D %s;\n", t.Name)
+		if t.Cube {
+			fmt.Fprintf(&b, "uniform samplerCube %s;\n", t.Name)
+		} else {
+			fmt.Fprintf(&b, "uniform sampler2D %s;\n", t.Name)
+		}
 	}
 	res := internal.NewBare(prismDialect)
 	b.WriteString("out vec4 fragColor;\n\nvoid main() {\n")
-	for _, s := range m.Fragment.Body {
-		fmt.Fprintf(&b, "  %s %s = %s;\n", typeName(s.Type), s.Target, ir.Print(s.Value, res))
-	}
+	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
 	fmt.Fprintf(&b, "  fragColor = %s;\n}\n", ir.Print(m.Fragment.Output, res))
 	return b.String()
 }
@@ -76,9 +207,11 @@ func emitFragment(m ir.Module) string {
 // emitPointsVertex emits the GLES3 points vertex shader.
 //
 // Varyings use the split vec3+float model to match the WGSL contract:
-//   v_color  vec3  — rgb base colour (NOT vec4; alpha is separate)
-//   v_alpha  float — per-point alpha pre-multiplied by u_opacity
-//   v_fogFactor, v_pointSize float
+//
+//	v_color  vec3  — rgb base colour (NOT vec4; alpha is separate)
+//	v_alpha  float — per-point alpha pre-multiplied by u_opacity
+//	v_fogFactor, v_pointSize float
+//
 // pt.pointUV resolves to gl_PointCoord in the fragment (no dead v_pointCoord varying).
 func emitPointsVertex(m ir.Module) string {
 	var b strings.Builder
@@ -142,14 +275,15 @@ func emitPointsVertex(m ir.Module) string {
 // emitPointsFragment emits the GLES3 points fragment shader.
 //
 // Varyings declared here must match the vertex shader exactly:
-//   v_color  vec3  — rgb (NOT vec4)
-//   v_alpha  float — alpha (already pre-multiplied by u_opacity in vertex)
-//   v_fogFactor, v_pointSize float
+//
+//	v_color  vec3  — rgb (NOT vec4)
+//	v_alpha  float — alpha (already pre-multiplied by u_opacity in vertex)
+//	v_fogFactor, v_pointSize float
 //
 // pt.pointUV resolves to gl_PointCoord directly (no dead varying).
 func emitPointsFragment(m ir.Module) string {
 	var b strings.Builder
-	b.WriteString("#version 300 es\nprecision mediump float;\n")
+	b.WriteString("#version 300 es\nprecision highp float;\n")
 	b.WriteString("in vec3 v_color;\n")
 	b.WriteString("in float v_alpha;\n")
 	b.WriteString("in float v_fogFactor;\n")
@@ -165,9 +299,7 @@ func emitPointsFragment(m ir.Module) string {
 	b.WriteString("void main() {\n")
 	// pt.pointUV → v_pointCoord in the IR; alias to gl_PointCoord (no dead varying).
 	b.WriteString("  vec2 v_pointCoord = gl_PointCoord;\n")
-	for _, s := range m.Fragment.Body {
-		fmt.Fprintf(&b, "  %s %s = %s;\n", typeName(s.Type), s.Target, ir.Print(s.Value, res))
-	}
+	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
 	fmt.Fprintf(&b, "  fragColor = %s;\n}\n", ir.Print(m.Fragment.Output, res))
 	return b.String()
 }
@@ -193,12 +325,15 @@ func emitPostVertex(m ir.Module) string {
 // emitPostFragment emits the GLES3 post-process fragment shader.
 func emitPostFragment(m ir.Module) string {
 	var b strings.Builder
-	b.WriteString("#version 300 es\nprecision mediump float;\n")
+	b.WriteString("#version 300 es\nprecision highp float;\n")
 	b.WriteString("in vec2 v_uv;\n\n")
 	b.WriteString("uniform sampler2D _sceneColor;\n")
 	b.WriteString("uniform sampler2D _sceneDepth;\n")
 	for _, u := range m.Uniforms {
 		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
+	}
+	for _, au := range m.ArrayUniforms {
+		fmt.Fprintf(&b, "uniform %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
 	}
 	b.WriteString("out vec4 fragColor;\n\n")
 	res := internal.Resolver{
@@ -216,9 +351,7 @@ func emitPostFragment(m ir.Module) string {
 		},
 	}
 	b.WriteString("void main() {\n")
-	for _, s := range m.Fragment.Body {
-		fmt.Fprintf(&b, "  %s %s = %s;\n", typeName(s.Type), s.Target, ir.Print(s.Value, res))
-	}
+	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
 	fmt.Fprintf(&b, "  fragColor = %s;\n}\n", ir.Print(m.Fragment.Output, res))
 	return b.String()
 }

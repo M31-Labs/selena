@@ -63,6 +63,24 @@ func packUniformBlock(block UniformBlock, values map[string]any, useDefaults boo
 }
 
 func packField(out []byte, field Field, values []float32) error {
+	if field.Count > 1 {
+		// Array uniform: pack each element at std140 stride (field.Stride bytes).
+		elemComps, ok := componentCount(field.Type)
+		if !ok {
+			return fmt.Errorf("unsupported array element type %q", field.Type)
+		}
+		wantTotal := elemComps * field.Count
+		if len(values) != wantTotal {
+			return fmt.Errorf("%s[%d] needs %d components, got %d", field.Type, field.Count, wantTotal, len(values))
+		}
+		stride := field.Stride
+		for elem := 0; elem < field.Count; elem++ {
+			for c := 0; c < elemComps; c++ {
+				writeFloat32(out, field.Offset+elem*stride+c*4, values[elem*elemComps+c])
+			}
+		}
+		return nil
+	}
 	want, ok := componentCount(field.Type)
 	if !ok {
 		return fmt.Errorf("unsupported type %q", field.Type)

@@ -1,0 +1,11 @@
+// cubemap.sel — exercises textureCube + sampleCube.
+// A sky-reflection material: computes a reflection direction from the world
+// normal and samples a cube-map environment texture with it.
+material CubeMap {
+    param sky : textureCube
+
+    surface(geo) -> color {
+        let dir = reflect(-(geo.position), normalize(geo.worldNormal))
+        return sampleCube(sky, dir).rgb
+    }
+}

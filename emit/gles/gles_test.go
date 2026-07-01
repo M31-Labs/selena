@@ -25,7 +25,7 @@ func TestEmitDirectionalDiffuse(t *testing.T) {
 	}
 	for _, want := range []string{
 		"#version 300 es",
-		"precision mediump float;",
+		"precision highp float;",
 		"in vec3 vNormal;",
 		"out vec4 fragColor;",
 		"float diff = max(dot(n, normalize(lightDir)), 0.0);",

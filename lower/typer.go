@@ -8,30 +8,66 @@ import (
 	"m31labs.dev/selena/ir"
 )
 
+// arrayInfo holds element type and size for a local fixed-size array variable.
+type arrayInfo struct {
+	elemType ir.Type
+	size     int
+}
+
 // typer infers the IR type of a HIR expression within one material surface.
 type typer struct {
-	paramKind        map[string]hir.Type
-	geo              string
-	locals           map[string]ir.Type
+	paramKind     map[string]hir.Type
+	geo           string
+	locals        map[string]ir.Type
+	mutableLocals map[string]bool // tracks which locals were declared with var
 	// geoFields is the geometry registry for this kind. Nil means mesh stdlib.
-	geoFields        map[string]geometrySpec
+	geoFields map[string]geometrySpec
 	// allowSceneSample enables sceneColor/sceneDepth (post kind only).
 	allowSceneSample bool
+	// allowState enables state(dx, dy) (feedback kind only).
+	allowState bool
+	// allowVertexIndex enables the vertexIndex builtin (authored vertex stage only). B4.
+	allowVertexIndex bool
+	// allowStateAt enables stateAt(uv) reads (mesh/general materials that declare
+	// a statefield; valid in both the authored vertex stage and the surface). B4.
+	allowStateAt bool
+	// arrayLocals tracks local fixed-size array variables (B2b).
+	arrayLocals map[string]arrayInfo
+	// paramArrays tracks uniform array params (B3.2): `param name : array<T, N>`.
+	// A bare Ref to a param array is a type error; indexing it returns ElemType.
+	paramArrays map[string]arrayInfo
 }
 
 func (t *typer) typeOf(e hir.Expr) (ir.Type, error) {
 	switch x := e.(type) {
 	case hir.Lit:
 		return ir.Float, nil
+	case hir.IntLit:
+		_ = x
+		return ir.Int, nil
+	case hir.UintLit:
+		_ = x
+		return ir.Uint, nil
 	case hir.Ref:
 		if lt, ok := t.locals[x.Name]; ok {
 			return lt, nil
+		}
+		if x.Name == "vertexIndex" {
+			if !t.allowVertexIndex {
+				return "", diagnostic(CodeUnknownName, x.Span, "vertexIndex is only available in a vertex() stage")
+			}
+			return ir.Uint, nil
 		}
 		if pk, ok := t.paramKind[x.Name]; ok {
 			if it, ok := hirToIRType(pk); ok {
 				return it, nil
 			}
 			return "", diagnostic(CodeInvalidMember, x.Span, "%q has record type %q and must be accessed by field", x.Name, pk)
+		}
+		if t.paramArrays != nil {
+			if _, ok := t.paramArrays[x.Name]; ok {
+				return "", diagnostic(CodeInvalidMember, x.Span, "array param %q must be indexed with [i], not used directly", x.Name)
+			}
 		}
 		return "", diagnostic(CodeUnknownName, x.Span, "unknown name %q", x.Name)
 	case hir.Member:
@@ -69,7 +105,70 @@ func (t *typer) typeOf(e hir.Expr) (ir.Type, error) {
 	case hir.Binary:
 		return t.binaryType(x)
 	case hir.Unary:
+		if x.Op == "!" {
+			inner, err := t.typeOf(x.E)
+			if err != nil {
+				return "", err
+			}
+			if inner != ir.Bool {
+				return "", diagnostic(CodeTypeMismatch, x.Span, "operator ! requires bool operand, got %s", inner)
+			}
+			return ir.Bool, nil
+		}
 		return t.typeOf(x.E)
+	case hir.Conditional:
+		condT, err := t.typeOf(x.Cond)
+		if err != nil {
+			return "", err
+		}
+		if condT != ir.Bool {
+			return "", diagnostic(CodeTypeMismatch, x.Span, "ternary condition must be bool, got %s", condT)
+		}
+		thenT, err := t.typeOf(x.Then)
+		if err != nil {
+			return "", err
+		}
+		altT, err := t.typeOf(x.Alt)
+		if err != nil {
+			return "", err
+		}
+		if thenT != altT {
+			return "", diagnostic(CodeTypeMismatch, x.Span, "ternary branches must have the same type, got %s and %s", thenT, altT)
+		}
+		return thenT, nil
+	case hir.IndexExpr:
+		// Base must be a Ref naming a local array variable or a uniform array param.
+		arrRef, ok := x.Arr.(hir.Ref)
+		if !ok {
+			return "", fmt.Errorf("array index expression: base must be a local array name or uniform array param")
+		}
+		// Check local arrays first (B2b).
+		if t.arrayLocals != nil {
+			if info, ok := t.arrayLocals[arrRef.Name]; ok {
+				idxT, err := t.typeOf(x.Index)
+				if err != nil {
+					return "", err
+				}
+				if idxT != ir.Int && idxT != ir.Uint {
+					return "", diagnostic(CodeTypeMismatch, x.Span, "array index must be int or uint, got %s", idxT)
+				}
+				return info.elemType, nil
+			}
+		}
+		// Check uniform array params (B3.2).
+		if t.paramArrays != nil {
+			if info, ok := t.paramArrays[arrRef.Name]; ok {
+				idxT, err := t.typeOf(x.Index)
+				if err != nil {
+					return "", err
+				}
+				if idxT != ir.Int && idxT != ir.Uint {
+					return "", diagnostic(CodeTypeMismatch, x.Span, "array index must be int or uint, got %s", idxT)
+				}
+				return info.elemType, nil
+			}
+		}
+		return "", diagnostic(CodeUnknownName, x.Span, "%q is not a local array or uniform array param", arrRef.Name)
 	}
 	return "", fmt.Errorf("unsupported expression %T", e)
 }
@@ -92,6 +191,35 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 		}
 		if c.Func == "sceneDepth" {
 			return ir.Float, nil
+		}
+		return ir.Vec4, nil
+	}
+
+	// Feedback-kind previous-state read: state(dx, dy) -> vec4.
+	if c.Func == "state" {
+		if !t.allowState {
+			return "", diagnostic(CodeInvalidCall, c.Span, "state(dx, dy) is only available in feedback-kind materials")
+		}
+		if len(c.Args) != 2 {
+			return "", diagnostic(CodeInvalidCall, c.Span, "state(dx, dy) takes 2 arguments")
+		}
+		return ir.Vec4, nil
+	}
+
+	// By-uv statefield read: stateAt(uv) -> vec4 (B4).
+	if c.Func == "stateAt" {
+		if !t.allowStateAt {
+			return "", diagnostic(CodeInvalidCall, c.Span, "stateAt(uv) requires a statefield; declare `state <name>` in the material")
+		}
+		if len(c.Args) != 1 {
+			return "", diagnostic(CodeInvalidCall, c.Span, "stateAt(uv) takes 1 argument")
+		}
+		uvt, err := t.typeOf(c.Args[0])
+		if err != nil {
+			return "", err
+		}
+		if uvt != ir.Vec2 {
+			return "", diagnostic(CodeTypeMismatch, c.Span, "stateAt: argument must be vec2 uv, got %s", uvt)
 		}
 		return ir.Vec4, nil
 	}
@@ -165,6 +293,22 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 			return "", diagnostic(CodeTypeMismatch, c.Span, "sample: second argument must be vec2 uv, got %s", uv)
 		}
 		return ir.Vec4, nil
+	case builtinSampleCube:
+		if len(c.Args) != spec.arity {
+			return "", diagnostic(CodeInvalidCall, c.Span, "sampleCube(texture, dir) takes 2 arguments")
+		}
+		tex, ok := c.Args[0].(hir.Ref)
+		if !ok || t.paramKind[tex.Name] != hir.TextureCube {
+			return "", diagnostic(CodeInvalidCall, c.Span, "sampleCube: first argument must be a textureCube param")
+		}
+		dir, err := t.typeOf(c.Args[1])
+		if err != nil {
+			return "", err
+		}
+		if dir != ir.Vec3 {
+			return "", diagnostic(CodeTypeMismatch, c.Span, "sampleCube: second argument must be vec3 direction, got %s", dir)
+		}
+		return ir.Vec4, nil
 	case builtinRGB:
 		if len(c.Args) != 3 && len(c.Args) != 4 {
 			return "", diagnostic(CodeInvalidCall, c.Span, "rgb expects 3 or 4 arguments, got %d", len(c.Args))
@@ -196,6 +340,61 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 			}
 		}
 		return ir.Vec2, nil
+	case builtinVec3:
+		// vec3f(x,y,z) or vec3f(vec2,z): args must contribute exactly 3 float components.
+		total := 0
+		for i, a := range c.Args {
+			at, err := t.typeOf(a)
+			if err != nil {
+				return "", err
+			}
+			n := floatComponents(at)
+			if n == 0 || n > 3 {
+				return "", diagnostic(CodeTypeMismatch, c.Span, "vec3f argument %d must be float, vec2, or vec3, got %s", i+1, at)
+			}
+			total += n
+		}
+		if total != 3 {
+			return "", diagnostic(CodeInvalidCall, c.Span, "vec3f arguments must provide exactly 3 components, got %d", total)
+		}
+		return ir.Vec3, nil
+	case builtinVec4:
+		// vec4f(x,y,z,w) / vec4f(vec3,w) / vec4f(vec2,z,w): args must contribute exactly 4 float components.
+		total := 0
+		for i, a := range c.Args {
+			at, err := t.typeOf(a)
+			if err != nil {
+				return "", err
+			}
+			n := floatComponents(at)
+			if n == 0 {
+				return "", diagnostic(CodeTypeMismatch, c.Span, "vec4f argument %d must be float, vec2, vec3, or vec4, got %s", i+1, at)
+			}
+			total += n
+		}
+		if total != 4 {
+			return "", diagnostic(CodeInvalidCall, c.Span, "vec4f arguments must provide exactly 4 components, got %d", total)
+		}
+		return ir.Vec4, nil
+	case builtinCastFloat, builtinCastInt, builtinCastUint:
+		if len(c.Args) != spec.arity {
+			return "", diagnostic(CodeInvalidCall, c.Span, "%s expects %d argument, got %d", c.Func, spec.arity, len(c.Args))
+		}
+		at, err := t.typeOf(c.Args[0])
+		if err != nil {
+			return "", err
+		}
+		if !isNumericScalar(at) {
+			return "", diagnostic(CodeTypeMismatch, c.Span, "%s: argument must be a numeric scalar (float/int/uint), got %s", c.Func, at)
+		}
+		switch spec.kind {
+		case builtinCastFloat:
+			return ir.Float, nil
+		case builtinCastInt:
+			return ir.Int, nil
+		default:
+			return ir.Uint, nil
+		}
 	case builtinUnarySame:
 		if len(c.Args) != spec.arity {
 			return "", diagnostic(CodeInvalidCall, c.Span, "%s expects %d arguments, got %d", c.Func, spec.arity, len(c.Args))
@@ -262,7 +461,43 @@ func (t *typer) sameOrScalarCall(name string, args []hir.Expr, n int, span hir.S
 	return base, nil
 }
 
+func isNumericScalar(t ir.Type) bool {
+	return t == ir.Float || t == ir.Int || t == ir.Uint
+}
+
 func (t *typer) binaryType(b hir.Binary) (ir.Type, error) {
+	// Comparison operators: operands must be the same numeric scalar, result is bool.
+	// Scalar-only for now; vector component comparisons deferred.
+	switch b.Op {
+	case "<", ">", "<=", ">=", "==", "!=":
+		lt, err := t.typeOf(b.L)
+		if err != nil {
+			return "", err
+		}
+		rt, err := t.typeOf(b.R)
+		if err != nil {
+			return "", err
+		}
+		if !isNumericScalar(lt) || lt != rt {
+			return "", diagnostic(CodeTypeMismatch, b.Span, "comparison operator %s requires matching numeric operands, got %s and %s", b.Op, lt, rt)
+		}
+		return ir.Bool, nil
+	// Boolean binary operators: both operands must be bool, result is bool.
+	case "&&", "||":
+		lt, err := t.typeOf(b.L)
+		if err != nil {
+			return "", err
+		}
+		rt, err := t.typeOf(b.R)
+		if err != nil {
+			return "", err
+		}
+		if lt != ir.Bool || rt != ir.Bool {
+			return "", diagnostic(CodeTypeMismatch, b.Span, "operator %s requires bool operands, got %s and %s", b.Op, lt, rt)
+		}
+		return ir.Bool, nil
+	}
+	// Arithmetic operators.
 	if b.Op != "+" && b.Op != "-" && b.Op != "*" && b.Op != "/" {
 		return "", diagnostic(CodeInvalidCall, b.Span, "unsupported operator %q", b.Op)
 	}
@@ -285,17 +520,36 @@ func (t *typer) binaryType(b hir.Binary) (ir.Type, error) {
 			return ir.Vec3, nil
 		}
 	}
+	// float can mix with vector/matrix (scalar promotion).
 	if lt == ir.Float {
 		return rt, nil
 	}
 	if rt == ir.Float {
 		return lt, nil
 	}
+	// int and uint only mix with themselves (no implicit coercion).
 	return "", diagnostic(CodeTypeMismatch, b.Span, "operator %s is not defined for %s and %s", b.Op, lt, rt)
 }
 
 func isVector(t ir.Type) bool {
 	return t == ir.Vec2 || t == ir.Vec3 || t == ir.Vec4
+}
+
+// floatComponents returns the number of float scalar components in t,
+// or 0 if t is not a float-family type (e.g. mat3, mat4).
+func floatComponents(t ir.Type) int {
+	switch t {
+	case ir.Float:
+		return 1
+	case ir.Vec2:
+		return 2
+	case ir.Vec3:
+		return 3
+	case ir.Vec4:
+		return 4
+	default:
+		return 0
+	}
 }
 
 func vectorWidth(t ir.Type) int {

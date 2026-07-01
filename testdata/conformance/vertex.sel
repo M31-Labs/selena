@@ -1,0 +1,30 @@
+// vertex.sel — author-controlled VERTEX stage (B4).
+//
+// A procedural grid surface: the vertex() stage builds each vertex position from
+// the vertexIndex builtin alone (no vertex attributes), ripples it with a sine
+// wave, writes the world-space position into the `worldPos` varying, and returns
+// the clip-space position. The surface() fragment reads geo.worldPos and colours
+// the mesh by its height.
+material Ripple {
+    param gridSize : float = 16.0
+    param amplitude : float = 0.15
+
+    varying worldPos : vec3
+
+    vertex() -> vec4 {
+        let fi = float(vertexIndex)
+        let col = fract(fi / gridSize)
+        let row = floor(fi / gridSize) / gridSize
+        let x = col * 2.0 - 1.0
+        let z = row * 2.0 - 1.0
+        let y = sin(x * 6.2831855) * amplitude
+        let p = vec3f(x, y, z)
+        worldPos = p
+        return mvp * vec4f(x, y, z, 1.0)
+    }
+
+    surface(geo) -> color {
+        let h = geo.worldPos.y * 0.5 + 0.5
+        return rgb(h, geo.worldPos.x * 0.5 + 0.5, geo.worldPos.z * 0.5 + 0.5)
+    }
+}

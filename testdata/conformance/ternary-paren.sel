@@ -1,0 +1,33 @@
+// ternary-paren.sel — exercises parenthesised and nested conditional
+// (ternary) expressions, the exact shapes that used to fail to parse:
+//   (a ? b : c)          — a parenthesised ternary
+//   a ? (b ? c : d) : e  — a nested ternary in the then-branch (parenthesised)
+//   a ? b : (c ? d : e)  — a nested ternary in the alt-branch (parenthesised)
+//   f(a ? b : c)         — a ternary as a call argument
+material TernaryParen {
+    param threshold : float
+    param colorA    : color
+    param colorB    : color
+
+    surface(geo) -> color {
+        let su = geo.uv.x
+        let sv = geo.uv.y
+
+        // parenthesised ternary
+        let band = (su > threshold ? 1.0 : 0.0)
+
+        // nested ternary in the then-branch, parenthesised inner
+        let pick = su > 0.5 ? (sv > 0.5 ? 1.0 : 0.5) : 0.0
+
+        // nested ternary in the alt-branch, parenthesised inner
+        let pick2 = su > 0.5 ? 0.25 : (sv > 0.5 ? 0.75 : 1.0)
+
+        // ternary used as a call argument
+        let m = clamp(su > threshold ? band : pick, 0.0, 1.0)
+
+        // parenthesised ternary feeding a binary expression
+        let shade = (m > 0.5 ? pick : pick2) * band + (1.0 - m)
+
+        return colorA * shade + colorB * (1.0 - shade)
+    }
+}

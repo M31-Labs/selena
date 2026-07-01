@@ -21,10 +21,142 @@ func Emit(m ir.Module) (vertex, fragment string, err error) {
 		return emitPointsVertex(m), emitPointsFragment(m), nil
 	case ir.KindPost:
 		return emitPostVertex(m), emitPostFragment(m), nil
+	case ir.KindFeedback:
+		return emitFeedbackVertex(m), emitFeedbackFragment(m), nil
 	default:
+		if m.VertexAuthored {
+			return emitVertexAuthored(m), emitFragmentAuthored(m), nil
+		}
 		return emitVertex(m), emitFragment(m), nil
 	}
 }
+
+// emitVertexAuthored emits the WebGL1 (GLSL ES 1.00) vertex shader for a material
+// that authors its own vertex() stage (B4).
+//
+// WebGL1 has no gl_VertexID: when the body uses the vertexIndex builtin the host
+// must supply a `float a_vertexIndex` attribute buffer (one float per vertex);
+// this emitter declares it and aliases `vertexIndex` to it. This is the one
+// documented procedural-geometry limitation versus GLES3/WGSL/Metal, which have
+// real vertex-index builtins.
+func emitVertexAuthored(m ir.Module) string {
+	var b strings.Builder
+	for _, a := range m.Attributes {
+		fmt.Fprintf(&b, "attribute %s %s;\n", typeName(a.Type), a.Name)
+	}
+	if m.UsesVertexIndex {
+		// WebGL1 fallback: host-supplied float vertex-index attribute.
+		b.WriteString("attribute float a_vertexIndex;\n")
+	}
+	for _, u := range m.Uniforms {
+		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
+	}
+	for _, au := range m.ArrayUniforms {
+		fmt.Fprintf(&b, "uniform %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
+	}
+	if m.StateField != "" {
+		b.WriteString("uniform highp sampler2D stateTex;\n")
+	}
+	for _, v := range m.Varyings {
+		fmt.Fprintf(&b, "varying %s %s;\n", typeName(v.Type), v.Name)
+	}
+	res := internal.NewBare(prismDialect)
+	res.Varyings = internal.NameSet(m.Varyings)
+	res.StateSampleUVFn = func(uv string) string { return fmt.Sprintf("texture2DLod(stateTex, %s, 0.0)", uv) }
+	b.WriteString("\nvoid main() {\n")
+	if m.UsesVertexIndex {
+		b.WriteString("  float vertexIndex = a_vertexIndex;\n")
+	}
+	internal.EmitStmtList(&b, m.Vertex.Body, res, "  ", false)
+	fmt.Fprintf(&b, "  gl_Position = %s;\n}\n", ir.Print(m.Vertex.Output, res))
+	return b.String()
+}
+
+// emitFragmentAuthored emits the WebGL1 fragment shader for an authored-vertex
+// material. It reads author varyings as bare globals and supports stateAt(uv)
+// (sampling stateTex) when the material declares a statefield.
+func emitFragmentAuthored(m ir.Module) string {
+	var b strings.Builder
+	if irUsesDerivatives(m.Fragment.Body, m.Fragment.Output) {
+		b.WriteString("#extension GL_OES_standard_derivatives : enable\n")
+	}
+	b.WriteString("precision mediump float;\n")
+	for _, u := range m.Uniforms {
+		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
+	}
+	for _, au := range m.ArrayUniforms {
+		fmt.Fprintf(&b, "uniform %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
+	}
+	if m.StateField != "" {
+		b.WriteString("uniform highp sampler2D stateTex;\n")
+	}
+	for _, v := range m.Varyings {
+		fmt.Fprintf(&b, "varying %s %s;\n", typeName(v.Type), v.Name)
+	}
+	for _, t := range m.Textures {
+		if t.Cube {
+			fmt.Fprintf(&b, "uniform samplerCube %s;\n", t.Name)
+		} else {
+			fmt.Fprintf(&b, "uniform sampler2D %s;\n", t.Name)
+		}
+	}
+	res := internal.NewBare(prismDialect)
+	res.StateSampleUVFn = func(uv string) string { return fmt.Sprintf("texture2D(stateTex, %s)", uv) }
+	b.WriteString("\nvoid main() {\n")
+	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
+	fmt.Fprintf(&b, "  gl_FragColor = %s;\n}\n", ir.Print(m.Fragment.Output, res))
+	return b.String()
+}
+
+// emitFeedbackVertex emits the GLSL ES 1.00 fullscreen-quad vertex for a
+// feedback ping-pong pass. It passes vUV (the cell's [0,1] grid coordinate) to
+// the fragment, where state(dx, dy) samples stateTex around it.
+func emitFeedbackVertex(m ir.Module) string {
+	var b strings.Builder
+	b.WriteString("attribute vec2 a_position;\n\n")
+	b.WriteString("varying vec2 vUV;\n\n")
+	b.WriteString("void main() {\n")
+	b.WriteString("  vUV = a_position * 0.5 + 0.5;\n")
+	b.WriteString("  gl_Position = vec4(a_position, 0.0, 1.0);\n")
+	b.WriteString("}\n")
+	return b.String()
+}
+
+// emitFeedbackFragment emits the GLSL ES 1.00 feedback fragment. The previous
+// state is read from a highp sampler2D (stateTex); state(dx, dy) lowers to a
+// texture2D sample stepped by texelSize. The next state is written to the bound
+// float FBO via gl_FragColor (the host ping-pongs which texture/FBO is in/out).
+func emitFeedbackFragment(m ir.Module) string {
+	var b strings.Builder
+	b.WriteString("precision highp float;\n")
+	b.WriteString("varying vec2 vUV;\n\n")
+	b.WriteString("uniform highp sampler2D stateTex;\n")
+	b.WriteString("uniform vec2 texelSize;\n")
+	for _, u := range m.Uniforms {
+		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
+	}
+	for _, au := range m.ArrayUniforms {
+		fmt.Fprintf(&b, "uniform %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
+	}
+	b.WriteString("\n")
+	res := internal.Resolver{
+		Dialect: prismDialect,
+		StateSampleFn: func(dx, dy int64) string {
+			if dx == 0 && dy == 0 {
+				return "texture2D(stateTex, vUV)"
+			}
+			return fmt.Sprintf("texture2D(stateTex, vUV + vec2(%s, %s) * texelSize)", glFloatLit(dx), glFloatLit(dy))
+		},
+		CellUVFn: func() string { return "vUV" },
+	}
+	b.WriteString("void main() {\n")
+	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
+	fmt.Fprintf(&b, "  gl_FragColor = %s;\n}\n", ir.Print(m.Fragment.Output, res))
+	return b.String()
+}
+
+// glFloatLit renders an integer cell offset as a GLSL float literal (1 -> 1.0).
+func glFloatLit(v int64) string { return fmt.Sprintf("%d.0", v) }
 
 func emitVertex(m ir.Module) string {
 	var b strings.Builder
@@ -33,6 +165,9 @@ func emitVertex(m ir.Module) string {
 	}
 	for _, u := range m.Uniforms {
 		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
+	}
+	for _, au := range m.ArrayUniforms {
+		fmt.Fprintf(&b, "uniform %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
 	}
 	for _, v := range m.Varyings {
 		fmt.Fprintf(&b, "varying %s %s;\n", typeName(v.Type), v.Name)
@@ -53,23 +188,112 @@ func emitVertex(m ir.Module) string {
 
 func emitFragment(m ir.Module) string {
 	var b strings.Builder
+	// GLSL ES 1.00: dFdx/dFdy/fwidth require the OES_standard_derivatives
+	// extension. Add it only when the fragment stage actually uses them.
+	if irUsesDerivatives(m.Fragment.Body, m.Fragment.Output) {
+		b.WriteString("#extension GL_OES_standard_derivatives : enable\n")
+	}
 	b.WriteString("precision mediump float;\n")
 	for _, u := range m.Uniforms {
 		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
+	}
+	for _, au := range m.ArrayUniforms {
+		fmt.Fprintf(&b, "uniform %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
 	}
 	for _, v := range m.Varyings {
 		fmt.Fprintf(&b, "varying %s %s;\n", typeName(v.Type), v.Name)
 	}
 	for _, t := range m.Textures {
-		fmt.Fprintf(&b, "uniform sampler2D %s;\n", t.Name)
+		if t.Cube {
+			fmt.Fprintf(&b, "uniform samplerCube %s;\n", t.Name)
+		} else {
+			fmt.Fprintf(&b, "uniform sampler2D %s;\n", t.Name)
+		}
 	}
 	res := internal.NewBare(prismDialect)
 	b.WriteString("\nvoid main() {\n")
-	for _, s := range m.Fragment.Body {
-		fmt.Fprintf(&b, "  %s %s = %s;\n", typeName(s.Type), s.Target, ir.Print(s.Value, res))
-	}
+	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
 	fmt.Fprintf(&b, "  gl_FragColor = %s;\n}\n", ir.Print(m.Fragment.Output, res))
 	return b.String()
+}
+
+// irUsesDerivatives reports whether the given stage body or output expression
+// contains any dpdx, dpdy, or fwidth calls. Used by the GLSL emitter to decide
+// whether to emit the OES_standard_derivatives extension request.
+func irUsesDerivatives(body []ir.Stmt, output ir.Expr) bool {
+	for _, s := range body {
+		if irStmtUsesDerivatives(s) {
+			return true
+		}
+	}
+	return irExprUsesDerivatives(output)
+}
+
+func irStmtUsesDerivatives(s ir.Stmt) bool {
+	if s.CF == nil {
+		return irExprUsesDerivatives(s.Value)
+	}
+	switch cf := s.CF.(type) {
+	case ir.AssignCF:
+		return irExprUsesDerivatives(cf.Value)
+	case ir.IfCF:
+		if irExprUsesDerivatives(cf.Cond) {
+			return true
+		}
+		for _, st := range cf.Then {
+			if irStmtUsesDerivatives(st) {
+				return true
+			}
+		}
+		for _, st := range cf.Else {
+			if irStmtUsesDerivatives(st) {
+				return true
+			}
+		}
+	case ir.ForCF:
+		if irExprUsesDerivatives(cf.Cond) || irExprUsesDerivatives(cf.InitValue) || irExprUsesDerivatives(cf.PostValue) {
+			return true
+		}
+		for _, st := range cf.Body {
+			if irStmtUsesDerivatives(st) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func irExprUsesDerivatives(e ir.Expr) bool {
+	switch x := e.(type) {
+	case ir.Call:
+		if x.Func == "dpdx" || x.Func == "dpdy" || x.Func == "fwidth" {
+			return true
+		}
+		for _, a := range x.Args {
+			if irExprUsesDerivatives(a) {
+				return true
+			}
+		}
+	case ir.Construct:
+		for _, a := range x.Args {
+			if irExprUsesDerivatives(a) {
+				return true
+			}
+		}
+	case ir.Binary:
+		return irExprUsesDerivatives(x.L) || irExprUsesDerivatives(x.R)
+	case ir.Unary:
+		return irExprUsesDerivatives(x.E)
+	case ir.Swizzle:
+		return irExprUsesDerivatives(x.E)
+	case ir.Sample:
+		return irExprUsesDerivatives(x.UV)
+	case ir.SceneSample:
+		return irExprUsesDerivatives(x.UV)
+	case ir.Conditional:
+		return irExprUsesDerivatives(x.Cond) || irExprUsesDerivatives(x.Then) || irExprUsesDerivatives(x.Alt)
+	}
+	return false
 }
 
 // emitPointsVertex emits the WebGL1 points vertex shader.
@@ -77,10 +301,12 @@ func emitFragment(m ir.Module) string {
 // Engine uniforms are declared as standard WebGL uniform vars.
 //
 // Varyings use the split vec3+float model to match the WGSL contract:
-//   v_color  vec3  — rgb base colour (NOT vec4; alpha is separate)
-//   v_alpha  float — per-point alpha pre-multiplied by u_opacity
-//   v_fogFactor float
-//   v_pointSize float
+//
+//	v_color  vec3  — rgb base colour (NOT vec4; alpha is separate)
+//	v_alpha  float — per-point alpha pre-multiplied by u_opacity
+//	v_fogFactor float
+//	v_pointSize float
+//
 // pt.pointUV resolves to gl_PointCoord in the fragment (no dead v_pointCoord varying).
 func emitPointsVertex(m ir.Module) string {
 	var b strings.Builder
@@ -145,9 +371,10 @@ func emitPointsVertex(m ir.Module) string {
 // author surface body with the engine point varyings.
 //
 // Varyings declared here must match the vertex shader exactly:
-//   v_color  vec3  — rgb (NOT vec4)
-//   v_alpha  float — alpha (NOT derived from v_color.a here; already in varying)
-//   v_fogFactor, v_pointSize float
+//
+//	v_color  vec3  — rgb (NOT vec4)
+//	v_alpha  float — alpha (NOT derived from v_color.a here; already in varying)
+//	v_fogFactor, v_pointSize float
 //
 // pt.pointUV resolves to gl_PointCoord directly (no dead varying).
 func emitPointsFragment(m ir.Module) string {
@@ -176,9 +403,7 @@ func emitPointsFragment(m ir.Module) string {
 	// pt.pointUV → v_pointCoord in the IR; alias to gl_PointCoord (no dead varying).
 	b.WriteString("  vec2 v_pointCoord = gl_PointCoord;\n")
 	// Author surface body.
-	for _, s := range m.Fragment.Body {
-		fmt.Fprintf(&b, "  %s %s = %s;\n", typeName(s.Type), s.Target, ir.Print(s.Value, res))
-	}
+	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
 	fmt.Fprintf(&b, "  gl_FragColor = %s;\n}\n", ir.Print(m.Fragment.Output, res))
 	return b.String()
 }
@@ -200,6 +425,12 @@ func emitPostVertex(m ir.Module) string {
 // User uniforms follow.
 func emitPostFragment(m ir.Module) string {
 	var b strings.Builder
+	// GLSL ES 1.00: dFdx/dFdy/fwidth require the OES_standard_derivatives
+	// extension. It must precede every non-preprocessor statement, so emit it
+	// (only when the fragment actually uses a derivative) before `precision`.
+	if irUsesDerivatives(m.Fragment.Body, m.Fragment.Output) {
+		b.WriteString("#extension GL_OES_standard_derivatives : enable\n")
+	}
 	b.WriteString("precision mediump float;\n")
 	b.WriteString("varying vec2 v_uv;\n\n")
 	b.WriteString("uniform sampler2D _sceneColor;\n")
@@ -207,6 +438,9 @@ func emitPostFragment(m ir.Module) string {
 	// User uniforms.
 	for _, u := range m.Uniforms {
 		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
+	}
+	for _, au := range m.ArrayUniforms {
+		fmt.Fprintf(&b, "uniform %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
 	}
 	b.WriteString("\n")
 
@@ -227,9 +461,7 @@ func emitPostFragment(m ir.Module) string {
 	}
 
 	b.WriteString("void main() {\n")
-	for _, s := range m.Fragment.Body {
-		fmt.Fprintf(&b, "  %s %s = %s;\n", typeName(s.Type), s.Target, ir.Print(s.Value, res))
-	}
+	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
 	fmt.Fprintf(&b, "  gl_FragColor = %s;\n}\n", ir.Print(m.Fragment.Output, res))
 	return b.String()
 }

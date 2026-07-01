@@ -31,14 +31,11 @@ func resolveExtends(m hir.Material, all []hir.Material) (hir.Material, error) {
 
 	in := &inliner{parent: &parent.Surface}
 	surf := m.Surface
-	surf.Body = make([]hir.Let, 0, len(m.Surface.Body))
-	for _, l := range m.Surface.Body {
-		v, err := in.expr(l.Value, nil)
-		if err != nil {
-			return m, err
-		}
-		surf.Body = append(surf.Body, hir.Let{Name: l.Name, Value: v, Span: l.Span})
+	body, err := in.stmts(m.Surface.Body, nil)
+	if err != nil {
+		return m, err
 	}
+	surf.Body = body
 	r, err := in.expr(m.Surface.Result, nil)
 	if err != nil {
 		return m, err

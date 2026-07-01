@@ -1,5 +1,5 @@
 #version 300 es
-precision mediump float;
+precision highp float;
 in vec3 v_color;
 in float v_alpha;
 in float v_fogFactor;

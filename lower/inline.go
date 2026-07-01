@@ -19,14 +19,11 @@ func inlineFuncs(m hir.Material, funcs []hir.FuncDecl) (hir.Material, error) {
 	in := &inliner{funcs: fm}
 
 	out := m
-	out.Surface.Body = make([]hir.Let, 0, len(m.Surface.Body))
-	for _, l := range m.Surface.Body {
-		v, err := in.expr(l.Value, nil)
-		if err != nil {
-			return m, err
-		}
-		out.Surface.Body = append(out.Surface.Body, hir.Let{Name: l.Name, Value: v, Span: l.Span})
+	body, err := in.stmts(m.Surface.Body, nil)
+	if err != nil {
+		return m, err
 	}
+	out.Surface.Body = body
 	r, err := in.expr(m.Surface.Result, nil)
 	if err != nil {
 		return m, err
@@ -41,10 +38,109 @@ type inliner struct {
 	depth  int
 }
 
+// stmts applies substitutions + inlining to all statements in a slice.
+func (in *inliner) stmts(ss []hir.Stmt, env map[string]hir.Expr) ([]hir.Stmt, error) {
+	out := make([]hir.Stmt, 0, len(ss))
+	for _, s := range ss {
+		processed, err := in.stmt(s, env)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, processed)
+	}
+	return out, nil
+}
+
+// stmt applies substitutions + inlining to a single HIR statement.
+func (in *inliner) stmt(s hir.Stmt, env map[string]hir.Expr) (hir.Stmt, error) {
+	switch x := s.(type) {
+	case hir.Let:
+		v, err := in.expr(x.Value, env)
+		if err != nil {
+			return nil, err
+		}
+		return hir.Let{Name: x.Name, Value: v, Span: x.Span}, nil
+	case hir.VarDecl:
+		v, err := in.expr(x.Value, env)
+		if err != nil {
+			return nil, err
+		}
+		return hir.VarDecl{Name: x.Name, Value: v, Span: x.Span}, nil
+	case hir.Assign:
+		v, err := in.expr(x.Value, env)
+		if err != nil {
+			return nil, err
+		}
+		return hir.Assign{Name: x.Name, Value: v, Span: x.Span}, nil
+	case hir.If:
+		cond, err := in.expr(x.Cond, env)
+		if err != nil {
+			return nil, err
+		}
+		then, err := in.stmts(x.Then, env)
+		if err != nil {
+			return nil, err
+		}
+		var els []hir.Stmt
+		if len(x.Else) > 0 {
+			els, err = in.stmts(x.Else, env)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return hir.If{Cond: cond, Then: then, Else: els, Span: x.Span}, nil
+	case hir.For:
+		initVal, err := in.expr(x.InitValue, env)
+		if err != nil {
+			return nil, err
+		}
+		cond, err := in.expr(x.Cond, env)
+		if err != nil {
+			return nil, err
+		}
+		postVal, err := in.expr(x.PostValue, env)
+		if err != nil {
+			return nil, err
+		}
+		body, err := in.stmts(x.Body, env)
+		if err != nil {
+			return nil, err
+		}
+		return hir.For{
+			InitName: x.InitName, InitValue: initVal,
+			Cond:      cond,
+			PostName:  x.PostName, PostValue: postVal,
+			Body:      body,
+			Span:      x.Span,
+		}, nil
+	case hir.VarArrayDecl:
+		// No expressions to inline inside a typed array declaration.
+		return x, nil
+	case hir.Discard:
+		// No expressions to inline in a bare discard statement.
+		return x, nil
+	case hir.IndexAssign:
+		idx, err := in.expr(x.Index, env)
+		if err != nil {
+			return nil, err
+		}
+		val, err := in.expr(x.Value, env)
+		if err != nil {
+			return nil, err
+		}
+		return hir.IndexAssign{Name: x.Name, Index: idx, Value: val, Span: x.Span}, nil
+	}
+	return nil, fmt.Errorf("unsupported stmt type %T in inliner", s)
+}
+
 // expr returns e with env substitutions applied and user-function calls inlined.
 func (in *inliner) expr(e hir.Expr, env map[string]hir.Expr) (hir.Expr, error) {
 	switch x := e.(type) {
 	case hir.Lit:
+		return x, nil
+	case hir.IntLit:
+		return x, nil
+	case hir.UintLit:
 		return x, nil
 	case hir.Ref:
 		if env != nil {
@@ -110,6 +206,30 @@ func (in *inliner) expr(e hir.Expr, env map[string]hir.Expr) (hir.Expr, error) {
 		res, err := in.expr(fn.Result, env2)
 		in.depth--
 		return res, err
+	case hir.Conditional:
+		cond, err := in.expr(x.Cond, env)
+		if err != nil {
+			return nil, err
+		}
+		then, err := in.expr(x.Then, env)
+		if err != nil {
+			return nil, err
+		}
+		alt, err := in.expr(x.Alt, env)
+		if err != nil {
+			return nil, err
+		}
+		return hir.Conditional{Cond: cond, Then: then, Alt: alt, Span: x.Span}, nil
+	case hir.IndexExpr:
+		arr, err := in.expr(x.Arr, env)
+		if err != nil {
+			return nil, err
+		}
+		idx, err := in.expr(x.Index, env)
+		if err != nil {
+			return nil, err
+		}
+		return hir.IndexExpr{Arr: arr, Index: idx, Span: x.Span}, nil
 	case hir.SuperCall:
 		if in.parent == nil {
 			return nil, diagnostic(CodeInvalidCall, x.Span, "super.%s used in a material with no parent (extends)", x.Method)
@@ -124,9 +244,17 @@ func (in *inliner) expr(e hir.Expr, env map[string]hir.Expr) (hir.Expr, error) {
 		if err != nil {
 			return nil, err
 		}
-		// inline the parent surface with its geo param bound to the passed arg
+		// inline the parent surface with its geo param bound to the passed arg.
+		// Only Let statements in the parent body are supported for inlining;
+		// imperative control-flow (var/assign/if/for) in a parent surface that is
+		// called via super.surface(...) is not yet supported (B2a limitation).
 		env2 := map[string]hir.Expr{in.parent.Geo: geoArg}
-		for _, l := range in.parent.Body {
+		for _, s := range in.parent.Body {
+			l, ok := s.(hir.Let)
+			if !ok {
+				return nil, diagnostic(CodeInvalidCall, x.Span,
+					"super.surface: parent surface body contains imperative statements that cannot be inlined (B2a limitation)")
+			}
 			v, err := in.expr(l.Value, env2)
 			if err != nil {
 				return nil, err

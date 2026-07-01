@@ -1,0 +1,40 @@
+// vertex-control.sel — authored VERTEX stage using control flow (B5).
+//
+// Exercises `var`, `for`, and `if` inside vertex(): accumulates a rippled
+// height across a few octaves of a sine wave into a mutable local, clamps it
+// with an `if`, then writes the result into the `worldPos` varying. Proves
+// vertex() now shares the same statement-lowering path as surface() (see
+// control.sel for the fragment-side equivalent of these constructs).
+material RippleAccum {
+    param gridSize : float = 16.0
+    param amplitude : float = 0.15
+
+    varying worldPos : vec3
+
+    vertex() -> vec4 {
+        let fi = float(vertexIndex)
+        let col = fract(fi / gridSize)
+        let row = floor(fi / gridSize) / gridSize
+        let x = col * 2.0 - 1.0
+        let z = row * 2.0 - 1.0
+
+        var y = 0.0
+        var n = 3i
+        for (var i = 0i; i < n; i = i + 1i) {
+            let phase = float(i) * 1.5707964
+            y = y + sin(x * 6.2831855 + phase) * amplitude
+        }
+        if (y > amplitude) {
+            y = amplitude
+        }
+
+        let p = vec3f(x, y, z)
+        worldPos = p
+        return mvp * vec4f(x, y, z, 1.0)
+    }
+
+    surface(geo) -> color {
+        let h = geo.worldPos.y * 0.5 + 0.5
+        return rgb(h, geo.worldPos.x * 0.5 + 0.5, geo.worldPos.z * 0.5 + 0.5)
+    }
+}

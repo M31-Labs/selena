@@ -24,8 +24,8 @@ func DirectionalDiffuse() Material {
 		},
 		Surface: Func{
 			Geo: "geo",
-			Body: []Let{
-				{Name: "n", Value: Call{Func: "normalize", Args: []Expr{
+			Body: []Stmt{
+				Let{Name: "n", Value: Call{Func: "normalize", Args: []Expr{
 					Member{E: Ref{Name: "geo"}, Field: "worldNormal"},
 				}}},
 			},
@@ -66,8 +66,8 @@ func Textured() Material {
 		},
 		Surface: Func{
 			Geo: "geo",
-			Body: []Let{
-				{Name: "c", Value: Member{
+			Body: []Stmt{
+				Let{Name: "c", Value: Member{
 					E: Call{Func: "sample", Args: []Expr{
 						Ref{Name: "albedo"},
 						Member{E: Ref{Name: "geo"}, Field: "uv"},

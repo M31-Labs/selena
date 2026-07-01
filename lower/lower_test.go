@@ -8,6 +8,7 @@ import (
 	"m31labs.dev/selena/emit/metal"
 	"m31labs.dev/selena/emit/wgsl"
 	"m31labs.dev/selena/hir"
+	"m31labs.dev/selena/ir"
 	"m31labs.dev/selena/parse"
 )
 
@@ -64,12 +65,16 @@ func TestLowerDirectionalDiffuse(t *testing.T) {
 	}
 }
 
-func TestLowerRejectsUnsupportedVertexHook(t *testing.T) {
+// TestLowerRejectsVertexHookOnPoints checks that the non-mesh kinds still reject
+// author vertex() hooks (only mesh/general supports them as of B4).
+func TestLowerRejectsVertexHookOnPoints(t *testing.T) {
 	_, _, err := Lower(hir.Material{
 		Name: "Bad",
+		Kind: hir.KindPoints,
 		Vertex: &hir.Func{
-			Span: hir.Span{Start: hir.Position{Line: 2, Column: 5}},
-			Geo:  "geo",
+			Span:   hir.Span{Start: hir.Position{Line: 2, Column: 5}},
+			Geo:    "geo",
+			Result: hir.Call{Func: "vec4f", Args: []hir.Expr{hir.Lit{Value: 0}, hir.Lit{Value: 0}, hir.Lit{Value: 0}, hir.Lit{Value: 1}}},
 		},
 		Surface: hir.Func{
 			Geo:    "geo",
@@ -86,8 +91,67 @@ func TestLowerRejectsUnsupportedVertexHook(t *testing.T) {
 	if de.Code != CodeUnsupportedFeat {
 		t.Fatalf("diagnostic code = %s, want %s", de.Code, CodeUnsupportedFeat)
 	}
-	if !strings.Contains(de.Message, "vertex hooks are not supported yet") {
+	if !strings.Contains(de.Message, "vertex hooks are not supported in points") {
 		t.Fatalf("diagnostic message = %q", de.Message)
+	}
+}
+
+// TestLowerMeshAuthoredVertex checks that a mesh material authoring its own
+// vertex() stage lowers (B4): procedural geometry from vertexIndex, an author
+// varying written in vertex and read in surface, with the expected WGSL constructs.
+func TestLowerMeshAuthoredVertex(t *testing.T) {
+	p, err := parse.Program([]byte(`material Ripple {
+    param gridSize : float = 16.0
+    varying worldPos : vec3
+    vertex() -> vec4 {
+        let fi = float(vertexIndex)
+        let gx = fract(fi / gridSize)
+        let p = vec3f(gx, 0.0, fi)
+        worldPos = p
+        return mvp * vec4f(gx, 0.0, fi, 1.0)
+    }
+    surface(geo) -> color {
+        return rgb(geo.worldPos.x, geo.worldPos.y, geo.worldPos.z)
+    }
+}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mod, layout, err := LowerProgram(p, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !mod.VertexAuthored {
+		t.Fatal("module VertexAuthored = false, want true")
+	}
+	if !mod.UsesVertexIndex {
+		t.Fatal("module UsesVertexIndex = false, want true")
+	}
+	if len(mod.Attributes) != 0 {
+		t.Fatalf("attributes = %+v, want none (procedural geometry)", mod.Attributes)
+	}
+	if len(mod.Varyings) != 1 || mod.Varyings[0].Name != "worldPos" || mod.Varyings[0].Type != ir.Vec3 {
+		t.Fatalf("varyings = %+v, want [worldPos vec3]", mod.Varyings)
+	}
+	if layout.EntryPoints.Vertex != "vertexMain" || layout.EntryPoints.Fragment != "fragmentMain" {
+		t.Fatalf("entry points = %+v", layout.EntryPoints)
+	}
+	src, err := wgsl.Emit(mod)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"@vertex\nfn vertexMain(@builtin(vertex_index) vertexIndex : u32) -> VertexOutput {",
+		"let fi = f32(vertexIndex);",
+		"out.worldPos = p;",
+		"let p = vec3<f32>(gx, 0.0, fi);",
+		"out.position = (u.mvp * vec4<f32>(gx, 0.0, fi, 1.0));",
+		"@location(0) worldPos : vec3<f32>,",
+		"return vec4<f32>(vec3<f32>(in.worldPos.x, in.worldPos.y, in.worldPos.z), 1.0);",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("WGSL missing %q\n--- got ---\n%s", want, src)
+		}
 	}
 }
 
@@ -300,7 +364,7 @@ func TestLowerRejectsInterfaceNameCollisions(t *testing.T) {
 				Params: []hir.Param{{Name: "baseColor", Type: hir.Color}},
 				Surface: hir.Func{
 					Geo:    "geo",
-					Body:   []hir.Let{{Name: "baseColor", Value: hir.Lit{Value: 1}}},
+					Body:   []hir.Stmt{hir.Let{Name: "baseColor", Value: hir.Lit{Value: 1}}},
 					Result: hir.Ref{Name: "baseColor"},
 				},
 			},
@@ -312,8 +376,8 @@ func TestLowerRejectsInterfaceNameCollisions(t *testing.T) {
 				Name: "Bad",
 				Surface: hir.Func{
 					Geo: "geo",
-					Body: []hir.Let{
-						{Name: "fragColor", Value: hir.Call{Func: "rgb", Args: []hir.Expr{hir.Lit{Value: 1}, hir.Lit{Value: 0}, hir.Lit{Value: 0}}}},
+					Body: []hir.Stmt{
+						hir.Let{Name: "fragColor", Value: hir.Call{Func: "rgb", Args: []hir.Expr{hir.Lit{Value: 1}, hir.Lit{Value: 0}, hir.Lit{Value: 0}}}},
 					},
 					Result: hir.Ref{Name: "fragColor"},
 				},
@@ -326,9 +390,9 @@ func TestLowerRejectsInterfaceNameCollisions(t *testing.T) {
 				Name: "Bad",
 				Surface: hir.Func{
 					Geo: "geo",
-					Body: []hir.Let{
-						{Name: "c", Value: hir.Call{Func: "rgb", Args: []hir.Expr{hir.Lit{Value: 1}, hir.Lit{Value: 0}, hir.Lit{Value: 0}}}},
-						{Name: "c", Value: hir.Call{Func: "rgb", Args: []hir.Expr{hir.Lit{Value: 0}, hir.Lit{Value: 1}, hir.Lit{Value: 0}}}},
+					Body: []hir.Stmt{
+						hir.Let{Name: "c", Value: hir.Call{Func: "rgb", Args: []hir.Expr{hir.Lit{Value: 1}, hir.Lit{Value: 0}, hir.Lit{Value: 0}}}},
+						hir.Let{Name: "c", Value: hir.Call{Func: "rgb", Args: []hir.Expr{hir.Lit{Value: 0}, hir.Lit{Value: 1}, hir.Lit{Value: 0}}}},
 					},
 					Result: hir.Ref{Name: "c"},
 				},

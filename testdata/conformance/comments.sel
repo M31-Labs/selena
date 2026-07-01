@@ -1,0 +1,35 @@
+// comments.sel — exercises `//` line comments in every body position that
+// used to mis-lex (the `//` was consumed as two `/` division tokens when the
+// lexer was in an expression-continuation state):
+//   - after a call-valued statement   (let c = rgb(...) // note)
+//   - between two let bindings
+//   - on a standalone line
+//   - immediately before if / for / return
+material Comments {
+    param baseColor : color // base tint
+    param gain      : float // overall brightness
+
+    surface(geo) -> color {
+        let n = normalize(geo.worldNormal) // unit surface normal
+        let white = rgb(1.0, 1.0, 1.0) // a white reference colour
+        let lit = max(n.y, 0.0) // simple top-down lambert
+
+        // standalone comment line before a var declaration
+        var acc = 0.0
+
+        // comment immediately before an if statement
+        if (lit > 0.5) {
+            acc = gain // bright side
+        } else {
+            acc = gain * 0.5 // dim side
+        }
+
+        // comment immediately before a for loop
+        for (var i = 0i; i < 2i; i = i + 1i) {
+            acc = acc + 0.1 // accumulate a little each step
+        }
+
+        // comment immediately before the return statement
+        return baseColor * (acc * lit) + white * 0.0 // final shaded colour
+    }
+}

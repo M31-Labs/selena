@@ -1,0 +1,25 @@
+material Control {
+    param baseColor : color
+
+    surface(geo) -> color {
+        var n = 4i
+        var acc = 0i
+
+        for (var i = 0i; i < n; i = i + 1i) {
+            acc = acc + 1i
+        }
+
+        var r = 0.0
+        var g = 0.0
+        if (acc == n) {
+            r = baseColor.r
+        } else {
+            g = baseColor.g
+        }
+
+        var result = r
+        result = result + g
+
+        return rgb(result, baseColor.g, baseColor.b)
+    }
+}

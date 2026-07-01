@@ -1,0 +1,43 @@
+#version 300 es
+uniform mat4 mvp;
+uniform mat3 normalMatrix;
+uniform float poolWidth;
+uniform float poolLength;
+uniform float poolHeight;
+uniform vec3 lightDir;
+uniform highp sampler2D stateTex;
+out vec3 vWorldPos;
+out vec3 vNormal;
+out vec2 vTileUV;
+out vec2 vWaterUV;
+out float vFace;
+
+void main() {
+  uint vertexIndex = uint(gl_VertexID);
+  float fi = float(vertexIndex);
+  float fv = floor((fi / 6.0));
+  float faceF = min(fv, 4.0);
+  float cu = (fi - (fv * 6.0));
+  float uf = ((cu == 1.0) ? 1.0 : ((cu == 2.0) ? 1.0 : ((cu == 4.0) ? 1.0 : 0.0)));
+  float vf = ((cu == 2.0) ? 1.0 : ((cu == 4.0) ? 1.0 : ((cu == 5.0) ? 1.0 : 0.0)));
+  float hw = max(poolWidth, 0.001);
+  float hl = max(poolLength, 0.001);
+  float flY = (-max(poolHeight, 0.001));
+  float rimY = max((poolHeight * 0.1667), 0.025);
+  float wx = ((faceF == 2.0) ? mix(hw, (-hw), uf) : ((faceF == 3.0) ? hw : ((faceF == 4.0) ? (-hw) : mix((-hw), hw, uf))));
+  float wy = ((faceF == 0.0) ? flY : mix(flY, rimY, vf));
+  float wz = ((faceF == 1.0) ? hl : ((faceF == 2.0) ? (-hl) : ((faceF == 3.0) ? mix(hl, (-hl), uf) : ((faceF == 4.0) ? mix((-hl), hl, uf) : mix((-hl), hl, vf)))));
+  float nx = ((faceF == 3.0) ? (-1.0) : ((faceF == 4.0) ? 1.0 : 0.0));
+  float ny = ((faceF == 0.0) ? 1.0 : 0.0);
+  float nz = ((faceF == 1.0) ? (-1.0) : ((faceF == 2.0) ? 1.0 : 0.0));
+  float tileX = ((faceF == 3.0) ? (wz * 0.42) : ((faceF == 4.0) ? (wz * 0.42) : (wx * 0.42)));
+  float tileY = ((faceF == 0.0) ? (wz * 0.42) : (wy * 0.72));
+  float duw = max((poolWidth * 2.0), 0.001);
+  float dul = max((poolLength * 2.0), 0.001);
+  vWorldPos = vec3(wx, wy, wz);
+  vNormal = vec3(nx, ny, nz);
+  vTileUV = vec2(tileX, tileY);
+  vWaterUV = vec2(((wx / duw) + 0.5), ((wz / dul) + 0.5));
+  vFace = faceF;
+  gl_Position = (mvp * vec4(wx, wy, wz, 1.0));
+}

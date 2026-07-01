@@ -92,7 +92,7 @@ func diagnosticHint(code, message string) string {
 	case "SEL1004":
 		return "Choose a name that is not a shader keyword, generated binding, or Selena stdlib builtin."
 	case "SEL1005":
-		return "Keep custom vertex deformation out of this material until vertex-hook lowering and backend conformance land."
+		return "This feature is not available here; author vertex()/varying/statefield only in mesh materials, and keep vertex() bodies to let bindings and varying writes."
 	case "SEL2001":
 		return "Declare a material param or let binding with this name, or correct the identifier."
 	case "SEL2002":

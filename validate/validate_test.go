@@ -41,22 +41,22 @@ func pointsMaterial() hir.Material {
 		},
 		Surface: hir.Func{
 			Geo: "pt",
-			Body: []hir.Let{
-				{Name: "centered", Value: hir.Binary{Op: "-",
+			Body: []hir.Stmt{
+				hir.Let{Name: "centered", Value: hir.Binary{Op: "-",
 					L: hir.Member{E: hir.Ref{Name: "pt"}, Field: "pointUV"},
 					R: hir.Call{Func: "vec2f", Args: []hir.Expr{hir.Lit{Value: 0.5}, hir.Lit{Value: 0.5}}},
 				}},
-				{Name: "radial", Value: hir.Binary{Op: "*",
+				hir.Let{Name: "radial", Value: hir.Binary{Op: "*",
 					L: hir.Call{Func: "length", Args: []hir.Expr{hir.Ref{Name: "centered"}}},
 					R: hir.Lit{Value: 2.0},
 				}},
-				{Name: "core", Value: hir.Call{Func: "exp", Args: []hir.Expr{
+				hir.Let{Name: "core", Value: hir.Call{Func: "exp", Args: []hir.Expr{
 					hir.Unary{Op: "-", E: hir.Binary{Op: "*",
 						L: hir.Ref{Name: "radial"},
 						R: hir.Binary{Op: "*", L: hir.Ref{Name: "radial"}, R: hir.Lit{Value: 4.2}},
 					}},
 				}}},
-				{Name: "a", Value: hir.Binary{Op: "*",
+				hir.Let{Name: "a", Value: hir.Binary{Op: "*",
 					L: hir.Ref{Name: "core"},
 					R: hir.Member{E: hir.Ref{Name: "pt"}, Field: "alpha"},
 				}},

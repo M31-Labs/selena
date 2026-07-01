@@ -20,8 +20,10 @@ func reservedBackendName(name string) (string, bool) {
 		return "Selena stdlib builtin", true
 	}
 	switch name {
-	case "rgb", "sample":
+	case "rgb", "sample", "state", "stateAt":
 		return "Selena stdlib builtin", true
+	case "vertexIndex":
+		return "Selena vertex-index builtin", true
 	}
 	return "", false
 }
@@ -44,6 +46,24 @@ var generatedNames = map[string]string{
 	"position":     "generated vertex position attribute",
 	"u":            "generated uniform binding",
 	"vertexMain":   "generated shader entry point",
+	// Feedback-kind injected names.
+	"computeMain": "generated compute entry point",
+	"inState":     "generated statefield input buffer",
+	"outState":    "generated statefield output buffer",
+	"stateTex":    "generated statefield sampler",
+	"cellIndex":   "generated cell index",
+	"gridWidth":   "generated grid uniform",
+	"gridLen":     "generated grid uniform",
+	"texelSize":   "generated grid uniform",
+	"vUV":         "generated fragment uv varying",
+	"_grid":       "generated grid uniform block",
+	// B4 mesh/general statefield-read (stateAt) + authored-vertex injected names.
+	"_inState":      "generated statefield input buffer",
+	"_stateGrid":    "generated state-grid uniform block",
+	"StateGrid":     "generated state-grid uniform struct",
+	"gridHeight":    "generated grid uniform",
+	"a_vertexIndex": "generated GLSL vertex-index attribute",
+	"vertexIndex":   "generated vertex-index builtin",
 }
 
 var shaderReservedNames = map[string]string{

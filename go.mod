@@ -12,3 +12,5 @@ require (
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/odvcencio/turboquant v0.1.3 // indirect
 )
+
+replace m31labs.dev/prism => /home/draco/work/prism

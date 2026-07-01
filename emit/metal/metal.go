@@ -19,9 +19,68 @@ func Emit(m ir.Module) (string, error) {
 		return emitPoints(m)
 	case ir.KindPost:
 		return emitPost(m)
+	case ir.KindFeedback:
+		return emitFeedback(m)
 	default:
 		return emitMesh(m)
 	}
+}
+
+// emitFeedback emits a Metal compute kernel for a feedback-kind simulation step,
+// analogous to the WGSL compute path (parity). state(dx, dy) reads gather from
+// the inState buffer; the result is written to outState[cellIndex].
+//
+// Buffer contract: inState [[buffer(0)]], outState [[buffer(1)]],
+// GridUniforms [[buffer(2)]], UserUniforms [[buffer(3)]] (if any).
+func emitFeedback(m ir.Module) (string, error) {
+	var b strings.Builder
+	b.WriteString("#include <metal_stdlib>\nusing namespace metal;\n\n")
+	b.WriteString("struct GridUniforms {\n  uint gridWidth;\n  uint gridLen;\n};\n\n")
+
+	if len(m.Uniforms) > 0 || len(m.ArrayUniforms) > 0 {
+		b.WriteString("struct UserUniforms {\n")
+		for _, u := range m.Uniforms {
+			fmt.Fprintf(&b, "  %s %s;\n", typeName(u.Type), u.Name)
+		}
+		for _, au := range m.ArrayUniforms {
+			fmt.Fprintf(&b, "  %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
+		}
+		b.WriteString("};\n\n")
+	}
+
+	allUniforms := internal.NameSet(m.Uniforms)
+	for _, au := range m.ArrayUniforms {
+		allUniforms[au.Name] = true
+	}
+	fs := internal.Resolver{
+		Dialect:   prismDialect,
+		Uniforms:  allUniforms,
+		Fragment:  true,
+		Qualified: true,
+		StateSampleFn: func(dx, dy int64) string {
+			return fmt.Sprintf(
+				"inState[clamp(int(cellIndex) + (%d) + (%d) * int(_grid.gridWidth), 0, int(_grid.gridLen) - 1)]",
+				dx, dy)
+		},
+		CellUVFn: func() string {
+			return "(float2(float(cellIndex % _grid.gridWidth), float(cellIndex / _grid.gridWidth)) + float2(0.5, 0.5)) / float(_grid.gridWidth)"
+		},
+	}
+
+	b.WriteString("kernel void computeMain(\n")
+	b.WriteString("  uint3 gid [[thread_position_in_grid]],\n")
+	b.WriteString("  const device float4* inState [[buffer(0)]],\n")
+	b.WriteString("  device float4* outState [[buffer(1)]],\n")
+	b.WriteString("  constant GridUniforms& _grid [[buffer(2)]]")
+	if len(m.Uniforms) > 0 {
+		b.WriteString(",\n  constant UserUniforms& u [[buffer(3)]]")
+	}
+	b.WriteString("\n) {\n")
+	b.WriteString("  uint cellIndex = gid.x;\n")
+	b.WriteString("  if (cellIndex >= _grid.gridLen) { return; }\n")
+	internal.EmitStmtList(&b, m.Fragment.Body, fs, "  ", false)
+	fmt.Fprintf(&b, "  outState[cellIndex] = %s;\n}\n", ir.Print(m.Fragment.Output, fs))
+	return b.String(), nil
 }
 
 // emitMesh is the original mesh pipeline emitter.
@@ -30,13 +89,19 @@ func Emit(m ir.Module) (string, error) {
 // model design decision the slice is meant to expose; for now uniforms are a
 // single constant buffer at [[buffer(0)]].
 func emitMesh(m ir.Module) (string, error) {
+	if m.VertexAuthored {
+		return emitMeshAuthored(m)
+	}
 	var b strings.Builder
 	b.WriteString("#include <metal_stdlib>\nusing namespace metal;\n\n")
 
-	if len(m.Uniforms) > 0 {
+	if len(m.Uniforms) > 0 || len(m.ArrayUniforms) > 0 {
 		b.WriteString("struct Uniforms {\n")
 		for _, u := range m.Uniforms {
 			fmt.Fprintf(&b, "  %s %s;\n", typeName(u.Type), u.Name)
+		}
+		for _, au := range m.ArrayUniforms {
+			fmt.Fprintf(&b, "  %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
 		}
 		b.WriteString("};\n\n")
 	}
@@ -67,15 +132,104 @@ func emitMesh(m ir.Module) (string, error) {
 	fs := internal.NewQualified(prismDialect, m, true)
 	fragSig := "fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]"
 	for i, t := range m.Textures {
-		fragSig += fmt.Sprintf(", texture2d<float> %s [[texture(%d)]], sampler %sSampler [[sampler(%d)]]", t.Name, i, t.Name, i)
+		if t.Cube {
+			fragSig += fmt.Sprintf(", texturecube<float> %s [[texture(%d)]], sampler %sSampler [[sampler(%d)]]", t.Name, i, t.Name, i)
+		} else {
+			fragSig += fmt.Sprintf(", texture2d<float> %s [[texture(%d)]], sampler %sSampler [[sampler(%d)]]", t.Name, i, t.Name, i)
+		}
 	}
 	b.WriteString(fragSig + ") {\n")
-	for _, s := range m.Fragment.Body {
-		fmt.Fprintf(&b, "  %s %s = %s;\n", typeName(s.Type), s.Target, ir.Print(s.Value, fs))
-	}
+	internal.EmitStmtList(&b, m.Fragment.Body, fs, "  ", false)
 	fmt.Fprintf(&b, "  return %s;\n}\n", ir.Print(m.Fragment.Output, fs))
 
 	return b.String(), nil
+}
+
+// emitMeshAuthored emits a mesh material that authors its own vertex() stage (B4).
+//
+// The vertex function takes its index source from [[vertex_id]] (procedural
+// geometry) and/or per-vertex [[stage_in]] attributes, computes the clip-space
+// position from the author body, and writes author varyings into VertexOut. The
+// fragment function reads them. An optional statefield adds a read-only inState
+// buffer + a StateGrid uniform addressed by stateAt(uv). Legacy mesh materials go
+// through emitMesh and stay byte-identical.
+func emitMeshAuthored(m ir.Module) (string, error) {
+	var b strings.Builder
+	b.WriteString("#include <metal_stdlib>\nusing namespace metal;\n\n")
+
+	// Mesh always has the mvp/normalMatrix transform uniforms, so Uniforms exists.
+	b.WriteString("struct Uniforms {\n")
+	for _, u := range m.Uniforms {
+		fmt.Fprintf(&b, "  %s %s;\n", typeName(u.Type), u.Name)
+	}
+	for _, au := range m.ArrayUniforms {
+		fmt.Fprintf(&b, "  %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
+	}
+	b.WriteString("};\n\n")
+
+	if m.StateField != "" {
+		b.WriteString("struct StateGrid {\n  uint gridWidth;\n  uint gridHeight;\n};\n\n")
+	}
+
+	if len(m.Attributes) > 0 {
+		b.WriteString("struct VertexIn {\n")
+		for i, a := range m.Attributes {
+			fmt.Fprintf(&b, "  %s %s [[attribute(%d)]];\n", typeName(a.Type), a.Name, i)
+		}
+		b.WriteString("};\n\n")
+	}
+
+	b.WriteString("struct VertexOut {\n  float4 position [[position]];\n")
+	for _, v := range m.Varyings {
+		fmt.Fprintf(&b, "  %s %s;\n", typeName(v.Type), v.Name)
+	}
+	b.WriteString("};\n\n")
+
+	// Vertex stage.
+	vs := internal.NewQualified(prismDialect, m, false)
+	vs.StateSampleUVFn = metalStateSampleUV
+	var vparams []string
+	if m.UsesVertexIndex {
+		vparams = append(vparams, "uint vertexIndex [[vertex_id]]")
+	}
+	if len(m.Attributes) > 0 {
+		vparams = append(vparams, "VertexIn in [[stage_in]]")
+	}
+	vparams = append(vparams, "constant Uniforms& u [[buffer(0)]]")
+	if m.StateField != "" {
+		vparams = append(vparams, "constant StateGrid& _stateGrid [[buffer(1)]]", "const device float4* _inState [[buffer(2)]]")
+	}
+	fmt.Fprintf(&b, "vertex VertexOut vertexMain(%s) {\n  VertexOut out;\n", strings.Join(vparams, ", "))
+	internal.EmitStmtList(&b, m.Vertex.Body, vs, "  ", false)
+	fmt.Fprintf(&b, "  out.position = %s;\n  return out;\n}\n\n", ir.Print(m.Vertex.Output, vs))
+
+	// Fragment stage.
+	fs := internal.NewQualified(prismDialect, m, true)
+	fs.StateSampleUVFn = metalStateSampleUV
+	fragSig := "fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]"
+	for i, t := range m.Textures {
+		if t.Cube {
+			fragSig += fmt.Sprintf(", texturecube<float> %s [[texture(%d)]], sampler %sSampler [[sampler(%d)]]", t.Name, i, t.Name, i)
+		} else {
+			fragSig += fmt.Sprintf(", texture2d<float> %s [[texture(%d)]], sampler %sSampler [[sampler(%d)]]", t.Name, i, t.Name, i)
+		}
+	}
+	if m.StateField != "" {
+		fragSig += ", constant StateGrid& _stateGrid [[buffer(1)]], const device float4* _inState [[buffer(2)]]"
+	}
+	b.WriteString(fragSig + ") {\n")
+	internal.EmitStmtList(&b, m.Fragment.Body, fs, "  ", false)
+	fmt.Fprintf(&b, "  return %s;\n}\n", ir.Print(m.Fragment.Output, fs))
+
+	return b.String(), nil
+}
+
+// metalStateSampleUV renders a stateAt(uv) read against the inState buffer,
+// addressing the grid by a uv -> linear cell index using the StateGrid dims. B4.
+func metalStateSampleUV(uv string) string {
+	return fmt.Sprintf(
+		"_inState[min(uint((%s).x * float(_stateGrid.gridWidth)) + uint((%s).y * float(_stateGrid.gridHeight)) * _stateGrid.gridWidth, _stateGrid.gridWidth * _stateGrid.gridHeight - 1u)]",
+		uv, uv)
 }
 
 // emitPoints emits a Metal points/particle surface.
@@ -192,9 +346,7 @@ vertex PointsOut vertexMain(
 		fragSig += ", constant UserUniforms& u [[buffer(1)]]"
 	}
 	b.WriteString(fragSig + ") {\n")
-	for _, s := range m.Fragment.Body {
-		fmt.Fprintf(&b, "  %s %s = %s;\n", typeName(s.Type), s.Target, ir.Print(s.Value, fs))
-	}
+	internal.EmitStmtList(&b, m.Fragment.Body, fs, "  ", false)
 	fmt.Fprintf(&b, "  return %s;\n}\n", ir.Print(m.Fragment.Output, fs))
 	return b.String(), nil
 }
@@ -206,10 +358,13 @@ func emitPost(m ir.Module) (string, error) {
 	var b strings.Builder
 	b.WriteString("#include <metal_stdlib>\nusing namespace metal;\n\n")
 
-	if len(m.Uniforms) > 0 {
+	if len(m.Uniforms) > 0 || len(m.ArrayUniforms) > 0 {
 		b.WriteString("struct UserUniforms {\n")
 		for _, u := range m.Uniforms {
 			fmt.Fprintf(&b, "  %s %s;\n", typeName(u.Type), u.Name)
+		}
+		for _, au := range m.ArrayUniforms {
+			fmt.Fprintf(&b, "  %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
 		}
 		b.WriteString("};\n\n")
 	}
@@ -230,10 +385,16 @@ vertex PostOut vertexMain(uint vid [[vertex_id]]) {
 
 `)
 
+	// Array uniforms must join the uniform name set so refs like spheres[i]
+	// resolve through the u. struct accessor (u.spheres[i]).
 	varyingSet := map[string]bool{"v_uv": true}
+	uniformSet := internal.NameSet(m.Uniforms)
+	for _, au := range m.ArrayUniforms {
+		uniformSet[au.Name] = true
+	}
 	fs := internal.Resolver{
 		Dialect:   prismDialect,
-		Uniforms:  internal.NameSet(m.Uniforms),
+		Uniforms:  uniformSet,
 		Varyings:  varyingSet,
 		Fragment:  true,
 		Qualified: true,
@@ -250,13 +411,11 @@ vertex PostOut vertexMain(uint vid [[vertex_id]]) {
 	}
 
 	fragSig := "fragment float4 fragmentMain(PostOut in [[stage_in]], texture2d<float> _sceneColorTex [[texture(0)]], sampler _sceneColorSamp [[sampler(0)]], depth2d<float> _sceneDepthTex [[texture(2)]], sampler _sceneDepthSamp [[sampler(2)]]"
-	if len(m.Uniforms) > 0 {
+	if len(m.Uniforms) > 0 || len(m.ArrayUniforms) > 0 {
 		fragSig += ", constant UserUniforms& u [[buffer(1)]]"
 	}
 	b.WriteString(fragSig + ") {\n")
-	for _, s := range m.Fragment.Body {
-		fmt.Fprintf(&b, "  %s %s = %s;\n", typeName(s.Type), s.Target, ir.Print(s.Value, fs))
-	}
+	internal.EmitStmtList(&b, m.Fragment.Body, fs, "  ", false)
 	fmt.Fprintf(&b, "  return %s;\n}\n", ir.Print(m.Fragment.Output, fs))
 	return b.String(), nil
 }

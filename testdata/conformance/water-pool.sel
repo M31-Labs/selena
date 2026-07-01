@@ -1,0 +1,100 @@
+// water-pool.sel — selena port of the JeantimeX water pool render pass.
+//
+// Models a rectangular pool (5 faces x 6 vertices per face = 30 verts) whose
+// geometry is generated entirely from vertexIndex. The vertex() stage uses
+// float arithmetic throughout so all four backends (WGSL, GLSL, GLES, Metal)
+// receive identical scalar code with no uint-to-float promotion issues.
+//
+// The rounded-corner path from pool.vertex.sel is intentionally omitted: it
+// requires var/if/for control flow inside the vertex() stage, which the
+// selena vertex-stage constraint (let-chain + varying writes only) forbids.
+//
+// Textures: tileTexture (surface pattern), causticTexture, shadowTexture.
+// State: water simulation height-field accessed via stateAt(uv) in both stages.
+//
+// Key WGSL scalar-splat cases exercised by this shader:
+//   max(vec3, float) in the lighting: max(dot(...), 0.0) is float+float so
+//   no splat, but max(poolWidth*2, 0.001) is float+float too -- no splat here
+//   since both sides are scalar. The stateAt path exercises vec+scalar-exempt
+//   mix (mix(base, wet, below) where below is float).
+material WaterPool {
+    param poolWidth  : float = 1.5
+    param poolLength : float = 1.5
+    param poolHeight : float = 0.3
+    param lightDir   : vec3
+
+    param tileTexture    : texture2d
+    param causticTexture : texture2d
+    param shadowTexture  : texture2d
+
+    state height
+
+    varying vWorldPos : vec3
+    varying vNormal   : vec3
+    varying vTileUV   : vec2
+    varying vWaterUV  : vec2
+    varying vFace     : float
+
+    vertex() -> vec4 {
+        let fi    = float(vertexIndex)
+        let fv    = floor(fi / 6.0)
+        let faceF = min(fv, 4.0)
+        let cu    = fi - fv * 6.0
+        let uf    = cu == 1.0 ? 1.0 : cu == 2.0 ? 1.0 : cu == 4.0 ? 1.0 : 0.0
+        let vf    = cu == 2.0 ? 1.0 : cu == 4.0 ? 1.0 : cu == 5.0 ? 1.0 : 0.0
+        let hw    = max(poolWidth, 0.001)
+        let hl    = max(poolLength, 0.001)
+        let flY   = -max(poolHeight, 0.001)
+        let rimY  = max(poolHeight * 0.1667, 0.025)
+        let wx    = faceF == 2.0 ? mix(hw, -hw, uf) : faceF == 3.0 ? hw : faceF == 4.0 ? -hw : mix(-hw, hw, uf)
+        let wy    = faceF == 0.0 ? flY : mix(flY, rimY, vf)
+        let wz    = faceF == 1.0 ? hl : faceF == 2.0 ? -hl : faceF == 3.0 ? mix(hl, -hl, uf) : faceF == 4.0 ? mix(-hl, hl, uf) : mix(-hl, hl, vf)
+        let nx    = faceF == 3.0 ? -1.0 : faceF == 4.0 ? 1.0 : 0.0
+        let ny    = faceF == 0.0 ? 1.0 : 0.0
+        let nz    = faceF == 1.0 ? -1.0 : faceF == 2.0 ? 1.0 : 0.0
+        let tileX = faceF == 3.0 ? wz * 0.42 : faceF == 4.0 ? wz * 0.42 : wx * 0.42
+        let tileY = faceF == 0.0 ? wz * 0.42 : wy * 0.72
+        let duw   = max(poolWidth * 2.0, 0.001)
+        let dul   = max(poolLength * 2.0, 0.001)
+        vWorldPos = vec3f(wx, wy, wz)
+        vNormal   = vec3f(nx, ny, nz)
+        vTileUV   = vec2f(tileX, tileY)
+        vWaterUV  = vec2f(wx / duw + 0.5, wz / dul + 0.5)
+        vFace     = faceF
+        return mvp * vec4f(wx, wy, wz, 1.0)
+    }
+
+    surface(geo) -> color {
+        let wuv      = clamp(geo.vWaterUV, vec2f(0.0, 0.0), vec2f(1.0, 1.0))
+        let info     = stateAt(wuv)
+        let wh       = info.x * poolHeight
+        let ldir     = normalize(lightDir)
+        let refr     = refract(-ldir, vec3f(0.0, 1.0, 0.0), 1.0 / 1.333)
+        let refY     = abs(refr.y) > 0.05 ? refr.y : 0.05
+        let duw      = max(poolWidth * 2.0, 0.001)
+        let dul      = max(poolLength * 2.0, 0.001)
+        let projX    = (geo.vWorldPos.x - geo.vWorldPos.y * refr.x / refY) / duw
+        let projZ    = (geo.vWorldPos.z - geo.vWorldPos.y * refr.z / refY) / dul
+        let cUV      = clamp(vec2f(projX * 0.75 + 0.5, projZ * 0.75 + 0.5), vec2f(0.0, 0.0), vec2f(1.0, 1.0))
+        let tileSamp = sample(tileTexture, geo.vTileUV)
+        let causticS = sample(causticTexture, cUV)
+        let shadowS  = sample(shadowTexture, wuv)
+        let tileRGB  = tileSamp.xyz
+        let caustic  = causticS.xyz
+        let shadowV  = shadowS.x
+        let nrm      = normalize(geo.vNormal)
+        let diffuse  = max(dot(nrm, normalize(-refr)), 0.0)
+        let below    = geo.vWorldPos.y < wh ? 1.0 : 0.0
+        let distFade = 1.0 / max(length(geo.vWorldPos) * 0.52, 1.0)
+        let dryLight = 0.46 + diffuse * 0.34
+        let causticE = dot(caustic, vec3f(0.34, 0.44, 0.22))
+        let base     = tileRGB * dryLight * distFade
+        let wet      = base * vec3f(0.42, 0.92, 1.0) * (0.72 + diffuse * 0.22) + caustic * (1.55 + causticE * 0.6)
+        let col0     = mix(base, wet, below)
+        let col1     = col0 * (1.0 - clamp(shadowV, 0.0, 1.0) * 0.62)
+        let rim      = smoothstep(0.0, 0.12, geo.vWorldPos.y)
+        let rimAdd   = vec3f(0.05, 0.035, 0.018)
+        let col2     = mix(col1, col1 + rimAdd, rim * (1.0 - below))
+        return rgb(col2.x, col2.y, col2.z)
+    }
+}

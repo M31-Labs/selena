@@ -1,0 +1,21 @@
+material MathExt {
+    param ior : float
+
+    surface(geo) -> color {
+        let st   = geo.uv
+        let n    = normalize(geo.worldNormal)
+        let ri   = refract(n, n, ior)
+        let m    = mod(st.x, 0.5)
+        let rnd  = round(st.y)
+        let a1   = atan(st.x)
+        let a2   = atan2(st.y, st.x)
+        let ai   = asin(m)
+        let ac   = acos(m)
+        let dx   = dpdx(st.x)
+        let dy   = dpdy(st.y)
+        let fw   = fwidth(m)
+        let v3   = vec3f(m, rnd, a1)
+        let v4   = vec4f(st, ai, ac)
+        return ri + v3 * (a2 + dx + dy + fw) + v4.xyz
+    }
+}

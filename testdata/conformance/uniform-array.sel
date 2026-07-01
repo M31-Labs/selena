@@ -1,0 +1,13 @@
+material UniformArray {
+    param tint : vec4
+    param items : array<vec4, 8>
+
+    surface(geo) -> color {
+        var acc = tint
+        for (var i = 0i; i < 8i; i = i + 1i) {
+            let item = items[i]
+            acc = acc + item
+        }
+        return acc.rgb
+    }
+}

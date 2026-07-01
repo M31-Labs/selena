@@ -10,6 +10,10 @@ func hirToIRType(t hir.Type) (ir.Type, bool) {
 	switch t {
 	case hir.Float:
 		return ir.Float, true
+	case hir.Int:
+		return ir.Int, true
+	case hir.Uint:
+		return ir.Uint, true
 	case hir.Vec2:
 		return ir.Vec2, true
 	case hir.Vec3, hir.Color:
@@ -46,27 +50,37 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 		return lowerPoints(m)
 	case hir.KindPost:
 		return lowerPost(m)
+	case hir.KindFeedback:
+		return lowerFeedback(m)
 	default:
 		return lowerMesh(m)
 	}
 }
 
 // lowerMesh compiles a mesh material — the original Lower implementation.
-// It synthesizes the default vertex transform and the fragment surface.
+// It synthesizes the default vertex transform and the fragment surface. When the
+// material authors its own vertex() stage it dispatches to lowerMeshWithVertex
+// (B4); the default-transform path below is unchanged so legacy mesh materials
+// emit byte-identically.
 func lowerMesh(m hir.Material) (ir.Module, bindings.Layout, error) {
 	if m.Vertex != nil {
+		return lowerMeshWithVertex(m)
+	}
+	if len(m.Varyings) > 0 {
 		return ir.Module{}, bindings.Layout{}, diagnostic(
-			CodeUnsupportedFeat,
-			m.Vertex.Span,
-			"vertex hooks are not supported yet; Selena currently emits the default transform",
+			CodeUnsupportedFeat, m.Varyings[0].Span,
+			"varying %q requires a vertex() stage to write it", m.Varyings[0].Name,
 		)
 	}
+	if err := rejectMeshStateField(m); err != nil {
+		return ir.Module{}, bindings.Layout{}, err
+	}
 
-	paramKind, err := validateParams(m.Params)
+	paramKind, err := validateParams(m.Params, m.Context)
 	if err != nil {
 		return ir.Module{}, bindings.Layout{}, err
 	}
-	uniforms, err := buildUniformPlan(m.Params)
+	uniforms, err := buildUniformPlan(m.Params, m.Context)
 	if err != nil {
 		return ir.Module{}, bindings.Layout{}, err
 	}
@@ -79,8 +93,9 @@ func lowerMesh(m hir.Material) (ir.Module, bindings.Layout, error) {
 		return ir.Module{}, bindings.Layout{}, err
 	}
 
-	rs := &resolver{paramKind: paramKind, uniformOf: uniforms.uniformOf, varyingOf: interfaces.varyingOf, geo: m.Surface.Geo}
-	tp := &typer{paramKind: paramKind, geo: m.Surface.Geo, locals: map[string]ir.Type{}}
+	rs := &resolver{paramKind: paramKind, uniformOf: uniforms.uniformOf, varyingOf: interfaces.varyingOf, geo: m.Surface.Geo, allowDiscard: true}
+	tp := &typer{paramKind: paramKind, geo: m.Surface.Geo, locals: map[string]ir.Type{}, mutableLocals: map[string]bool{}, paramArrays: uniforms.paramArrays}
+	rs.tp = tp
 
 	fragBody, fragOut, err := lowerFragment(m.Surface, reserved, rs, tp)
 	if err != nil {
@@ -92,30 +107,34 @@ func lowerMesh(m hir.Material) (ir.Module, bindings.Layout, error) {
 
 	irTextures := make([]ir.Texture, len(uniforms.textures))
 	for i, t := range uniforms.textures {
-		irTextures[i] = ir.Texture{Name: t}
+		irTextures[i] = ir.Texture{Name: t, Cube: uniforms.cubeTextures[t]}
 	}
 
 	mod := ir.Module{
-		Name:       m.Name,
-		Kind:       ir.KindMesh,
-		Uniforms:   toBindings(uniforms.uniforms),
-		Attributes: interfaces.attributes,
-		Varyings:   interfaces.varyings,
-		Textures:   irTextures,
-		Vertex:     ir.Stage{Body: interfaces.vertexBody, Output: vertexOut},
-		Fragment:   ir.Stage{Body: fragBody, Output: fragOut},
+		Name:          m.Name,
+		Kind:          ir.KindMesh,
+		Uniforms:      toBindings(uniforms.uniforms),
+		ArrayUniforms: toArrayBindings(uniforms.uniforms),
+		Attributes:    interfaces.attributes,
+		Varyings:      interfaces.varyings,
+		Textures:      irTextures,
+		Vertex:        ir.Stage{Body: interfaces.vertexBody, Output: vertexOut},
+		Fragment:      ir.Stage{Body: fragBody, Output: fragOut},
 	}
+	ub := bindings.ComputeUniformBlock(uniforms.uniforms)
+	stampContextClass(ub.Fields, uniforms.contextNames)
 	layout := bindings.Layout{
 		SchemaVersion:   bindings.DescriptorSchemaVersion,
 		LanguageVersion: bindings.LanguageVersion,
 		Material:        m.Name,
 		Kind:            bindings.SurfaceKindMesh,
 		EntryPoints:     bindings.EntryPoints{Vertex: "vertexMain", Fragment: "fragmentMain"},
-		UniformBlock:    bindings.ComputeUniformBlock(uniforms.uniforms),
+		UniformBlock:    ub,
 		Attributes:      toAttrs(interfaces.attributes),
-		Textures:        bindings.ComputeTextures(uniforms.textures),
+		Textures:        bindings.ComputeTexturesMixed(uniforms.textures, uniforms.cubeTextures),
 		WGSL:            bindings.WGSLBinding{Group: 0, Binding: 0},
 		Metal:           bindings.MetalBinding{Buffer: 0},
+		Context:         uniforms.contextNames,
 	}
 	if layout.Textures == nil {
 		layout.Textures = []bindings.Texture{}
@@ -149,11 +168,22 @@ func lowerPoints(m hir.Material) (ir.Module, bindings.Layout, error) {
 		if _, dup := paramKind[p.Name]; dup {
 			return ir.Module{}, bindings.Layout{}, diagnostic(CodeDuplicateParam, p.Span, "duplicate param %q", p.Name)
 		}
+		if p.IsArray {
+			return ir.Module{}, bindings.Layout{}, diagnostic(
+				CodeUnsupportedType, p.Span,
+				"param %q: array params are not yet supported in points materials", p.Name,
+			)
+		}
 		switch p.Type {
 		case hir.Texture2D:
 			return ir.Module{}, bindings.Layout{}, diagnostic(
 				CodeUnsupportedType, p.Span,
 				"param %q: texture2d params are not supported in points materials", p.Name,
+			)
+		case hir.TextureCube:
+			return ir.Module{}, bindings.Layout{}, diagnostic(
+				CodeUnsupportedType, p.Span,
+				"param %q: textureCube params are not supported in points materials", p.Name,
 			)
 		case hir.Sun:
 			return ir.Module{}, bindings.Layout{}, diagnostic(
@@ -178,6 +208,17 @@ func lowerPoints(m hir.Material) (ir.Module, bindings.Layout, error) {
 		}
 	}
 
+	// Context fields (§3.3 C6): points has no array-uniform wiring yet (array
+	// params are rejected above), so allowArrays is false here.
+	seen := map[string]bool{}
+	for k := range paramKind {
+		seen[k] = true
+	}
+	contextNames, err := lowerContextFields(m.Context, seen, paramKind, nil, uniformOf, &uniformsList, false)
+	if err != nil {
+		return ir.Module{}, bindings.Layout{}, err
+	}
+
 	// Build the varyings resolver from point geometry fields.
 	varyingOf := map[string]string{}
 	var varyings []ir.Binding
@@ -188,18 +229,20 @@ func lowerPoints(m hir.Material) (ir.Module, bindings.Layout, error) {
 	}
 
 	rs := &resolver{
-		paramKind:  paramKind,
-		uniformOf:  uniformOf,
-		varyingOf:  varyingOf,
-		geo:        m.Surface.Geo,
-		geoFields:  pointGeometry,
-	}
-	tp := &typer{
 		paramKind: paramKind,
+		uniformOf: uniformOf,
+		varyingOf: varyingOf,
 		geo:       m.Surface.Geo,
-		locals:    map[string]ir.Type{},
 		geoFields: pointGeometry,
 	}
+	tp := &typer{
+		paramKind:     paramKind,
+		geo:           m.Surface.Geo,
+		locals:        map[string]ir.Type{},
+		mutableLocals: map[string]bool{},
+		geoFields:     pointGeometry,
+	}
+	rs.tp = tp
 
 	uniforms := uniformPlan{uniforms: uniformsList, defaults: defaults, uniformOf: uniformOf}
 	reserved, err := interfaceNames(uniforms.uniforms, nil, nil, varyings)
@@ -222,12 +265,13 @@ func lowerPoints(m hir.Material) (ir.Module, bindings.Layout, error) {
 
 	ub := bindings.ComputeUniformBlock(uniformsList)
 	ub.Defaults = defaults
+	stampContextClass(ub.Fields, contextNames)
 	// Points WGSL emits two vertex entry points:
 	//   vertexMain        — reads a_position/a_size/a_color attributes (static layers)
 	//   vertexStorageMain — reads from storage buffer particles[] (particle render)
 	// GLSL/GLES emit only the attribute form.
 	layout := bindings.Layout{
-		SchemaVersion: bindings.DescriptorSchemaVersion,
+		SchemaVersion:   bindings.DescriptorSchemaVersion,
 		LanguageVersion: bindings.LanguageVersion,
 		Material:        m.Name,
 		Kind:            bindings.SurfaceKindPoints,
@@ -241,6 +285,7 @@ func lowerPoints(m hir.Material) (ir.Module, bindings.Layout, error) {
 		Textures:     []bindings.Texture{},
 		WGSL:         bindings.WGSLBinding{Group: 1, Binding: 0},
 		Metal:        bindings.MetalBinding{Buffer: 1},
+		Context:      contextNames,
 	}
 	return mod, layout, nil
 }
@@ -256,9 +301,12 @@ func lowerPost(m hir.Material) (ir.Module, bindings.Layout, error) {
 		)
 	}
 
-	// Only scalar/vector/color params; no textures, no Sun, in post materials.
-	// (User textures are not currently supported; engine provides sceneColor/sceneDepth.)
+	// Only scalar/vector/color params and fixed-size array params; no textures, no
+	// Sun, in post materials. (User textures are not currently supported; engine
+	// provides sceneColor/sceneDepth.) Array params let a fullscreen pass loop over
+	// a uniform array (mesh/feedback already support them).
 	paramKind := map[string]hir.Type{}
+	paramArrays := map[string]arrayInfo{}
 	var uniformsList []bindings.NamedType
 	var defaults []bindings.DefaultValue
 	uniformOf := map[string]string{}
@@ -270,11 +318,34 @@ func lowerPost(m hir.Material) (ir.Module, bindings.Layout, error) {
 		if _, dup := paramKind[p.Name]; dup {
 			return ir.Module{}, bindings.Layout{}, diagnostic(CodeDuplicateParam, p.Span, "duplicate param %q", p.Name)
 		}
+		if _, dup := paramArrays[p.Name]; dup {
+			return ir.Module{}, bindings.Layout{}, diagnostic(CodeDuplicateParam, p.Span, "duplicate param %q", p.Name)
+		}
+		if p.IsArray {
+			if p.Default != nil {
+				return ir.Module{}, bindings.Layout{}, diagnostic(CodeInvalidDefault, hir.ExprSpan(p.Default), "param %q: defaults for array params are not supported", p.Name)
+			}
+			elemType, ok := hirToIRType(p.Type)
+			if !ok {
+				return ir.Module{}, bindings.Layout{}, diagnostic(CodeUnsupportedType, p.Span, "param %q: unsupported array element type %q", p.Name, p.Type)
+			}
+			if p.ArraySize <= 0 {
+				return ir.Module{}, bindings.Layout{}, diagnostic(CodeUnsupportedType, p.Span, "param %q: array size must be positive", p.Name)
+			}
+			paramArrays[p.Name] = arrayInfo{elemType: elemType, size: p.ArraySize}
+			uniformsList = append(uniformsList, bindings.NamedType{Name: p.Name, Type: elemType, Count: p.ArraySize})
+			continue
+		}
 		switch p.Type {
 		case hir.Texture2D:
 			return ir.Module{}, bindings.Layout{}, diagnostic(
 				CodeUnsupportedType, p.Span,
 				"param %q: texture2d params are not supported in post materials (use sceneColor(uv) instead)", p.Name,
+			)
+		case hir.TextureCube:
+			return ir.Module{}, bindings.Layout{}, diagnostic(
+				CodeUnsupportedType, p.Span,
+				"param %q: textureCube params are not supported in post materials", p.Name,
 			)
 		case hir.Sun:
 			return ir.Module{}, bindings.Layout{}, diagnostic(
@@ -299,6 +370,20 @@ func lowerPost(m hir.Material) (ir.Module, bindings.Layout, error) {
 		}
 	}
 
+	// Context fields (§3.3 C6): post already wires ArrayUniforms for array
+	// params, so array context fields are allowed here too.
+	seen := map[string]bool{}
+	for k := range paramKind {
+		seen[k] = true
+	}
+	for k := range paramArrays {
+		seen[k] = true
+	}
+	contextNames, err := lowerContextFields(m.Context, seen, paramKind, paramArrays, uniformOf, &uniformsList, true)
+	if err != nil {
+		return ir.Module{}, bindings.Layout{}, err
+	}
+
 	// Post surface only exposes "uv" as a geo field.
 	varyingOf := map[string]string{
 		"uv": postGeometry["uv"].varying,
@@ -308,20 +393,24 @@ func lowerPost(m hir.Material) (ir.Module, bindings.Layout, error) {
 	}
 
 	rs := &resolver{
-		paramKind:       paramKind,
-		uniformOf:       uniformOf,
-		varyingOf:       varyingOf,
-		geo:             m.Surface.Geo,
-		geoFields:       postGeometry,
+		paramKind:        paramKind,
+		uniformOf:        uniformOf,
+		varyingOf:        varyingOf,
+		geo:              m.Surface.Geo,
+		geoFields:        postGeometry,
 		allowSceneSample: true,
+		allowDiscard:     true,
 	}
 	tp := &typer{
-		paramKind:       paramKind,
-		geo:             m.Surface.Geo,
-		locals:          map[string]ir.Type{},
-		geoFields:       postGeometry,
+		paramKind:        paramKind,
+		geo:              m.Surface.Geo,
+		locals:           map[string]ir.Type{},
+		mutableLocals:    map[string]bool{},
+		geoFields:        postGeometry,
 		allowSceneSample: true,
+		paramArrays:      paramArrays,
 	}
+	rs.tp = tp
 
 	uniforms := uniformPlan{uniforms: uniformsList, defaults: defaults, uniformOf: uniformOf}
 	reserved, err := interfaceNames(uniforms.uniforms, nil, nil, varyings)
@@ -335,17 +424,19 @@ func lowerPost(m hir.Material) (ir.Module, bindings.Layout, error) {
 	}
 
 	mod := ir.Module{
-		Name:     m.Name,
-		Kind:     ir.KindPost,
-		Uniforms: toBindings(uniformsList),
-		Varyings: varyings,
-		Fragment: ir.Stage{Body: fragBody, Output: fragOut},
+		Name:          m.Name,
+		Kind:          ir.KindPost,
+		Uniforms:      toBindings(uniformsList),
+		ArrayUniforms: toArrayBindings(uniformsList),
+		Varyings:      varyings,
+		Fragment:      ir.Stage{Body: fragBody, Output: fragOut},
 	}
 
 	// For post passes: engine scene textures live at @group(0) @binding(0/1/2/3).
 	// User uniforms start at @group(0) @binding(4) (WGSL) / buffer(1) (Metal).
 	ub := bindings.ComputeUniformBlock(uniformsList)
 	ub.Defaults = defaults
+	stampContextClass(ub.Fields, contextNames)
 
 	// Post user-UBO slot is always @group(0) @binding(4) / Metal buffer(1),
 	// regardless of whether the author declared any params. The {0,0} default
@@ -366,7 +457,7 @@ func lowerPost(m hir.Material) (ir.Module, bindings.Layout, error) {
 		Textures:        []bindings.Texture{},
 		WGSL:            wgslBinding,
 		Metal:           metalBinding,
+		Context:         contextNames,
 	}
 	return mod, layout, nil
 }
-

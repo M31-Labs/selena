@@ -90,9 +90,20 @@ func uniformValues(layout bindings.Layout, omitDefaults bool) map[string]any {
 		if defaults[field.Name] {
 			continue
 		}
-		out[field.Name] = zeroValue(field.Type)
+		out[field.Name] = zeroValueField(field)
 	}
 	return out
+}
+
+// zeroValueField returns a zero-value host representation for the given
+// uniform field. For array fields (Count > 1), it returns a flat []float32
+// slice with Count * componentsPerElement zeros.
+func zeroValueField(f bindings.Field) any {
+	if f.Count > 1 {
+		comps := componentCountForType(f.Type)
+		return make([]float32, comps*f.Count)
+	}
+	return zeroValue(f.Type)
 }
 
 func zeroValue(t string) any {
@@ -111,5 +122,26 @@ func zeroValue(t string) any {
 		return []float32{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 	default:
 		return float32(0)
+	}
+}
+
+// componentCountForType returns the number of float32 components per element
+// for the given type string.
+func componentCountForType(t string) int {
+	switch t {
+	case "float":
+		return 1
+	case "vec2":
+		return 2
+	case "vec3":
+		return 3
+	case "vec4":
+		return 4
+	case "mat3":
+		return 9
+	case "mat4":
+		return 16
+	default:
+		return 1
 	}
 }

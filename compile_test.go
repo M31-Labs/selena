@@ -215,12 +215,16 @@ func TestCompileErrorRejectsReservedNames(t *testing.T) {
 	}
 }
 
-func TestCompileProgramRejectsUnsupportedVertexHook(t *testing.T) {
+// TestCompileProgramRejectsVertexHookOnNonMesh verifies the non-mesh kinds still
+// reject author vertex() hooks (mesh/general supports them as of B4).
+func TestCompileProgramRejectsVertexHookOnNonMesh(t *testing.T) {
 	_, err := CompileProgram(hir.Program{Materials: []hir.Material{{
 		Name: "Bad",
+		Kind: hir.KindPoints,
 		Vertex: &hir.Func{
-			Span: hir.Span{Start: hir.Position{Line: 2, Column: 5}},
-			Geo:  "geo",
+			Span:   hir.Span{Start: hir.Position{Line: 2, Column: 5}},
+			Geo:    "geo",
+			Result: hir.Call{Func: "vec4f", Args: []hir.Expr{hir.Lit{Value: 0}, hir.Lit{Value: 0}, hir.Lit{Value: 0}, hir.Lit{Value: 1}}},
 		},
 		Surface: hir.Func{
 			Geo:    "geo",
@@ -241,8 +245,74 @@ func TestCompileProgramRejectsUnsupportedVertexHook(t *testing.T) {
 	if d.Range.Start.Line != 2 || d.Range.Start.Column != 5 {
 		t.Fatalf("range start = %d:%d, want 2:5", d.Range.Start.Line, d.Range.Start.Column)
 	}
-	if !strings.Contains(d.Hint, "vertex-hook lowering") {
-		t.Fatalf("diagnostic hint = %q", d.Hint)
+	if !strings.Contains(d.Message, "not supported in points") {
+		t.Fatalf("diagnostic message = %q", d.Message)
+	}
+}
+
+// TestCompileUniformBlockOffsetsMatchEmittedWGSLOrderForScalarAfterArray is an
+// end-to-end regression test for a real bug: bindings.ComputeUniformBlock used
+// to pack uniform-block fields in raw declaration order, but every backend
+// emitter (WGSL/GLSL/GLES/Metal) renders scalars/vectors/matrices first and
+// fixed-size arrays last (see emit/wgsl/wgsl.go emitMesh, which writes
+// m.Uniforms then m.ArrayUniforms into one struct). A material declaring a
+// scalar AFTER an array — like this one's "b" — used to get a descriptor
+// whose "b" offset landed after "arr", even though the emitted struct puts it
+// before. This locks the offsets to agree with the emitted struct's actual
+// member order.
+func TestCompileUniformBlockOffsetsMatchEmittedWGSLOrderForScalarAfterArray(t *testing.T) {
+	src := []byte(`material ScalarAfterArray {
+    param a : float
+    param arr : array<vec4, 4>
+    param b : float
+
+    surface(geo) -> color {
+        let item = arr[0i]
+        return rgb(a + b, item.x, item.y)
+    }
+}`)
+	res, err := Compile(src, CompileOptions{Targets: []Target{TargetWGSL}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wgslArtifact, ok := res.Artifact(TargetWGSL)
+	if !ok {
+		t.Fatal("missing WGSL artifact")
+	}
+
+	// Confirm the emitted struct really does put a,b (scalars) before arr
+	// (array) — pins the emitter behavior this test's invariant depends on.
+	idxA := strings.Index(wgslArtifact.Source, "\n  a : f32,\n")
+	idxB := strings.Index(wgslArtifact.Source, "\n  b : f32,\n")
+	idxArr := strings.Index(wgslArtifact.Source, "\n  arr : array<vec4<f32>, 4>,\n")
+	if idxA < 0 || idxB < 0 || idxArr < 0 {
+		t.Fatalf("could not locate uniform members in emitted WGSL:\n%s", wgslArtifact.Source)
+	}
+	if !(idxA < idxArr && idxB < idxArr) {
+		t.Fatalf("expected emitted WGSL struct to order scalars a,b before array arr; got a=%d b=%d arr=%d in:\n%s", idxA, idxB, idxArr, wgslArtifact.Source)
+	}
+
+	// The compiled descriptor's byte offsets must agree with that emitted
+	// order: a and b must be offset before arr.
+	offsets := map[string]int{}
+	for _, f := range res.Layout.UniformBlock.Fields {
+		offsets[f.Name] = f.Offset
+	}
+	oa, ok := offsets["a"]
+	if !ok {
+		t.Fatal("descriptor missing field a")
+	}
+	ob, ok := offsets["b"]
+	if !ok {
+		t.Fatal("descriptor missing field b")
+	}
+	oarr, ok := offsets["arr"]
+	if !ok {
+		t.Fatal("descriptor missing field arr")
+	}
+	if !(oa < oarr && ob < oarr) {
+		t.Fatalf("descriptor offsets disagree with emitted struct order: a@%d b@%d arr@%d (want a,b before arr)", oa, ob, oarr)
 	}
 }
 

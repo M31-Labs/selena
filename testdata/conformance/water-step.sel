@@ -1,0 +1,18 @@
+// water-step: a heightfield ripple simulation step authored once as a
+// `kind feedback` material. From this single source Selena emits a WGSL
+// @compute kernel (WebGPU), a GLSL/GLES fullscreen fragment ping-pong pass
+// (WebGL2), and a Metal compute kernel. The per-cell state vec4 packs
+// (height, velocity, normalX, normalZ); each step reads the 4-neighbour
+// stencil via state(dx, dy) and advances the wave.
+material WaterStep kind feedback {
+    param damping : float = 0.99
+    state water
+
+    feedback(cell) -> vec4 {
+        let here = state(0, 0)
+        let avg  = (state(1, 0) + state(-1, 0) + state(0, 1) + state(0, -1)) * 0.25
+        let vel  = (here.y + (avg.x - here.x)) * damping
+        let h    = here.x + vel
+        return vec4f(h, vel, here.z, here.w)
+    }
+}

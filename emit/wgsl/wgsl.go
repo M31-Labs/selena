@@ -19,27 +19,104 @@ func Emit(m ir.Module) (string, error) {
 		return emitPoints(m)
 	case ir.KindPost:
 		return emitPost(m)
+	case ir.KindFeedback:
+		return emitFeedback(m)
 	default:
 		return emitMesh(m)
 	}
 }
 
-// emitMesh is the original mesh pipeline emitter.
-func emitMesh(m ir.Module) (string, error) {
+// emitFeedback emits a WGSL compute kernel for a feedback-kind simulation step.
+//
+// One @compute @workgroup_size(64) entry computes the cell index from the
+// invocation id (guarded by gridLen), evaluates the feedback body — where each
+// state(dx, dy) read lowers to an inState[...] gather — and writes the result
+// to outState[cellIndex].
+//
+// Binding contract (@group(0)):
+//
+//	@binding(0)  GridUniforms { gridWidth, gridLen }
+//	@binding(1)  inState  : array<vec4<f32>>  (storage, read)      — previous state
+//	@binding(2)  outState : array<vec4<f32>>  (storage, read_write) — next state
+//	@binding(3)  UserUniforms (from m.Uniforms, if any)
+//
+// The host ping-pongs the two storage buffers each step (swap in/out).
+func emitFeedback(m ir.Module) (string, error) {
 	var b strings.Builder
 
-	if len(m.Uniforms) > 0 {
+	// Kind-injected grid uniforms + the statefield ping-pong buffers.
+	b.WriteString("struct GridUniforms {\n  gridWidth : u32,\n  gridLen   : u32,\n};\n")
+	b.WriteString("@group(0) @binding(0) var<uniform> _grid : GridUniforms;\n")
+	b.WriteString("@group(0) @binding(1) var<storage, read> inState : array<vec4<f32>>;\n")
+	b.WriteString("@group(0) @binding(2) var<storage, read_write> outState : array<vec4<f32>>;\n")
+
+	// User uniforms at @group(0) @binding(3).
+	if len(m.Uniforms) > 0 || len(m.ArrayUniforms) > 0 {
+		b.WriteString("\nstruct UserUniforms {\n")
+		for _, u := range m.Uniforms {
+			fmt.Fprintf(&b, "  %s : %s,\n", u.Name, typeName(u.Type))
+		}
+		for _, au := range m.ArrayUniforms {
+			fmt.Fprintf(&b, "  %s : array<%s, %d>,\n", au.Name, typeName(au.ElemType), au.Count)
+		}
+		b.WriteString("};\n@group(0) @binding(3) var<uniform> u : UserUniforms;\n")
+	}
+
+	allUniforms := internal.NameSet(m.Uniforms)
+	for _, au := range m.ArrayUniforms {
+		allUniforms[au.Name] = true
+	}
+	fs := internal.Resolver{
+		Dialect:   prismDialect,
+		Uniforms:  allUniforms,
+		Fragment:  true,
+		Qualified: true,
+		StateSampleFn: func(dx, dy int64) string {
+			return fmt.Sprintf(
+				"inState[clamp(i32(cellIndex) + (%d) + (%d) * i32(_grid.gridWidth), 0, i32(_grid.gridLen) - 1)]",
+				dx, dy)
+		},
+		CellUVFn: func() string {
+			return "(vec2<f32>(f32(cellIndex % _grid.gridWidth), f32(cellIndex / _grid.gridWidth)) + vec2<f32>(0.5, 0.5)) / f32(_grid.gridWidth)"
+		},
+	}
+
+	b.WriteString("\n@compute @workgroup_size(64)\nfn computeMain(@builtin(global_invocation_id) gid : vec3<u32>) {\n")
+	b.WriteString("  let cellIndex = gid.x;\n")
+	b.WriteString("  if (cellIndex >= _grid.gridLen) { return; }\n")
+	internal.EmitStmtList(&b, m.Fragment.Body, fs, "  ", true)
+	fmt.Fprintf(&b, "  outState[cellIndex] = %s;\n}\n", ir.Print(m.Fragment.Output, fs))
+
+	return b.String(), nil
+}
+
+// emitMesh is the original mesh pipeline emitter.
+func emitMesh(m ir.Module) (string, error) {
+	if m.VertexAuthored {
+		return emitMeshAuthored(m)
+	}
+	var b strings.Builder
+
+	if len(m.Uniforms) > 0 || len(m.ArrayUniforms) > 0 {
 		b.WriteString("struct Uniforms {\n")
 		for _, u := range m.Uniforms {
 			fmt.Fprintf(&b, "  %s : %s,\n", u.Name, typeName(u.Type))
+		}
+		for _, au := range m.ArrayUniforms {
+			fmt.Fprintf(&b, "  %s : array<%s, %d>,\n", au.Name, typeName(au.ElemType), au.Count)
 		}
 		b.WriteString("};\n@group(0) @binding(0) var<uniform> u : Uniforms;\n\n")
 	}
 
 	// Textures: WGSL binds the texture and its sampler separately. Convention:
 	// uniform block is binding 0, then texture i takes 1+2i and its sampler 2+2i.
+	// Cube-map textures use texture_cube<f32>; regular 2D textures use texture_2d<f32>.
 	for i, t := range m.Textures {
-		fmt.Fprintf(&b, "@group(0) @binding(%d) var %s : texture_2d<f32>;\n", 1+2*i, t.Name)
+		if t.Cube {
+			fmt.Fprintf(&b, "@group(0) @binding(%d) var %s : texture_cube<f32>;\n", 1+2*i, t.Name)
+		} else {
+			fmt.Fprintf(&b, "@group(0) @binding(%d) var %s : texture_2d<f32>;\n", 1+2*i, t.Name)
+		}
 		fmt.Fprintf(&b, "@group(0) @binding(%d) var %sSampler : sampler;\n", 2+2*i, t.Name)
 	}
 	if len(m.Textures) > 0 {
@@ -73,12 +150,101 @@ func emitMesh(m ir.Module) (string, error) {
 	// Fragment stage.
 	fs := internal.NewQualified(prismDialect, m, true)
 	b.WriteString("@fragment\nfn fragmentMain(in : VertexOutput) -> @location(0) vec4<f32> {\n")
-	for _, s := range m.Fragment.Body {
-		fmt.Fprintf(&b, "  let %s = %s;\n", s.Target, ir.Print(s.Value, fs))
-	}
+	internal.EmitStmtList(&b, m.Fragment.Body, fs, "  ", true)
 	fmt.Fprintf(&b, "  return %s;\n}\n", ir.Print(m.Fragment.Output, fs))
 
 	return b.String(), nil
+}
+
+// emitMeshAuthored emits a mesh material that authors its own vertex() stage (B4).
+//
+// The vertex entry takes its index source from @builtin(vertex_index) (procedural
+// geometry) and/or per-vertex attributes, computes the clip-space position from
+// the author body, and writes author-declared @location varyings into
+// VertexOutput. The fragment entry reads those varyings. An optional statefield
+// adds a read-only inState storage buffer + a StateGrid uniform addressed by
+// stateAt(uv). Legacy mesh materials go through emitMesh and are byte-identical.
+func emitMeshAuthored(m ir.Module) (string, error) {
+	var b strings.Builder
+
+	if len(m.Uniforms) > 0 || len(m.ArrayUniforms) > 0 {
+		b.WriteString("struct Uniforms {\n")
+		for _, u := range m.Uniforms {
+			fmt.Fprintf(&b, "  %s : %s,\n", u.Name, typeName(u.Type))
+		}
+		for _, au := range m.ArrayUniforms {
+			fmt.Fprintf(&b, "  %s : array<%s, %d>,\n", au.Name, typeName(au.ElemType), au.Count)
+		}
+		b.WriteString("};\n@group(0) @binding(0) var<uniform> u : Uniforms;\n\n")
+	}
+
+	for i, t := range m.Textures {
+		if t.Cube {
+			fmt.Fprintf(&b, "@group(0) @binding(%d) var %s : texture_cube<f32>;\n", 1+2*i, t.Name)
+		} else {
+			fmt.Fprintf(&b, "@group(0) @binding(%d) var %s : texture_2d<f32>;\n", 1+2*i, t.Name)
+		}
+		fmt.Fprintf(&b, "@group(0) @binding(%d) var %sSampler : sampler;\n", 2+2*i, t.Name)
+	}
+	if len(m.Textures) > 0 {
+		b.WriteString("\n")
+	}
+
+	// Optional statefield read bindings (stateAt(uv)).
+	if m.StateField != "" {
+		base := 1 + 2*len(m.Textures)
+		b.WriteString("struct StateGrid {\n  gridWidth  : u32,\n  gridHeight : u32,\n};\n")
+		fmt.Fprintf(&b, "@group(0) @binding(%d) var<uniform> _stateGrid : StateGrid;\n", base)
+		fmt.Fprintf(&b, "@group(0) @binding(%d) var<storage, read> _inState : array<vec4<f32>>;\n\n", base+1)
+	}
+
+	// VertexInput only when attributes are actually read (procedural geometry has none).
+	if len(m.Attributes) > 0 {
+		b.WriteString("struct VertexInput {\n")
+		for i, a := range m.Attributes {
+			fmt.Fprintf(&b, "  @location(%d) %s : %s,\n", i, a.Name, typeName(a.Type))
+		}
+		b.WriteString("};\n\n")
+	}
+
+	b.WriteString("struct VertexOutput {\n  @builtin(position) position : vec4<f32>,\n")
+	for i, v := range m.Varyings {
+		fmt.Fprintf(&b, "  @location(%d) %s : %s,\n", i, v.Name, typeName(v.Type))
+	}
+	b.WriteString("};\n\n")
+
+	// Vertex stage.
+	vs := internal.NewQualified(prismDialect, m, false)
+	vs.StateSampleUVFn = wgslStateSampleUV
+	var vparams []string
+	if m.UsesVertexIndex {
+		vparams = append(vparams, "@builtin(vertex_index) vertexIndex : u32")
+	}
+	if len(m.Attributes) > 0 {
+		vparams = append(vparams, "in : VertexInput")
+	}
+	fmt.Fprintf(&b, "@vertex\nfn vertexMain(%s) -> VertexOutput {\n  var out : VertexOutput;\n", strings.Join(vparams, ", "))
+	internal.EmitStmtList(&b, m.Vertex.Body, vs, "  ", true)
+	fmt.Fprintf(&b, "  out.position = %s;\n  return out;\n}\n\n", ir.Print(m.Vertex.Output, vs))
+
+	// Fragment stage.
+	fs := internal.NewQualified(prismDialect, m, true)
+	fs.StateSampleUVFn = wgslStateSampleUV
+	b.WriteString("@fragment\nfn fragmentMain(in : VertexOutput) -> @location(0) vec4<f32> {\n")
+	internal.EmitStmtList(&b, m.Fragment.Body, fs, "  ", true)
+	fmt.Fprintf(&b, "  return %s;\n}\n", ir.Print(m.Fragment.Output, fs))
+
+	return b.String(), nil
+}
+
+// wgslStateSampleUV renders a stateAt(uv) read against the inState storage buffer,
+// addressing the grid by a uv -> linear cell index using the StateGrid dims.
+// Valid in both the vertex and fragment stages (WGSL allows storage reads in the
+// vertex stage, so no sampling/LOD restriction applies). B4.
+func wgslStateSampleUV(uv string) string {
+	return fmt.Sprintf(
+		"_inState[min(u32((%s).x * f32(_stateGrid.gridWidth)) + u32((%s).y * f32(_stateGrid.gridHeight)) * _stateGrid.gridWidth, _stateGrid.gridWidth * _stateGrid.gridHeight - 1u)]",
+		uv, uv)
 }
 
 // emitPoints emits a WGSL billboard quad points/particle surface.
@@ -138,10 +304,13 @@ struct ParticleInstance {
 `)
 
 	// User uniforms at @group(1) @binding(0).
-	if len(m.Uniforms) > 0 {
+	if len(m.Uniforms) > 0 || len(m.ArrayUniforms) > 0 {
 		b.WriteString("\nstruct UserUniforms {\n")
 		for _, u := range m.Uniforms {
 			fmt.Fprintf(&b, "  %s : %s,\n", u.Name, typeName(u.Type))
+		}
+		for _, au := range m.ArrayUniforms {
+			fmt.Fprintf(&b, "  %s : array<%s, %d>,\n", au.Name, typeName(au.ElemType), au.Count)
 		}
 		b.WriteString("};\n@group(1) @binding(0) var<uniform> u : UserUniforms;\n")
 	}
@@ -294,9 +463,7 @@ const _quadPos = array<vec2<f32>, 6>(
 	}
 
 	b.WriteString("@fragment fn fragmentMain(in : PointsInput) -> @location(0) vec4<f32> {\n")
-	for _, s := range m.Fragment.Body {
-		fmt.Fprintf(&b, "  let %s = %s;\n", s.Target, ir.Print(s.Value, fs))
-	}
+	internal.EmitStmtList(&b, m.Fragment.Body, fs, "  ", true)
 	fmt.Fprintf(&b, "  return %s;\n}\n", ir.Print(m.Fragment.Output, fs))
 
 	return b.String(), nil
@@ -325,10 +492,13 @@ func emitPost(m ir.Module) (string, error) {
 `)
 
 	// User uniforms at @group(0) @binding(4).
-	if len(m.Uniforms) > 0 {
+	if len(m.Uniforms) > 0 || len(m.ArrayUniforms) > 0 {
 		b.WriteString("\nstruct UserUniforms {\n")
 		for _, u := range m.Uniforms {
 			fmt.Fprintf(&b, "  %s : %s,\n", u.Name, typeName(u.Type))
+		}
+		for _, au := range m.ArrayUniforms {
+			fmt.Fprintf(&b, "  %s : array<%s, %d>,\n", au.Name, typeName(au.ElemType), au.Count)
 		}
 		b.WriteString("};\n@group(0) @binding(4) var<uniform> u : UserUniforms;\n")
 	}
@@ -364,10 +534,16 @@ const _postUVs = array<vec2<f32>, 3>(
 	b.WriteString("struct PostInput {\n  @location(0) v_uv : vec2<f32>,\n};\n\n")
 
 	// Build resolver. Varyings = v_uv. SceneSampleFn renders scene samples.
+	// Array uniforms must join the uniform name set so refs like spheres[i]
+	// resolve through the u. struct accessor (u.spheres[i]).
 	varyingSet := map[string]bool{"v_uv": true}
+	uniformSet := internal.NameSet(m.Uniforms)
+	for _, au := range m.ArrayUniforms {
+		uniformSet[au.Name] = true
+	}
 	fs := internal.Resolver{
 		Dialect:   prismDialect,
-		Uniforms:  internal.NameSet(m.Uniforms),
+		Uniforms:  uniformSet,
 		Varyings:  varyingSet,
 		Fragment:  true,
 		Qualified: true,
@@ -384,9 +560,7 @@ const _postUVs = array<vec2<f32>, 3>(
 	}
 
 	b.WriteString("@fragment fn fragmentMain(in : PostInput) -> @location(0) vec4<f32> {\n")
-	for _, s := range m.Fragment.Body {
-		fmt.Fprintf(&b, "  let %s = %s;\n", s.Target, ir.Print(s.Value, fs))
-	}
+	internal.EmitStmtList(&b, m.Fragment.Body, fs, "  ", true)
 	fmt.Fprintf(&b, "  return %s;\n}\n", ir.Print(m.Fragment.Output, fs))
 
 	return b.String(), nil

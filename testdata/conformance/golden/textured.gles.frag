@@ -1,5 +1,5 @@
 #version 300 es
-precision mediump float;
+precision highp float;
 uniform mat4 mvp;
 uniform mat3 normalMatrix;
 uniform float light_ambient;

@@ -1,0 +1,21 @@
+material Arrays {
+    param baseColor : color
+
+    surface(geo) -> color {
+        var a : array<float, 3>
+
+        for (var i = 0i; i < 3i; i = i + 1i) {
+            a[i] = 1.0
+        }
+
+        a[0i] = baseColor.r
+        a[1i] = baseColor.g
+        a[2i] = baseColor.b
+
+        let r = a[0i]
+        let g = a[1i]
+        let b = a[2i]
+
+        return rgb(r, g, b)
+    }
+}

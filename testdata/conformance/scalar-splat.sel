@@ -1,0 +1,24 @@
+// scalar-splat: conformance test for WGSL automatic scalar->vector splat.
+//
+// WGSL requires all arguments to component-wise builtins (max, min, clamp, mix,
+// step, pow) to have the same type. When a vec3 param is combined with a float
+// scalar the WGSL emitter wraps the scalar in vec3<f32>(s). GLSL/GLES/Metal
+// broadcast scalar args natively so no splat is produced there.
+//
+// Exemptions: mix(vecN, vecN, f32) and refract(vecN, vecN, f32) have native
+// WGSL overloads where the last argument stays scalar.
+material ScalarSplat {
+    param baseColor : vec3
+    param lo        : float
+    param hi        : float
+
+    surface(geo) -> color {
+        let clamped = clamp(baseColor, lo, hi)
+        let bright  = max(baseColor, lo)
+        let dark    = min(baseColor, hi)
+        let blended = mix(baseColor, clamped, lo)
+        let stepped = step(lo, baseColor)
+        let powered  = pow(clamped, hi)
+        return clamped + bright * 0.0 + dark * 0.0 + blended * 0.0 + stepped * 0.0 + powered * 0.0
+    }
+}

@@ -1,0 +1,24 @@
+// vertex-state.sel — author vertex() + by-uv statefield read stateAt(uv) (B4).
+//
+// The water render pass: a feedback-kind pass (see water-step.sel) simulates a
+// height field into a statefield; this render material displaces the mesh in its
+// vertex() stage by reading that state at the vertex uv (vertex texture fetch),
+// passes the uv through a varying, and the surface() reads the same state again
+// to shade. stateAt(uv) is exercised in BOTH stages across all four targets.
+material WaterRender {
+    state height
+
+    varying vUv : vec2
+
+    vertex(geo) -> vec4 {
+        let s = stateAt(geo.uv)
+        let y = s.x
+        vUv = geo.uv
+        return mvp * vec4f(geo.position.x, y, geo.position.z, 1.0)
+    }
+
+    surface(geo) -> color {
+        let s = stateAt(geo.vUv)
+        return rgb(s.x * 0.5 + 0.5, s.y * 0.5 + 0.5, s.z * 0.5 + 0.5)
+    }
+}
