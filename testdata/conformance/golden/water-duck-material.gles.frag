@@ -10,6 +10,7 @@ uniform vec3 lightDir;
 uniform highp sampler2D stateTex;
 in vec3 worldPos;
 in vec2 vUv;
+in vec3 vNormal;
 uniform sampler2D modelTexture;
 out vec4 fragColor;
 
@@ -23,10 +24,10 @@ void main() {
   }
   vec3 lightN = normalize(lightDir);
   vec3 refr = refract((-lightN), vec3(0.0, 1.0, 0.0), (1.0 / 1.333));
-  vec3 up = vec3(0.0, 1.0, 0.0);
+  vec3 n = normalize(vNormal);
   vec3 albedo = (texture(modelTexture, vUv).rgb * baseColor.rgb);
   bool submerged = (worldPos.y < waterHeight);
-  float diffuse = (max(dot((-refr), up), 0.0) * 0.6);
+  float diffuse = (max(dot((-refr), n), 0.0) * 0.6);
   if (submerged) {
     diffuse = ((diffuse * caustic) * 4.0);
   }

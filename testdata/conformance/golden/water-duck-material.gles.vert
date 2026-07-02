@@ -1,5 +1,6 @@
 #version 300 es
 in vec3 position;
+in vec3 normal;
 in vec2 uv;
 uniform mat4 mvp;
 uniform mat3 normalMatrix;
@@ -11,9 +12,11 @@ uniform vec3 lightDir;
 uniform highp sampler2D stateTex;
 out vec3 worldPos;
 out vec2 vUv;
+out vec3 vNormal;
 
 void main() {
   worldPos = position;
   vUv = uv;
+  vNormal = normalize((normalMatrix * normal));
   gl_Position = (mvp * vec4(position, 1.0));
 }

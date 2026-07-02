@@ -18,19 +18,22 @@ struct StateGrid {
 
 struct VertexIn {
   float3 position [[attribute(0)]];
-  float2 uv [[attribute(1)]];
+  float3 normal [[attribute(1)]];
+  float2 uv [[attribute(2)]];
 };
 
 struct VertexOut {
   float4 position [[position]];
   float3 worldPos;
   float2 vUv;
+  float3 vNormal;
 };
 
 vertex VertexOut vertexMain(VertexIn in [[stage_in]], constant Uniforms& u [[buffer(0)]], constant StateGrid& _stateGrid [[buffer(1)]], const device float4* _inState [[buffer(2)]]) {
   VertexOut out;
   out.worldPos = in.position;
   out.vUv = in.uv;
+  out.vNormal = normalize((u.normalMatrix * in.normal));
   out.position = (u.mvp * float4(in.position, 1.0));
   return out;
 }
@@ -45,9 +48,9 @@ fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[b
   }
   float3 lightN = normalize(u.lightDir);
   float3 refr = refract((-lightN), float3(0.0, 1.0, 0.0), (1.0 / 1.333));
-  float3 up = float3(0.0, 1.0, 0.0);
+  float3 n = normalize(in.vNormal);
   bool submerged = (in.worldPos.y < waterHeight);
-  float diffuse = (max(dot((-refr), up), 0.0) * 0.5);
+  float diffuse = (max(dot((-refr), n), 0.0) * 0.5);
   if (submerged) {
     diffuse = (((diffuse + 0.06) * caustic) * 4.0);
   }

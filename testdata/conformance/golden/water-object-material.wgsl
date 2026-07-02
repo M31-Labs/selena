@@ -18,13 +18,15 @@ struct StateGrid {
 
 struct VertexInput {
   @location(0) position : vec3<f32>,
-  @location(1) uv : vec2<f32>,
+  @location(1) normal : vec3<f32>,
+  @location(2) uv : vec2<f32>,
 };
 
 struct VertexOutput {
   @builtin(position) position : vec4<f32>,
   @location(0) worldPos : vec3<f32>,
   @location(1) vUv : vec2<f32>,
+  @location(2) vNormal : vec3<f32>,
 };
 
 @vertex
@@ -32,6 +34,7 @@ fn vertexMain(in : VertexInput) -> VertexOutput {
   var out : VertexOutput;
   out.worldPos = in.position;
   out.vUv = in.uv;
+  out.vNormal = normalize((u.normalMatrix * in.normal));
   out.position = (u.mvp * vec4<f32>(in.position, 1.0));
   return out;
 }
@@ -47,9 +50,9 @@ fn fragmentMain(in : VertexOutput) -> @location(0) vec4<f32> {
   }
   let lightN = normalize(u.lightDir);
   let refr = refract((-lightN), vec3<f32>(0.0, 1.0, 0.0), (1.0 / 1.333));
-  let up = vec3<f32>(0.0, 1.0, 0.0);
+  let n = normalize(in.vNormal);
   let submerged = (in.worldPos.y < waterHeight);
-  var diffuse : f32 = (max(dot((-refr), up), 0.0) * 0.5);
+  var diffuse : f32 = (max(dot((-refr), n), 0.0) * 0.5);
   if (submerged) {
     diffuse = (((diffuse + 0.06) * caustic) * 4.0);
   }
