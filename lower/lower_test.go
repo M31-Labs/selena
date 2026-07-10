@@ -529,3 +529,57 @@ func TestLowerRejectsInvalidParamDefaults(t *testing.T) {
 		})
 	}
 }
+
+// TestLowerWorldPosGeometryField verifies geo.worldPos lowers to a vWorldPos
+// varying that passes the (pre-baked world-space) position attribute through
+// unchanged — the scene3d mesh convention — and types as vec3.
+func TestLowerWorldPosGeometryField(t *testing.T) {
+	src := `material WorldPosProbe {
+    param tint : color = rgb(0.5, 0.5, 0.5)
+
+    context {
+        cameraPos : vec3
+    }
+
+    surface(geo) -> color {
+        let v = normalize(cameraPos - geo.worldPos)
+        let n = normalize(geo.worldNormal)
+        let fres = pow(1.0 - max(dot(n, v), 0.0), 3.0)
+        return tint * fres
+    }
+}`
+	program, err := parse.Program([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mod, layout, err := Lower(program.Materials[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	names := map[string]bool{}
+	for _, v := range mod.Varyings {
+		names[v.Name] = true
+	}
+	if !names["vWorldPos"] || !names["vWorldNormal"] {
+		t.Fatalf("varyings = %+v, want vWorldPos + vWorldNormal", mod.Varyings)
+	}
+	foundPassthrough := false
+	for _, stmt := range mod.Vertex.Body {
+		if stmt.Target == "vWorldPos" {
+			if ref, ok := stmt.Value.(ir.Ref); ok && ref.Name == "position" {
+				foundPassthrough = true
+			}
+		}
+	}
+	if !foundPassthrough {
+		t.Fatal("vWorldPos should pass the world-space position attribute through unchanged")
+	}
+	classByName := map[string]string{}
+	for _, f := range layout.UniformBlock.Fields {
+		classByName[f.Name] = f.Class
+	}
+	if classByName["cameraPos"] != "context" {
+		t.Fatalf("cameraPos field class = %q, want context", classByName["cameraPos"])
+	}
+}

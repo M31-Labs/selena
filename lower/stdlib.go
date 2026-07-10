@@ -154,6 +154,20 @@ var stdlib = stdlibRegistry{
 				}}
 			},
 		},
+		// worldPos is the world-space surface position. Under the scene3d
+		// mesh convention, position attributes arrive pre-baked to world
+		// space (mvp = view×proj, no model re-multiply; skinned hosts
+		// rebind the attribute to the skinned world-space result), so the
+		// varying passes the attribute through unchanged — the same value
+		// geo.position carries, named for what it IS on this pipeline so
+		// surfaces reading it (fresnel terms against a cameraPos context
+		// field, height fades, etc.) say what they mean.
+		"worldPos": {
+			typ:     ir.Vec3,
+			varying: "vWorldPos",
+			attrs:   []string{"position"},
+			build:   func() ir.Expr { return ir.Ref{Name: "position"} },
+		},
 	},
 	builtins: map[string]builtinSpec{
 		"dot":      {kind: builtinDot, arity: 2},
