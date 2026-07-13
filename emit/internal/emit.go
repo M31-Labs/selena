@@ -187,6 +187,41 @@ func (r Resolver) CallTyped(name string, args []string, argTypes []ir.Type) stri
 // Sample renders a 2D texture sample.
 func (r Resolver) Sample(tex, uv string) string { return r.Dialect.Sample(tex, uv) }
 
+// SampleLevel renders a 2D texture sample at an explicit LOD (mip level),
+// bypassing the dialect's implicit-LOD Sample. This is a selena-only
+// extension layered on top of the prism dialect.Dialect interface (which has
+// no SampleLevel method), spelled here directly per backend — the same
+// pattern IntLit/UintLit/Discard already use to add backend-specific
+// behaviour prism doesn't carry.
+//
+// WGSL:         textureSampleLevel(tex, texSampler, uv, lod) — unlike
+//
+//	textureSample (Sample), this form is valid inside non-uniform
+//	control flow under naga's validator.
+//
+// GLSL ES 1.00: texture2DLod(tex, uv, lod) — per the GLSL ES 1.00 spec this
+//
+//	form is only defined in the vertex stage unless the
+//	GL_EXT_shader_texture_lod extension is enabled; no current
+//	selena GLSL emitter enables that extension, so fragment-stage
+//	use requires the caller to arrange for it.
+//
+// GLSL ES 3.00 (GLES): textureLod(tex, uv, lod) — valid in any stage.
+// Metal:        tex.sample(texSampler, uv, level(lod)).
+func (r Resolver) SampleLevel(tex, uv, lod string) string {
+	switch r.Dialect.(type) {
+	case dialect.WGSL:
+		return "textureSampleLevel(" + tex + ", " + tex + "Sampler, " + uv + ", " + lod + ")"
+	case dialect.Metal:
+		return tex + ".sample(" + tex + "Sampler, " + uv + ", level(" + lod + "))"
+	case dialect.GLES:
+		return "textureLod(" + tex + ", " + uv + ", " + lod + ")"
+	default:
+		// dialect.GLSL (GLSL ES 1.00).
+		return "texture2DLod(" + tex + ", " + uv + ", " + lod + ")"
+	}
+}
+
 // SampleCube renders a cube-map texture sample by a vec3 direction vector.
 func (r Resolver) SampleCube(tex, dir string) string { return r.Dialect.SampleCube(tex, dir) }
 

@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"m31labs.dev/selena/emit/gles"
+	"m31labs.dev/selena/emit/glsl"
 	"m31labs.dev/selena/emit/metal"
 	"m31labs.dev/selena/emit/wgsl"
 	"m31labs.dev/selena/hir"
@@ -581,5 +583,110 @@ func TestLowerWorldPosGeometryField(t *testing.T) {
 	}
 	if classByName["cameraPos"] != "context" {
 		t.Fatalf("cameraPos field class = %q, want context", classByName["cameraPos"])
+	}
+}
+
+// TestLowerSampleLevel verifies sampleLevel(tex, uv, lod) types as vec4 (like
+// sample) and lowers to each backend's explicit-LOD texture fetch: WGSL
+// textureSampleLevel (valid inside non-uniform control flow, unlike
+// textureSample), Metal tex.sample(...,level(lod)), GLES textureLod, and
+// GLSL texture2DLod.
+func TestLowerSampleLevel(t *testing.T) {
+	src := `material SampleLevelProbe {
+    param albedo : texture2d
+    surface(geo) -> color {
+        let c = sampleLevel(albedo, geo.uv, 0.0).rgb
+        return c
+    }
+}`
+	program, err := parse.Program([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mod, _, err := Lower(program.Materials[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w, err := wgsl.Emit(mod)
+	if err != nil {
+		t.Fatalf("wgsl emit: %v", err)
+	}
+	if want := "textureSampleLevel(albedo, albedoSampler, in.vUv, 0.0)"; !strings.Contains(w, want) {
+		t.Errorf("WGSL missing %q\n--- got ---\n%s", want, w)
+	}
+
+	m, err := metal.Emit(mod)
+	if err != nil {
+		t.Fatalf("metal emit: %v", err)
+	}
+	if want := "albedo.sample(albedoSampler, in.vUv, level(0.0))"; !strings.Contains(m, want) {
+		t.Errorf("Metal missing %q\n--- got ---\n%s", want, m)
+	}
+
+	_, gf, err := gles.Emit(mod)
+	if err != nil {
+		t.Fatalf("gles emit: %v", err)
+	}
+	if want := "textureLod(albedo, vUv, 0.0)"; !strings.Contains(gf, want) {
+		t.Errorf("GLES missing %q\n--- got ---\n%s", want, gf)
+	}
+
+	_, sf, err := glsl.Emit(mod)
+	if err != nil {
+		t.Fatalf("glsl emit: %v", err)
+	}
+	if want := "texture2DLod(albedo, vUv, 0.0)"; !strings.Contains(sf, want) {
+		t.Errorf("GLSL missing %q\n--- got ---\n%s", want, sf)
+	}
+}
+
+// TestLowerRejectsSampleLevelBadArgs verifies sampleLevel's arity/type
+// diagnostics mirror sample's (CodeInvalidCall/CodeTypeMismatch).
+func TestLowerRejectsSampleLevelBadArgs(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "wrong arity",
+			src: `material Bad {
+    param albedo : texture2d
+    surface(geo) -> color { return sampleLevel(albedo, geo.uv).rgb }
+}`,
+			want: "sampleLevel(texture, uv, lod) takes 3 arguments",
+		},
+		{
+			name: "not a texture",
+			src: `material Bad {
+    param albedo : float
+    surface(geo) -> color { return sampleLevel(albedo, geo.uv, 0.0).rgb }
+}`,
+			want: "sampleLevel: first argument must be a texture2d param",
+		},
+		{
+			name: "lod not a float",
+			src: `material Bad {
+    param albedo : texture2d
+    surface(geo) -> color { return sampleLevel(albedo, geo.uv, geo.uv).rgb }
+}`,
+			want: "sampleLevel: third argument must be a float lod",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p, err := parse.Program([]byte(tc.src))
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _, err = LowerProgram(p, 0)
+			if err == nil {
+				t.Fatal("LowerProgram succeeded, want error")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %q, want substring %q", err, tc.want)
+			}
+		})
 	}
 }

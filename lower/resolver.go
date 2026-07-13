@@ -142,6 +142,24 @@ func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
 			}
 			return ir.Sample{Texture: texRef.Name, UV: uv}, nil
 		}
+		if x.Func == "sampleLevel" {
+			if len(x.Args) != 3 {
+				return nil, diagnostic(CodeInvalidCall, x.Span, "sampleLevel(texture, uv, lod) takes 3 arguments")
+			}
+			texRef, ok := x.Args[0].(hir.Ref)
+			if !ok || r.paramKind[texRef.Name] != hir.Texture2D {
+				return nil, diagnostic(CodeInvalidCall, x.Span, "sampleLevel: first argument must be a texture2d param")
+			}
+			uv, err := r.expr(x.Args[1])
+			if err != nil {
+				return nil, err
+			}
+			lod, err := r.expr(x.Args[2])
+			if err != nil {
+				return nil, err
+			}
+			return ir.SampleLevel{Texture: texRef.Name, UV: uv, LOD: lod}, nil
+		}
 		if x.Func == "sampleCube" {
 			if len(x.Args) != 2 {
 				return nil, diagnostic(CodeInvalidCall, x.Span, "sampleCube(texture, dir) takes 2 arguments")

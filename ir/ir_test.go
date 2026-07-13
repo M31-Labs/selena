@@ -18,6 +18,18 @@ func TestPrintUsesDialectCallSpelling(t *testing.T) {
 	}
 }
 
+func TestPrintSampleLevel(t *testing.T) {
+	got := Print(SampleLevel{
+		Texture: "albedo",
+		UV:      Ref{Name: "uv"},
+		LOD:     Lit{Value: 0.0},
+	}, testDialect{})
+	want := "sampleLevel(albedo, uv, 0.0)"
+	if got != want {
+		t.Fatalf("Print(SampleLevel) = %q, want %q", got, want)
+	}
+}
+
 type testDialect struct{}
 
 func (testDialect) TypeName(t Type) string { return string(t) }
@@ -30,6 +42,9 @@ func (testDialect) CallTyped(name string, args []string, _ []Type) string {
 }
 func (testDialect) Sample(tex, uv string) string {
 	return "sample(" + tex + ", " + uv + ")"
+}
+func (testDialect) SampleLevel(tex, uv, lod string) string {
+	return "sampleLevel(" + tex + ", " + uv + ", " + lod + ")"
 }
 func (testDialect) SampleCube(tex, dir string) string {
 	return "sampleCube(" + tex + ", " + dir + ")"

@@ -293,6 +293,29 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 			return "", diagnostic(CodeTypeMismatch, c.Span, "sample: second argument must be vec2 uv, got %s", uv)
 		}
 		return ir.Vec4, nil
+	case builtinSampleLevel:
+		if len(c.Args) != spec.arity {
+			return "", diagnostic(CodeInvalidCall, c.Span, "sampleLevel(texture, uv, lod) takes 3 arguments")
+		}
+		tex, ok := c.Args[0].(hir.Ref)
+		if !ok || t.paramKind[tex.Name] != hir.Texture2D {
+			return "", diagnostic(CodeInvalidCall, c.Span, "sampleLevel: first argument must be a texture2d param")
+		}
+		uv, err := t.typeOf(c.Args[1])
+		if err != nil {
+			return "", err
+		}
+		if uv != ir.Vec2 {
+			return "", diagnostic(CodeTypeMismatch, c.Span, "sampleLevel: second argument must be vec2 uv, got %s", uv)
+		}
+		lod, err := t.typeOf(c.Args[2])
+		if err != nil {
+			return "", err
+		}
+		if lod != ir.Float {
+			return "", diagnostic(CodeTypeMismatch, c.Span, "sampleLevel: third argument must be a float lod, got %s", lod)
+		}
+		return ir.Vec4, nil
 	case builtinSampleCube:
 		if len(c.Args) != spec.arity {
 			return "", diagnostic(CodeInvalidCall, c.Span, "sampleCube(texture, dir) takes 2 arguments")

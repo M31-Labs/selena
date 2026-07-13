@@ -35,18 +35,19 @@ func TestStdlibRegistryCoversCurrentRecordsAndGeometry(t *testing.T) {
 
 func TestStdlibRegistryCoversCurrentBuiltins(t *testing.T) {
 	for name, want := range map[string]builtinSpec{
-		"dot":       {kind: builtinDot, arity: 2},
-		"length":    {kind: builtinLength, arity: 1},
-		"distance":  {kind: builtinDistance, arity: 2},
-		"sample":    {kind: builtinSample, arity: 2},
-		"rgb":       {kind: builtinRGB},
-		"normalize": {kind: builtinUnarySame, arity: 1},
-		"abs":       {kind: builtinUnarySame, arity: 1},
-		"max":       {kind: builtinSameOrScalar, arity: 2},
-		"min":       {kind: builtinSameOrScalar, arity: 2},
-		"pow":       {kind: builtinSameOrScalar, arity: 2},
-		"clamp":     {kind: builtinSameOrScalar, arity: 3},
-		"mix":       {kind: builtinSameOrScalar, arity: 3},
+		"dot":         {kind: builtinDot, arity: 2},
+		"length":      {kind: builtinLength, arity: 1},
+		"distance":    {kind: builtinDistance, arity: 2},
+		"sample":      {kind: builtinSample, arity: 2},
+		"sampleLevel": {kind: builtinSampleLevel, arity: 3},
+		"rgb":         {kind: builtinRGB},
+		"normalize":   {kind: builtinUnarySame, arity: 1},
+		"abs":         {kind: builtinUnarySame, arity: 1},
+		"max":         {kind: builtinSameOrScalar, arity: 2},
+		"min":         {kind: builtinSameOrScalar, arity: 2},
+		"pow":         {kind: builtinSameOrScalar, arity: 2},
+		"clamp":       {kind: builtinSameOrScalar, arity: 3},
+		"mix":         {kind: builtinSameOrScalar, arity: 3},
 	} {
 		got, ok := stdlib.builtin(name)
 		if !ok {

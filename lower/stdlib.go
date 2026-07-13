@@ -57,6 +57,13 @@ const (
 	// vec3 direction vector, returning vec4. The first arg must be a textureCube
 	// param and the second must be vec3.
 	builtinSampleCube builtinKind = "sample_cube"
+	// builtinSampleLevel: sampleLevel(tex, uv, lod) samples a texture2d param
+	// at an explicit LOD (mip level), returning vec4. The first arg must be a
+	// texture2d param, the second vec2 uv, the third a float lod. Unlike
+	// sample(), the emitted WGSL (textureSampleLevel) does not require uniform
+	// control flow, so authors use it for sample() calls that must live inside
+	// an if/for.
+	builtinSampleLevel builtinKind = "sample_level"
 )
 
 type builtinSpec struct {
@@ -170,12 +177,13 @@ var stdlib = stdlibRegistry{
 		},
 	},
 	builtins: map[string]builtinSpec{
-		"dot":      {kind: builtinDot, arity: 2},
-		"length":   {kind: builtinLength, arity: 1},
-		"distance": {kind: builtinDistance, arity: 2},
-		"sample":     {kind: builtinSample, arity: 2},
-		"sampleCube": {kind: builtinSampleCube, arity: 2},
-		"rgb":      {kind: builtinRGB},
+		"dot":         {kind: builtinDot, arity: 2},
+		"length":      {kind: builtinLength, arity: 1},
+		"distance":    {kind: builtinDistance, arity: 2},
+		"sample":      {kind: builtinSample, arity: 2},
+		"sampleLevel": {kind: builtinSampleLevel, arity: 3},
+		"sampleCube":  {kind: builtinSampleCube, arity: 2},
+		"rgb":         {kind: builtinRGB},
 		// vec2(x, y) constructs a vec2 from two floats.
 		"vec2f":     {kind: builtinVec2, arity: 2},
 		"normalize": {kind: builtinUnarySame, arity: 1},

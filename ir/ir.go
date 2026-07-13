@@ -257,6 +257,23 @@ type Sample struct {
 	UV      Expr
 }
 
+// SampleLevel samples Texture at UV using an explicit LOD (mip level),
+// bypassing the implicit derivative-based LOD selection Sample uses. Each
+// backend renders it differently (see Dialect.SampleLevel); the named texture
+// must be declared in Module.Textures. The explicit-LOD form is legal inside
+// non-uniform (data-dependent) control flow on every backend — WGSL's
+// textureSample (what Sample lowers to) requires uniform control flow under
+// naga's validator, but textureSampleLevel does not — so authors move a
+// sample() that must live inside an if/for into sampleLevel() instead. Only
+// safe when the sampler's effective LOD is already known to be constant
+// (e.g. a non-mipmapped texture/sampler), since forcing LOD changes the
+// result wherever the implicit form would have picked a different level.
+type SampleLevel struct {
+	Texture string
+	UV      Expr
+	LOD     Expr
+}
+
 // SampleCube samples a cube-map Texture by a vec3 direction vector. Each
 // backend renders it differently (see Dialect.SampleCube); the named texture
 // must be declared in Module.Textures with Cube == true.
@@ -327,6 +344,7 @@ func (Binary) isExpr()        {}
 func (Unary) isExpr()         {}
 func (Swizzle) isExpr()       {}
 func (Sample) isExpr()        {}
+func (SampleLevel) isExpr()   {}
 func (SampleCube) isExpr()    {}
 func (SceneSample) isExpr()   {}
 func (Conditional) isExpr()   {}
@@ -354,6 +372,13 @@ type Dialect interface {
 	// already-rendered UV expression (WGSL: textureSample(t, tSampler, uv);
 	// GLSL ES1: texture2D(t, uv); GLSL ES3: texture(t, uv); Metal: t.sample(tSampler, uv)).
 	Sample(tex, uv string) string
+	// SampleLevel renders a 2D texture sample at an explicit LOD given the
+	// texture name and the already-rendered UV and LOD expressions (WGSL:
+	// textureSampleLevel(t, tSampler, uv, lod); GLSL ES1: texture2DLod(t, uv,
+	// lod); GLSL ES3: textureLod(t, uv, lod); Metal: t.sample(tSampler, uv,
+	// level(lod))). Unlike Sample, this form is legal inside non-uniform
+	// control flow under WGSL/naga.
+	SampleLevel(tex, uv, lod string) string
 	// SampleCube renders a cube-map texture sample given the texture name and the
 	// already-rendered direction expression (vec3).
 	// WGSL: textureSample(t, tSampler, dir); GLSL ES1: textureCube(t, dir);
@@ -415,6 +440,8 @@ func Print(e Expr, d Dialect) string {
 		return Print(x.E, d) + "." + x.Field
 	case Sample:
 		return d.Sample(x.Texture, Print(x.UV, d))
+	case SampleLevel:
+		return d.SampleLevel(x.Texture, Print(x.UV, d), Print(x.LOD, d))
 	case SampleCube:
 		return d.SampleCube(x.Texture, Print(x.Dir, d))
 	case SceneSample:
