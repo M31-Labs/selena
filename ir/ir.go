@@ -179,6 +179,10 @@ type IndexAssignCF struct {
 // `discard_fragment();`).
 type DiscardCF struct{}
 
+// BreakCF exits the innermost enclosing loop. It carries no payload and emits as
+// `break;` on every backend (WGSL, GLSL, GLES, Metal all spell it the same).
+type BreakCF struct{}
+
 // Index reads an array element: Arr[Idx].
 // Emits identically across all four backends as Arr[Idx].
 type Index struct {
@@ -192,6 +196,7 @@ func (ForCF) isStmtCF()         {}
 func (VarArrayCF) isStmtCF()    {}
 func (IndexAssignCF) isStmtCF() {}
 func (DiscardCF) isStmtCF()     {}
+func (BreakCF) isStmtCF()       {}
 func (Index) isExpr()           {}
 
 // Expr is the typed expression graph. It is total by construction (no loops,

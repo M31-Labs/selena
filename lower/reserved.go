@@ -71,7 +71,6 @@ var shaderReservedNames = map[string]string{
 	"array":       "WGSL keyword",
 	"attribute":   "GLSL keyword",
 	"bool":        "shader type keyword",
-	"break":       "shader control-flow keyword",
 	"case":        "shader control-flow keyword",
 	"const":       "shader keyword",
 	"constant":    "Metal address-space keyword",

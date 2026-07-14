@@ -400,3 +400,59 @@ func TestWGSLStatefieldReadIsTextureBackedForRenderMaterials(t *testing.T) {
 		t.Errorf("GL state uniform = %q, want stateTex", st.GL.Uniform)
 	}
 }
+
+// break exits the innermost for loop, on every backend.
+//
+// Without it a bounded search must be a fixed-trip loop with a predicated body, so every
+// lane grinds through every iteration even after it has the answer. On a GPU that is not a
+// stylistic loss: a ray-march's trip count is data-dependent, so a warp whose lanes finish
+// at different steps pays the WORST lane's cost across all of them. The gosx water demo's
+// surface shader marched 30 steps x 64 segments per fragment with no way out, and its cost
+// swung with how disturbed the water was purely because disturbance made the lanes diverge.
+func TestBreakExitsLoopOnEveryBackend(t *testing.T) {
+	src := []byte(`material BreakTest kind post {
+    surface(geo) -> color {
+        var acc = 0.0
+        var done = 0.0
+        for (var i = 0i; i < 30i; i = i + 1i) {
+            if (done > 0.5) { break }
+            acc = acc + 0.01
+            if (acc > 0.1) { done = 1.0 }
+        }
+        return vec4f(acc, acc, acc, 1.0)
+    }
+}`)
+	res, err := Compile(src, CompileOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	emitted := 0
+	for _, a := range res.Artifacts {
+		// Compile returns empty GLSL/GLES artifacts for a post material (pre-existing;
+		// those targets are produced through the emit path directly). Assert on the
+		// artifacts that actually carry source.
+		if a.Source == "" {
+			continue
+		}
+		emitted++
+		if !strings.Contains(a.Source, "break;") {
+			t.Errorf("%s: break not emitted\n%s", a.Target, a.Source)
+		}
+	}
+	if emitted == 0 {
+		t.Fatal("no artifact carried source; the assertion above proved nothing")
+	}
+}
+
+// break outside a loop is a diagnostic, not invalid backend code.
+func TestBreakOutsideLoopIsRejected(t *testing.T) {
+	src := []byte(`material BadBreak kind post {
+    surface(geo) -> color {
+        break
+        return vec4f(1.0, 1.0, 1.0, 1.0)
+    }
+}`)
+	if _, err := Compile(src, CompileOptions{}); err == nil {
+		t.Fatal("break outside a loop compiled; want a diagnostic")
+	}
+}

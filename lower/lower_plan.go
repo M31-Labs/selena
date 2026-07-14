@@ -621,6 +621,15 @@ func (lc *lowerCtx) lowerStmt(s hir.Stmt) (ir.Stmt, error) {
 		}
 		return ir.Stmt{CF: ir.DiscardCF{}}, nil
 
+	case hir.Break:
+		if lc.rs.loopDepth <= 0 {
+			return ir.Stmt{}, diagnostic(
+				CodeUnsupportedFeat, x.Span,
+				"break is only valid inside a for loop",
+			)
+		}
+		return ir.Stmt{CF: ir.BreakCF{}}, nil
+
 	case hir.For:
 		// Lower init value and declare the loop variable as mutable.
 		if err := validateAuthorName("for loop variable", x.InitName, x.Span); err != nil {
@@ -665,7 +674,9 @@ func (lc *lowerCtx) lowerStmt(s hir.Stmt) (ir.Stmt, error) {
 			return ir.Stmt{}, fmt.Errorf("for post %q: %w", x.PostName, err)
 		}
 
+		lc.rs.loopDepth++
 		body, err := lc.lowerStmts(x.Body)
+		lc.rs.loopDepth--
 		if err != nil {
 			return ir.Stmt{}, err
 		}

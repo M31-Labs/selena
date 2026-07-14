@@ -119,6 +119,9 @@ func (in *inliner) stmt(s hir.Stmt, env map[string]hir.Expr) (hir.Stmt, error) {
 	case hir.Discard:
 		// No expressions to inline in a bare discard statement.
 		return x, nil
+	case hir.Break:
+		// Likewise: a bare break carries no expressions.
+		return x, nil
 	case hir.IndexAssign:
 		idx, err := in.expr(x.Index, env)
 		if err != nil {

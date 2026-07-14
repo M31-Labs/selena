@@ -33,6 +33,10 @@ type resolver struct {
 	// fragment stage of mesh and post kinds; left false for vertex stages and for
 	// kinds (points, feedback) that do not support discard.
 	allowDiscard bool
+
+	// loopDepth counts enclosing for loops. `break` is only meaningful inside one;
+	// emitting it outside would produce backend code that does not compile.
+	loopDepth int
 	// tp is a reference to the companion typer used during lowering. When set,
 	// the resolver populates ir.Call.ArgTypes for component-wise builtins that
 	// accept mixed vec/scalar arguments, enabling WGSL auto-splat in the emitter.

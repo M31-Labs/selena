@@ -239,6 +239,11 @@ type IndexAssign struct {
 	Span  Span
 }
 
+// Break exits the innermost enclosing for loop. Lowering rejects it outside a loop.
+type Break struct {
+	Span Span
+}
+
 // Discard throws away the current fragment (`discard`). It is a fragment-only
 // statement (mesh/post kinds) and may appear inside an if-block. Lowering rejects
 // it in the vertex stage and in kinds that do not support it.
@@ -254,6 +259,7 @@ func (For) isHIRStmt()          {}
 func (VarArrayDecl) isHIRStmt() {}
 func (IndexAssign) isHIRStmt()  {}
 func (Discard) isHIRStmt()      {}
+func (Break) isHIRStmt()        {}
 func (IndexExpr) isExpr()       {}
 
 // Expr is the high-level expression tree.

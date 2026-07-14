@@ -103,6 +103,7 @@ func SelenaGrammar() *grammargen.Grammar {
 		sym("var_typed_stmt"),
 		sym("index_assign_stmt"),
 		sym("discard_stmt"),
+		sym("break_stmt"),
 		sym("_ternary_follow_anchor"),
 	))
 
@@ -415,6 +416,19 @@ func SelenaGrammar() *grammargen.Grammar {
 	// statement. Defined at the very END to preserve LALR symbol-ID order for all
 	// existing rules (appending it elsewhere broke an existing file before).
 	g.Define("discard_stmt", s("discard"))
+
+	// break_stmt: exit the innermost enclosing for loop.
+	//
+	// Without it, a bounded search has to be written as a fixed-trip loop with a
+	// predicated body -- every lane grinds through every iteration even once the answer
+	// is found. That is not a stylistic loss: on a GPU the trip count of a ray-march is
+	// data-dependent, so a warp whose lanes finish at different steps pays the WORST
+	// lane's cost for all of them. The water demo's surface shader marched 30 steps x 64
+	// segments per fragment with no way out, and its cost swung with how disturbed the
+	// surface was purely because that changed how far the lanes diverged.
+	//
+	// Appended after discard_stmt for the same LALR symbol-ID ordering reason.
+	g.Define("break_stmt", s("break"))
 
 	// _ternary_follow_anchor: a hidden LALR lookahead anchor (NOT a real
 	// statement — it never matches valid input). It exists solely to repair a

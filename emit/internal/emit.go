@@ -369,6 +369,9 @@ func emitStmt(b *strings.Builder, s *ir.Stmt, d Resolver, indent string, wgsl bo
 	case ir.IndexAssignCF:
 		// Array element write — identical syntax across all four backends.
 		fmt.Fprintf(b, "%s%s[%s] = %s;\n", indent, cf.Target, ir.Print(cf.Index, d), ir.Print(cf.Value, d))
+	case ir.BreakCF:
+		// Same spelling on WGSL, GLSL, GLES and Metal.
+		fmt.Fprintf(b, "%sbreak;\n", indent)
 	case ir.DiscardCF:
 		// Fragment discard — spelling is backend-specific (Metal uses
 		// discard_fragment(); others use discard;).

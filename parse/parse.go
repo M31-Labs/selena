@@ -628,6 +628,8 @@ func (w *walker) blockBody(block *gts.Node) (stmts []hir.Stmt, result hir.Expr, 
 			result = e
 		case "discard_stmt":
 			stmts = append(stmts, hir.Discard{Span: w.span(s)})
+		case "break_stmt":
+			stmts = append(stmts, hir.Break{Span: w.span(s)})
 		}
 	}
 	return stmts, result, nil
