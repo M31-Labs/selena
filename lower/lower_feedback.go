@@ -188,7 +188,7 @@ func lowerFeedback(m hir.Material) (ir.Module, bindings.Layout, error) {
 		Metal: bindings.MetalBinding{Buffer: 3},
 		States: []bindings.StateField{{
 			Name:  stateName,
-			WGSL:  bindings.WGSLStateBinding{Group: 0, InBinding: 1, OutBinding: 2},
+			WGSL:  bindings.WGSLStateBinding{Group: 0, InBinding: 1, OutBinding: 2, InKind: "storage"},
 			GL:    bindings.GLStateBinding{Uniform: "stateTex", Unit: 0},
 			Metal: bindings.MetalStateBinding{InBuffer: 0, OutBuffer: 1},
 		}},

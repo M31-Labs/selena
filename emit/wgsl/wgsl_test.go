@@ -31,3 +31,4 @@ func TestEmitDirectionalDiffuse(t *testing.T) {
 		}
 	}
 }
+

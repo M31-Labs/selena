@@ -195,7 +195,7 @@ func emitMeshAuthored(m ir.Module) (string, error) {
 		base := 1 + 2*len(m.Textures)
 		b.WriteString("struct StateGrid {\n  gridWidth  : u32,\n  gridHeight : u32,\n};\n")
 		fmt.Fprintf(&b, "@group(0) @binding(%d) var<uniform> _stateGrid : StateGrid;\n", base)
-		fmt.Fprintf(&b, "@group(0) @binding(%d) var<storage, read> _inState : array<vec4<f32>>;\n\n", base+1)
+		fmt.Fprintf(&b, "@group(0) @binding(%d) var _inState : texture_2d<f32>;\n\n", base+1)
 	}
 
 	// VertexInput only when attributes are actually read (procedural geometry has none).
@@ -237,13 +237,19 @@ func emitMeshAuthored(m ir.Module) (string, error) {
 	return b.String(), nil
 }
 
-// wgslStateSampleUV renders a stateAt(uv) read against the inState storage buffer,
-// addressing the grid by a uv -> linear cell index using the StateGrid dims.
-// Valid in both the vertex and fragment stages (WGSL allows storage reads in the
-// vertex stage, so no sampling/LOD restriction applies). B4.
+// wgslStateSampleUV renders a stateAt(uv) read against the inState texture, addressing
+// the grid by uv -> integer texel using the StateGrid dims.
+//
+// textureLoad, not textureSample: it takes integer coordinates and needs no sampler, so
+// it selects exactly the texel the previous flat-index read selected (same truncation)
+// and is bit-identical, while going through the texture cache rather than the raw buffer
+// path. It also carries no implicit derivative, so it stays legal in the vertex stage,
+// where a mesh material's stateAt() displaces geometry. The clamp is now per-axis, which
+// additionally fixes a wrap: clamping a FLAT index let a uv slightly past 1.0 in x bleed
+// into the first texel of the next ROW, where WebGL's CLAMP_TO_EDGE holds the edge. B4.
 func wgslStateSampleUV(uv string) string {
 	return fmt.Sprintf(
-		"_inState[min(u32((%s).x * f32(_stateGrid.gridWidth)) + u32((%s).y * f32(_stateGrid.gridHeight)) * _stateGrid.gridWidth, _stateGrid.gridWidth * _stateGrid.gridHeight - 1u)]",
+		"textureLoad(_inState, vec2<u32>(min(u32((%s).x * f32(_stateGrid.gridWidth)), _stateGrid.gridWidth - 1u), min(u32((%s).y * f32(_stateGrid.gridHeight)), _stateGrid.gridHeight - 1u)), 0)",
 		uv, uv)
 }
 

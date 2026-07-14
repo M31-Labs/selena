@@ -22,7 +22,7 @@ struct StateGrid {
   gridHeight : u32,
 };
 @group(0) @binding(1) var<uniform> _stateGrid : StateGrid;
-@group(0) @binding(2) var<storage, read> _inState : array<vec4<f32>>;
+@group(0) @binding(2) var _inState : texture_2d<f32>;
 
 struct VertexOutput {
   @builtin(position) position : vec4<f32>,
@@ -44,11 +44,11 @@ fn vertexMain(@builtin(vertex_index) vertexIndex : u32) -> VertexOutput {
 fn fragmentMain(in : VertexOutput) -> @location(0) vec4<f32> {
   let uv = clamp(in.vUv, vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 1.0));
   let texel = (1.0 / max(u.resolution, 1.0));
-  let c = _inState[min(u32((uv).x * f32(_stateGrid.gridWidth)) + u32((uv).y * f32(_stateGrid.gridHeight)) * _stateGrid.gridWidth, _stateGrid.gridWidth * _stateGrid.gridHeight - 1u)];
-  let e = _inState[min(u32(((uv + vec2<f32>(texel, 0.0))).x * f32(_stateGrid.gridWidth)) + u32(((uv + vec2<f32>(texel, 0.0))).y * f32(_stateGrid.gridHeight)) * _stateGrid.gridWidth, _stateGrid.gridWidth * _stateGrid.gridHeight - 1u)];
-  let wv = _inState[min(u32(((uv - vec2<f32>(texel, 0.0))).x * f32(_stateGrid.gridWidth)) + u32(((uv - vec2<f32>(texel, 0.0))).y * f32(_stateGrid.gridHeight)) * _stateGrid.gridWidth, _stateGrid.gridWidth * _stateGrid.gridHeight - 1u)];
-  let nn = _inState[min(u32(((uv + vec2<f32>(0.0, texel))).x * f32(_stateGrid.gridWidth)) + u32(((uv + vec2<f32>(0.0, texel))).y * f32(_stateGrid.gridHeight)) * _stateGrid.gridWidth, _stateGrid.gridWidth * _stateGrid.gridHeight - 1u)];
-  let ss = _inState[min(u32(((uv - vec2<f32>(0.0, texel))).x * f32(_stateGrid.gridWidth)) + u32(((uv - vec2<f32>(0.0, texel))).y * f32(_stateGrid.gridHeight)) * _stateGrid.gridWidth, _stateGrid.gridWidth * _stateGrid.gridHeight - 1u)];
+  let c = textureLoad(_inState, vec2<u32>(min(u32((uv).x * f32(_stateGrid.gridWidth)), _stateGrid.gridWidth - 1u), min(u32((uv).y * f32(_stateGrid.gridHeight)), _stateGrid.gridHeight - 1u)), 0);
+  let e = textureLoad(_inState, vec2<u32>(min(u32(((uv + vec2<f32>(texel, 0.0))).x * f32(_stateGrid.gridWidth)), _stateGrid.gridWidth - 1u), min(u32(((uv + vec2<f32>(texel, 0.0))).y * f32(_stateGrid.gridHeight)), _stateGrid.gridHeight - 1u)), 0);
+  let wv = textureLoad(_inState, vec2<u32>(min(u32(((uv - vec2<f32>(texel, 0.0))).x * f32(_stateGrid.gridWidth)), _stateGrid.gridWidth - 1u), min(u32(((uv - vec2<f32>(texel, 0.0))).y * f32(_stateGrid.gridHeight)), _stateGrid.gridHeight - 1u)), 0);
+  let nn = textureLoad(_inState, vec2<u32>(min(u32(((uv + vec2<f32>(0.0, texel))).x * f32(_stateGrid.gridWidth)), _stateGrid.gridWidth - 1u), min(u32(((uv + vec2<f32>(0.0, texel))).y * f32(_stateGrid.gridHeight)), _stateGrid.gridHeight - 1u)), 0);
+  let ss = textureLoad(_inState, vec2<u32>(min(u32(((uv - vec2<f32>(0.0, texel))).x * f32(_stateGrid.gridWidth)), _stateGrid.gridWidth - 1u), min(u32(((uv - vec2<f32>(0.0, texel))).y * f32(_stateGrid.gridHeight)), _stateGrid.gridHeight - 1u)), 0);
   let ldir = normalize(u.lightDir);
   let waterNormal = normalize(vec3<f32>((c.z * u.normalScale), 1.0, (c.w * u.normalScale)));
   let causticNormal = normalize(vec3<f32>(((c.z * u.normalScale) * 0.5), 1.0, ((c.w * u.normalScale) * 0.5)));

@@ -22,7 +22,7 @@ struct StateGrid {
   gridHeight : u32,
 };
 @group(0) @binding(7) var<uniform> _stateGrid : StateGrid;
-@group(0) @binding(8) var<storage, read> _inState : array<vec4<f32>>;
+@group(0) @binding(8) var _inState : texture_2d<f32>;
 
 struct VertexOutput {
   @builtin(position) position : vec4<f32>,
@@ -171,7 +171,7 @@ fn vertexMain(@builtin(vertex_index) vertexIndex : u32) -> VertexOutput {
 @fragment
 fn fragmentMain(in : VertexOutput) -> @location(0) vec4<f32> {
   let wuv = clamp(in.vWaterUV, vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 1.0));
-  let info = _inState[min(u32((wuv).x * f32(_stateGrid.gridWidth)) + u32((wuv).y * f32(_stateGrid.gridHeight)) * _stateGrid.gridWidth, _stateGrid.gridWidth * _stateGrid.gridHeight - 1u)];
+  let info = textureLoad(_inState, vec2<u32>(min(u32((wuv).x * f32(_stateGrid.gridWidth)), _stateGrid.gridWidth - 1u), min(u32((wuv).y * f32(_stateGrid.gridHeight)), _stateGrid.gridHeight - 1u)), 0);
   let wh = (info.x * u.poolHeight);
   let ldir = normalize(u.lightDir);
   let refr = refract((-ldir), vec3<f32>(0.0, 1.0, 0.0), (1.0 / 1.333));

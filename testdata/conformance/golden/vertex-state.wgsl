@@ -9,7 +9,7 @@ struct StateGrid {
   gridHeight : u32,
 };
 @group(0) @binding(1) var<uniform> _stateGrid : StateGrid;
-@group(0) @binding(2) var<storage, read> _inState : array<vec4<f32>>;
+@group(0) @binding(2) var _inState : texture_2d<f32>;
 
 struct VertexInput {
   @location(0) position : vec3<f32>,
@@ -24,7 +24,7 @@ struct VertexOutput {
 @vertex
 fn vertexMain(in : VertexInput) -> VertexOutput {
   var out : VertexOutput;
-  let s = _inState[min(u32((in.uv).x * f32(_stateGrid.gridWidth)) + u32((in.uv).y * f32(_stateGrid.gridHeight)) * _stateGrid.gridWidth, _stateGrid.gridWidth * _stateGrid.gridHeight - 1u)];
+  let s = textureLoad(_inState, vec2<u32>(min(u32((in.uv).x * f32(_stateGrid.gridWidth)), _stateGrid.gridWidth - 1u), min(u32((in.uv).y * f32(_stateGrid.gridHeight)), _stateGrid.gridHeight - 1u)), 0);
   let y = s.x;
   out.vUv = in.uv;
   out.position = (u.mvp * vec4<f32>(in.position.x, y, in.position.z, 1.0));
@@ -33,6 +33,6 @@ fn vertexMain(in : VertexInput) -> VertexOutput {
 
 @fragment
 fn fragmentMain(in : VertexOutput) -> @location(0) vec4<f32> {
-  let s = _inState[min(u32((in.vUv).x * f32(_stateGrid.gridWidth)) + u32((in.vUv).y * f32(_stateGrid.gridHeight)) * _stateGrid.gridWidth, _stateGrid.gridWidth * _stateGrid.gridHeight - 1u)];
+  let s = textureLoad(_inState, vec2<u32>(min(u32((in.vUv).x * f32(_stateGrid.gridWidth)), _stateGrid.gridWidth - 1u), min(u32((in.vUv).y * f32(_stateGrid.gridHeight)), _stateGrid.gridHeight - 1u)), 0);
   return vec4<f32>(vec3<f32>(((s.x * 0.5) + 0.5), ((s.y * 0.5) + 0.5), ((s.z * 0.5) + 0.5)), 1.0);
 }

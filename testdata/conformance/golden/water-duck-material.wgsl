@@ -17,7 +17,7 @@ struct StateGrid {
   gridHeight : u32,
 };
 @group(0) @binding(3) var<uniform> _stateGrid : StateGrid;
-@group(0) @binding(4) var<storage, read> _inState : array<vec4<f32>>;
+@group(0) @binding(4) var _inState : texture_2d<f32>;
 
 struct VertexInput {
   @location(0) position : vec3<f32>,
@@ -44,7 +44,7 @@ fn vertexMain(in : VertexInput) -> VertexOutput {
 
 @fragment
 fn fragmentMain(in : VertexOutput) -> @location(0) vec4<f32> {
-  let info = _inState[min(u32((in.vUv).x * f32(_stateGrid.gridWidth)) + u32((in.vUv).y * f32(_stateGrid.gridHeight)) * _stateGrid.gridWidth, _stateGrid.gridWidth * _stateGrid.gridHeight - 1u)];
+  let info = textureLoad(_inState, vec2<u32>(min(u32((in.vUv).x * f32(_stateGrid.gridWidth)), _stateGrid.gridWidth - 1u), min(u32((in.vUv).y * f32(_stateGrid.gridHeight)), _stateGrid.gridHeight - 1u)), 0);
   let waterHeight = (info.x * u.poolHeight);
   let caustic = info.y;
   let belowWater = (in.worldPos.y < waterHeight);

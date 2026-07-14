@@ -237,7 +237,7 @@ func lowerMeshWithVertex(m hir.Material) (ir.Module, bindings.Layout, error) {
 		gridBinding, stateBinding := meshStateBindings(len(uniforms.textures))
 		layout.States = []bindings.StateField{{
 			Name:  stateName,
-			WGSL:  bindings.WGSLStateBinding{Group: 0, InBinding: stateBinding, OutBinding: -1},
+			WGSL:  bindings.WGSLStateBinding{Group: 0, InBinding: stateBinding, OutBinding: -1, InKind: "texture"},
 			GL:    bindings.GLStateBinding{Uniform: "stateTex", Unit: 0},
 			Metal: bindings.MetalStateBinding{InBuffer: 2, OutBuffer: -1},
 		}}

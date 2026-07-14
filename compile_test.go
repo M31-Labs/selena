@@ -324,3 +324,79 @@ func hasUniform(res Result, name string) bool {
 	}
 	return false
 }
+
+// A render material's statefield read must be TEXTURE-backed on WGSL, and the layout must
+// say so, because the host binds the resource the layout names.
+//
+// Render materials tap stateAt() in dependent chains -- each coordinate derived from the
+// value just read -- so the loads are scattered. Through a storage buffer they bypass the
+// texture cache entirely, and past a certain grid size the working set stops fitting: the
+// gosx water demo's surface shader burned ~16ms/frame on this, while the SAME shader on
+// WebGL2 -- which has no storage buffers and so always sampled a texture -- never degraded
+// at all. WebGL was right; WGSL was the outlier.
+//
+// Feedback materials keep their storage buffers: they WRITE the out buffer, and their
+// reads are coherent neighbour taps rather than dependent chains.
+func TestWGSLStatefieldReadIsTextureBackedForRenderMaterials(t *testing.T) {
+	src := []byte(`material StateRead kind mesh {
+    param gridResolution : float = 64.0
+    state height
+    varying vUv : vec2
+    vertex() -> vec4 {
+        let uv = vec2f(0.5, 0.5)
+        let info = stateAt(uv)
+        vUv = uv
+        return vec4f(info.x, 0.0, 0.0, 1.0)
+    }
+    surface(geo) -> color {
+        let s = stateAt(geo.vUv)
+        return vec4f(s.x, s.y, s.z, 1.0)
+    }
+}`)
+	res, err := Compile(src, CompileOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var wgsl string
+	for _, a := range res.Artifacts {
+		if a.Target == TargetWGSL {
+			wgsl = a.Source
+		}
+	}
+	if wgsl == "" {
+		t.Fatal("no WGSL artifact")
+	}
+
+	if strings.Contains(wgsl, "var<storage, read> _inState") {
+		t.Errorf("render statefield read is a storage buffer; it must be a texture:\n%s", wgsl)
+	}
+	if !strings.Contains(wgsl, "var _inState : texture_2d<f32>") {
+		t.Errorf("render statefield is not bound as texture_2d<f32>:\n%s", wgsl)
+	}
+	// textureLoad, not textureSample: integer texel selection is bit-identical to the
+	// flat-index read it replaces, and it carries no implicit derivative, so it stays
+	// legal in the vertex stage -- where a mesh material displaces geometry by the
+	// heightfield.
+	if !strings.Contains(wgsl, "textureLoad(_inState") {
+		t.Errorf("stateAt() does not lower to textureLoad:\n%s", wgsl)
+	}
+	if strings.Contains(wgsl, "textureSample(_inState") {
+		t.Errorf("stateAt() must not lower to textureSample (needs a sampler; illegal in vertex):\n%s", wgsl)
+	}
+
+	if len(res.Layout.States) != 1 {
+		t.Fatalf("layout states = %d, want 1", len(res.Layout.States))
+	}
+	st := res.Layout.States[0]
+	if st.WGSL.InKind != "texture" {
+		t.Errorf("layout WGSL.InKind = %q, want %q -- the host binds what the layout names", st.WGSL.InKind, "texture")
+	}
+	if st.WGSL.OutBinding >= 0 {
+		t.Errorf("render statefield has an out binding (%d); it is read-only", st.WGSL.OutBinding)
+	}
+	// WebGL sampled a texture all along; that must not have changed.
+	if st.GL.Uniform != "stateTex" {
+		t.Errorf("GL state uniform = %q, want stateTex", st.GL.Uniform)
+	}
+}

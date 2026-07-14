@@ -86,11 +86,20 @@ type StateField struct {
 }
 
 // WGSLStateBinding gives the bind-group slots for the read (in) and read_write
-// (out) storage buffers of one statefield.
+// (out) resources of one statefield.
+//
+// InKind says what resource the host must bind at InBinding, because the two differ:
+//   - "texture" (render materials, OutBinding < 0): a texture_2d<f32> read with
+//     textureLoad. Render materials tap stateAt() in dependent chains, so these reads
+//     must go through the texture cache -- which is what WebGL has always done via
+//     GLStateBinding's sampler2D.
+//   - "storage" (feedback materials): a read-only storage buffer paired with the
+//     read_write out buffer the dispatch writes, ping-ponged by the host.
 type WGSLStateBinding struct {
-	Group      int `json:"group"`
-	InBinding  int `json:"inBinding"`
-	OutBinding int `json:"outBinding"`
+	Group      int    `json:"group"`
+	InBinding  int    `json:"inBinding"`
+	OutBinding int    `json:"outBinding"`
+	InKind     string `json:"inKind,omitempty"`
 }
 
 // GLStateBinding gives the combined previous-state sampler2D uniform name and
