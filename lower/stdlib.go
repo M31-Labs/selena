@@ -57,6 +57,16 @@ const (
 	// vec3 direction vector, returning vec4. The first arg must be a textureCube
 	// param and the second must be vec3.
 	builtinSampleCube builtinKind = "sample_cube"
+	// builtinSceneSampleLevel: sceneColorLevel(uv, lod) samples the engine
+	// backdrop at an explicit mip level. It is the backdrop counterpart of
+	// sampleLevel(): post materials cannot declare texture2d params, so
+	// sampleLevel() can never name sceneColor. One pre-filtered tap replaces an
+	// N-tap blur kernel — the cost driver for frosted-glass passes.
+	builtinSceneSampleLevel builtinKind = "scene_sample_level"
+	// builtinSceneSize: sceneSize() returns the vec2 pixel size of the engine
+	// scene-color target, so a kernel radius can be written in pixels instead of
+	// UV corrected by an app-supplied aspect uniform.
+	builtinSceneSize builtinKind = "scene_size"
 	// builtinSampleLevel: sampleLevel(tex, uv, lod) samples a texture2d param
 	// at an explicit LOD (mip level), returning vec4. The first arg must be a
 	// texture2d param, the second vec2 uv, the third a float lod. Unlike
@@ -217,6 +227,12 @@ var stdlib = stdlibRegistry{
 		// sceneDepth(uv)->float. Only valid inside a post-kind surface.
 		"sceneColor": {kind: builtinSceneSample, arity: 1},
 		"sceneDepth": {kind: builtinSceneSample, arity: 1},
+		// sceneColorLevel(uv, lod)->vec4 samples the backdrop at an explicit mip
+		// level; sceneSize()->vec2 reports the backdrop pixel size. Both are
+		// post-kind only. The host must supply a mipped scene-color target for
+		// sceneColorLevel to blur (see bindings.Requirements).
+		"sceneColorLevel": {kind: builtinSceneSampleLevel, arity: 2},
+		"sceneSize":       {kind: builtinSceneSize, arity: 0},
 
 		// --- Extended math / vector builtins ---
 

@@ -43,8 +43,18 @@ func LowerWith(m hir.Material, funcs []hir.FuncDecl) (ir.Module, bindings.Layout
 }
 
 // Lower compiles a high-level material into the low-level ir.Module plus the
-// host binding layout. Dispatches to the appropriate lowerer based on material kind.
+// host binding layout. Dispatches to the appropriate lowerer based on material
+// kind, then stamps the host requirements the emitted shaders imply.
 func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
+	mod, layout, err := lowerByKind(m)
+	if err != nil {
+		return ir.Module{}, bindings.Layout{}, err
+	}
+	layout.Requires = hostRequirements(mod)
+	return mod, layout, nil
+}
+
+func lowerByKind(m hir.Material) (ir.Module, bindings.Layout, error) {
 	switch m.Kind {
 	case hir.KindPoints:
 		return lowerPoints(m)
@@ -55,6 +65,26 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 	default:
 		return lowerMesh(m)
 	}
+}
+
+// hostRequirements reports what the host must arrange for mod's emitted shaders
+// to behave as authored. Selena emits the shader call; only the host can enable
+// a WebGL extension, build a mip chain, or measure a render target — and a host
+// that does none of it loses the effect silently in the browser rather than
+// failing at compile time. See bindings.Requirements.
+func hostRequirements(mod ir.Module) bindings.Requirements {
+	var req bindings.Requirements
+	if ir.UsesDerivatives(mod) {
+		req.GLExtensions = append(req.GLExtensions, "OES_standard_derivatives")
+	}
+	if ir.UsesSceneSampleLevel(mod) {
+		req.GLExtensions = append(req.GLExtensions, "EXT_shader_texture_lod")
+		req.SceneColorMips = true
+	}
+	if ir.UsesSceneSize(mod) {
+		req.GLSceneSizeUniform = "_sceneSize"
+	}
+	return req
 }
 
 // lowerMesh compiles a mesh material — the original Lower implementation.

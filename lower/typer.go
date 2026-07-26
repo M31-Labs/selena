@@ -150,7 +150,7 @@ func (t *typer) typeOf(e hir.Expr) (ir.Type, error) {
 					return "", err
 				}
 				if idxT != ir.Int && idxT != ir.Uint {
-					return "", diagnostic(CodeTypeMismatch, x.Span, "array index must be int or uint, got %s", idxT)
+					return "", diagnostic(CodeTypeMismatch, x.Span, "%s", arrayIndexTypeMessage(idxT, x.Index))
 				}
 				return info.elemType, nil
 			}
@@ -163,7 +163,7 @@ func (t *typer) typeOf(e hir.Expr) (ir.Type, error) {
 					return "", err
 				}
 				if idxT != ir.Int && idxT != ir.Uint {
-					return "", diagnostic(CodeTypeMismatch, x.Span, "array index must be int or uint, got %s", idxT)
+					return "", diagnostic(CodeTypeMismatch, x.Span, "%s", arrayIndexTypeMessage(idxT, x.Index))
 				}
 				return info.elemType, nil
 			}
@@ -171,6 +171,24 @@ func (t *typer) typeOf(e hir.Expr) (ir.Type, error) {
 		return "", diagnostic(CodeUnknownName, x.Span, "%q is not a local array or uniform array param", arrRef.Name)
 	}
 	return "", fmt.Errorf("unsupported expression %T", e)
+}
+
+// arrayIndexTypeMessage explains a rejected array index.
+//
+// A bare `0` is a float literal in Selena, so `for (var i = 0; ...)` gives a
+// float counter and `rects[i]` is ill-typed. The bare "array index must be int
+// or uint, got float" left the reader with no way to know that the `i` literal
+// suffix exists, so the fix is named whenever the index is a plain variable.
+func arrayIndexTypeMessage(idxT ir.Type, index hir.Expr) string {
+	base := "array index must be int or uint, got " + string(idxT)
+	if idxT != ir.Float {
+		return base
+	}
+	if ref, ok := index.(hir.Ref); ok {
+		return base + "; declare the counter with an int literal — `var " + ref.Name +
+			" = 0i` — or convert at the index with `int(" + ref.Name + ")`"
+	}
+	return base + "; int literals carry the `i` suffix (0i, 8i), or convert with int(...)"
 }
 
 func (t *typer) callType(c hir.Call) (ir.Type, error) {
@@ -193,6 +211,42 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 			return ir.Float, nil
 		}
 		return ir.Vec4, nil
+	}
+
+	// Backdrop LOD tap: sceneColorLevel(uv, lod) -> vec4.
+	if c.Func == "sceneColorLevel" {
+		if !t.allowSceneSample {
+			return "", diagnostic(CodeInvalidCall, c.Span, "%s is only available in post-kind materials", c.Func)
+		}
+		if len(c.Args) != 2 {
+			return "", diagnostic(CodeInvalidCall, c.Span, "sceneColorLevel(uv, lod) takes 2 arguments")
+		}
+		uvt, err := t.typeOf(c.Args[0])
+		if err != nil {
+			return "", err
+		}
+		if uvt != ir.Vec2 {
+			return "", diagnostic(CodeTypeMismatch, c.Span, "sceneColorLevel: first argument must be vec2 uv, got %s", uvt)
+		}
+		lodt, err := t.typeOf(c.Args[1])
+		if err != nil {
+			return "", err
+		}
+		if lodt != ir.Float {
+			return "", diagnostic(CodeTypeMismatch, c.Span, "sceneColorLevel: second argument must be a float lod, got %s", lodt)
+		}
+		return ir.Vec4, nil
+	}
+
+	// Backdrop resolution: sceneSize() -> vec2.
+	if c.Func == "sceneSize" {
+		if !t.allowSceneSample {
+			return "", diagnostic(CodeInvalidCall, c.Span, "%s is only available in post-kind materials", c.Func)
+		}
+		if len(c.Args) != 0 {
+			return "", diagnostic(CodeInvalidCall, c.Span, "sceneSize() takes no arguments")
+		}
+		return ir.Vec2, nil
 	}
 
 	// Feedback-kind previous-state read: state(dx, dy) -> vec4.
@@ -226,10 +280,16 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 
 	spec, ok := stdlib.builtin(c.Func)
 	if !ok {
-		if len(c.Args) == 0 {
-			return "", diagnostic(CodeInvalidCall, c.Span, "call %q has no arguments", c.Func)
-		}
-		return t.typeOf(c.Args[0])
+		// An unregistered callee is an unknown name, not a typed call. Selena
+		// inlines every author `fn` before lowering, so anything still spelled as
+		// a call here names nothing the language provides. Reporting it as
+		// SEL2001 at the call site is the whole diagnosis; the earlier behaviour
+		// (infer the call's type from its first argument, or complain that a
+		// zero-argument call "has no arguments") reported a downstream type
+		// mismatch — for example `sceneColorLevel(uv, lod)` surfaced as "surface
+		// must return color/vec3/vec4, got vec2" — and let an unknown name pass
+		// straight through into every emitted backend source.
+		return "", diagnostic(CodeUnknownName, c.Span, "unknown function %q", c.Func)
 	}
 
 	switch spec.kind {
@@ -299,6 +359,12 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 		}
 		tex, ok := c.Args[0].(hir.Ref)
 		if !ok || t.paramKind[tex.Name] != hir.Texture2D {
+			if ok && (tex.Name == "sceneColor" || tex.Name == "sceneDepth") {
+				// The engine backdrop is not a param, so sampleLevel can never
+				// name it. Point at the builtin that does.
+				return "", diagnostic(CodeInvalidCall, c.Span,
+					"sampleLevel: %s is an engine backdrop, not a texture2d param; use sceneColorLevel(uv, lod)", tex.Name)
+			}
 			return "", diagnostic(CodeInvalidCall, c.Span, "sampleLevel: first argument must be a texture2d param")
 		}
 		uv, err := t.typeOf(c.Args[1])

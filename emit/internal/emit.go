@@ -89,6 +89,13 @@ type Resolver struct {
 	// emitters derive it from cellIndex and the injected grid uniforms.
 	// When nil, CellUV falls back to a dummy expression.
 	CellUVFn func() string
+	// SceneSampleLevelFn renders an engine post-pass texture sample at an
+	// explicit LOD. Each post emitter sets it. When nil, the call degrades to
+	// SceneSampleFn (implicit LOD) so no backend emits an undefined function.
+	SceneSampleLevelFn func(name, uv, lod string) string
+	// SceneSizeFn renders the vec2 pixel size of the scene-color target. Each
+	// post emitter sets it. When nil, SceneSize falls back to a dummy value.
+	SceneSizeFn func() string
 }
 
 // NewQualified builds a struct-qualified resolver (WGSL/Metal) for one stage.
@@ -231,6 +238,25 @@ func (r Resolver) SceneSample(name, uv string) string {
 		return r.SceneSampleFn(name, uv)
 	}
 	return "vec4<f32>(0.0)" // unreachable in valid programs; guard only
+}
+
+// SceneSampleLevel renders a post-pass engine scene texture sample at an
+// explicit LOD (mip level). It is the backdrop counterpart of SampleLevel: one
+// tap of a pre-filtered mip in place of an N-tap blur kernel.
+func (r Resolver) SceneSampleLevel(name, uv, lod string) string {
+	if r.SceneSampleLevelFn != nil {
+		return r.SceneSampleLevelFn(name, uv, lod)
+	}
+	// Degrade to the implicit-LOD form rather than emit an undefined function.
+	return r.SceneSample(name, uv)
+}
+
+// SceneSize renders the vec2 pixel size of the engine scene-color target.
+func (r Resolver) SceneSize() string {
+	if r.SceneSizeFn != nil {
+		return r.SceneSizeFn()
+	}
+	return "vec2(0.0, 0.0)" // unreachable in valid programs; guard only
 }
 
 // StateSample renders a feedback-kind previous-state read at the constant cell

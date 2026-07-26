@@ -102,6 +102,32 @@ func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
 			}
 			return ir.SceneSample{Name: x.Func, UV: uv}, nil
 		}
+		if x.Func == "sceneColorLevel" {
+			if !r.allowSceneSample {
+				return nil, diagnostic(CodeInvalidCall, x.Span, "%s is only available in post-kind materials", x.Func)
+			}
+			if len(x.Args) != 2 {
+				return nil, diagnostic(CodeInvalidCall, x.Span, "sceneColorLevel(uv, lod) takes 2 arguments")
+			}
+			uv, err := r.expr(x.Args[0])
+			if err != nil {
+				return nil, err
+			}
+			lod, err := r.expr(x.Args[1])
+			if err != nil {
+				return nil, err
+			}
+			return ir.SceneSampleLevel{Name: "sceneColor", UV: uv, LOD: lod}, nil
+		}
+		if x.Func == "sceneSize" {
+			if !r.allowSceneSample {
+				return nil, diagnostic(CodeInvalidCall, x.Span, "%s is only available in post-kind materials", x.Func)
+			}
+			if len(x.Args) != 0 {
+				return nil, diagnostic(CodeInvalidCall, x.Span, "sceneSize() takes no arguments")
+			}
+			return ir.SceneSize{}, nil
+		}
 		if x.Func == "state" {
 			if !r.allowState {
 				return nil, diagnostic(CodeInvalidCall, x.Span, "state(dx, dy) is only available in feedback-kind materials")
@@ -152,6 +178,10 @@ func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
 			}
 			texRef, ok := x.Args[0].(hir.Ref)
 			if !ok || r.paramKind[texRef.Name] != hir.Texture2D {
+				if ok && (texRef.Name == "sceneColor" || texRef.Name == "sceneDepth") {
+					return nil, diagnostic(CodeInvalidCall, x.Span,
+						"sampleLevel: %s is an engine backdrop, not a texture2d param; use sceneColorLevel(uv, lod)", texRef.Name)
+				}
 				return nil, diagnostic(CodeInvalidCall, x.Span, "sampleLevel: first argument must be a texture2d param")
 			}
 			uv, err := r.expr(x.Args[1])
@@ -177,6 +207,12 @@ func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
 				return nil, err
 			}
 			return ir.SampleCube{Texture: texRef.Name, Dir: dir}, nil
+		}
+		if _, known := stdlib.builtin(x.Func); !known {
+			// Mirror the typer: an unregistered callee is an unknown name. The
+			// resolver is reached directly (without a typeOf pass) from a few
+			// lowering sites, so the guard lives on both paths.
+			return nil, diagnostic(CodeUnknownName, x.Span, "unknown function %q", x.Func)
 		}
 		args, err := r.args(x.Args)
 		if err != nil {

@@ -71,6 +71,52 @@ type Layout struct {
 	// UniformBlock.Field for Class == "context". Empty for materials with no
 	// context block.
 	Context []string `json:"context,omitempty"`
+	// Requires lists what the host must arrange for this shader to run as
+	// authored. It is empty for every material that needs nothing beyond the
+	// standard contract. See Requirements.
+	Requires Requirements `json:"requires,omitzero"`
+}
+
+// Requirements is the host-side contract a compiled material needs beyond
+// uniforms, attributes and textures. Selena can emit the shader call; it cannot
+// enable a WebGL extension, build a mip chain, or measure a render target. When
+// a host ignores one of these the pass does not fail loudly — it silently loses
+// the effect (an unblurred backdrop) or fails to compile in the browser only
+// (a derivative call on WebGL). Declaring the requirement is what makes that
+// divergence visible before a page is loaded.
+type Requirements struct {
+	// GLExtensions names the WebGL extensions the host must request with
+	// gl.getExtension(...) BEFORE compiling the GLSL (WebGL 1 / GLSL ES 1.00)
+	// artifact. A shader `#extension` directive alone is not enough: WebGL only
+	// honours it when the matching extension object has been requested.
+	//
+	//   OES_standard_derivatives — dpdx / dpdy / fwidth
+	//   EXT_shader_texture_lod   — sceneColorLevel (fragment-stage explicit LOD)
+	//
+	// The GLES (GLSL ES 3.00), WGSL and Metal artifacts have all of this in
+	// core and need nothing.
+	GLExtensions []string `json:"glExtensions,omitempty"`
+	// SceneColorMips is true when the material samples the backdrop at an
+	// explicit mip level (sceneColorLevel). The host must render the post source
+	// into a texture WITH a mip chain, regenerate the mips each frame before the
+	// pass, and bind a sampler whose minification filter walks mips
+	// (LINEAR_MIPMAP_LINEAR / GPUFilterMode "linear" with mipmapFilter
+	// "linear"). Without a mip chain every backend clamps to level 0 and the
+	// pass renders unblurred.
+	SceneColorMips bool `json:"sceneColorMips,omitempty"`
+	// GLSceneSizeUniform is non-empty when the GLSL (WebGL 1 / GLSL ES 1.00)
+	// artifact declares a host-set backdrop-size uniform, because GLSL ES 1.00
+	// has no textureSize. The host must set it to the scene-color target size in
+	// pixels each time the target is resized. WGSL, GLES and Metal read the size
+	// off the bound texture and need nothing.
+	GLSceneSizeUniform string `json:"glSceneSizeUniform,omitempty"`
+}
+
+// IsZero reports whether r carries no host requirement. It also drives
+// `json:"omitzero"` on Layout.Requires so that descriptors for materials with
+// no extra host contract are byte-identical to the pre-Requirements form.
+func (r Requirements) IsZero() bool {
+	return len(r.GLExtensions) == 0 && !r.SceneColorMips && r.GLSceneSizeUniform == ""
 }
 
 // StateField is one feedback-kind vec4-per-cell statefield with its per-backend

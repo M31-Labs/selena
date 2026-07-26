@@ -563,6 +563,19 @@ const _postUVs = array<vec2<f32>, 3>(
 				return "vec4<f32>(0.0)"
 			}
 		},
+		// textureSampleLevel is also the form that is legal inside non-uniform
+		// control flow, so a backdrop LOD tap works inside an if/for.
+		SceneSampleLevelFn: func(name, uv, lod string) string {
+			switch name {
+			case "sceneColor":
+				return fmt.Sprintf("textureSampleLevel(_sceneColorTex, _sceneColorSamp, %s, %s)", uv, lod)
+			case "sceneDepth":
+				return fmt.Sprintf("textureSampleCompareLevel(_sceneDepthTex, _sceneDepthSamp, %s, 0.0)", uv)
+			default:
+				return "vec4<f32>(0.0)"
+			}
+		},
+		SceneSizeFn: func() string { return "vec2<f32>(textureDimensions(_sceneColorTex, 0))" },
 	}
 
 	b.WriteString("@fragment fn fragmentMain(in : PostInput) -> @location(0) vec4<f32> {\n")
