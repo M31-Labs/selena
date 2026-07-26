@@ -65,6 +65,11 @@ func emitFeedback(m ir.Module) (string, error) {
 		CellUVFn: func() string {
 			return "(float2(float(cellIndex % _grid.gridWidth), float(cellIndex / _grid.gridWidth)) + float2(0.5, 0.5)) / float(_grid.gridWidth)"
 		},
+		// computeMain returns void — an early ir.ReturnCF writes outState then
+		// bare-returns, matching the final unconditional write below it.
+		ReturnFn: func(val string) string {
+			return "outState[cellIndex] = " + val + "; return;"
+		},
 	}
 
 	b.WriteString("kernel void computeMain(\n")

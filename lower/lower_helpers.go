@@ -65,6 +65,8 @@ func collectGeoStmt(s hir.Stmt, geo string, used map[string]bool) {
 	case hir.IndexAssign:
 		collectGeo(x.Index, geo, used)
 		collectGeo(x.Value, geo, used)
+	case hir.Return:
+		collectGeo(x.Value, geo, used)
 	}
 }
 

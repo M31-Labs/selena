@@ -430,7 +430,7 @@ func (w *walker) material(n *gts.Node) (hir.Material, error) {
 func (w *walker) feedbackFn(n *gts.Node) (hir.Func, error) {
 	f := hir.Func{Geo: w.Text(w.Field(n, "cell")), Span: w.span(n)}
 	body := w.Field(n, "body")
-	stmts, result, err := w.blockBody(body)
+	stmts, result, _, err := w.blockBody(body)
 	if err != nil {
 		return f, err
 	}
@@ -452,7 +452,7 @@ func (w *walker) vertexFn(n *gts.Node) (hir.Func, error) {
 		f.Geo = w.Text(g)
 	}
 	body := w.Field(n, "body")
-	stmts, result, err := w.blockBody(body)
+	stmts, result, _, err := w.blockBody(body)
 	if err != nil {
 		return f, err
 	}
@@ -674,7 +674,7 @@ func (w *walker) contextFieldArray(n *gts.Node) (hir.ContextField, error) {
 func (w *walker) fn(n *gts.Node) (hir.Func, error) {
 	f := hir.Func{Geo: w.Text(w.Field(n, "geo")), Span: w.span(n)}
 	body := w.Field(n, "body")
-	stmts, result, err := w.blockBody(body)
+	stmts, result, _, err := w.blockBody(body)
 	if err != nil {
 		return f, err
 	}
@@ -687,15 +687,17 @@ func (w *walker) fn(n *gts.Node) (hir.Func, error) {
 }
 
 // blockBody parses the statements inside a block node into (HIR body stmts, return expr).
-// return_stmt sets the result expression; all other statement kinds go into stmts.
-// Sub-blocks (inside if/for) call subBlock which wraps blockBody and errors on return_stmt.
+// return_stmt sets the result expression (and its span); all other statement
+// kinds go into stmts. Sub-blocks (inside if/for) call subBlock, which wraps
+// blockBody and turns a trailing return into a hir.Return statement appended
+// to the block's own stmts (early returns, legal at any nesting depth).
 //
-// A return_stmt must be the last statement in the block: nothing may follow it.
+// A return_stmt must be the last statement in ITS block, at every nesting
+// depth: nothing may follow it, in the top-level body or inside an if/for.
 // Without this check a later statement (including a second return) would
 // silently overwrite an earlier return's result, or hoist unreachable code
-// into the executed body. Until early returns are supported, a return
-// followed by any statement is a compile error rather than a miscompile.
-func (w *walker) blockBody(block *gts.Node) (stmts []hir.Stmt, result hir.Expr, err error) {
+// into the executed body — the exact defect this check exists to prevent.
+func (w *walker) blockBody(block *gts.Node) (stmts []hir.Stmt, result hir.Expr, resultSpan hir.Span, err error) {
 	for i := 0; i < block.NamedChildCount(); i++ {
 		st := block.NamedChild(i)
 		if w.Type(st) != "statement" {
@@ -703,8 +705,8 @@ func (w *walker) blockBody(block *gts.Node) (stmts []hir.Stmt, result hir.Expr, 
 		}
 		s := st.NamedChild(0)
 		if result != nil {
-			return nil, nil, &Error{
-				Message: "unreachable statement after return (a surface body may only return once, as its final statement)",
+			return nil, nil, hir.Span{}, &Error{
+				Message: "unreachable statement after return (a return must be the last statement in its block)",
 				Span:    w.span(s),
 			}
 		}
@@ -712,13 +714,13 @@ func (w *walker) blockBody(block *gts.Node) (stmts []hir.Stmt, result hir.Expr, 
 		case "let_stmt":
 			e, err := w.expr(w.Field(s, "value"))
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, hir.Span{}, err
 			}
 			stmts = append(stmts, hir.Let{Name: w.Text(w.Field(s, "name")), Value: e, Span: w.span(s)})
 		case "var_stmt":
 			e, err := w.expr(w.Field(s, "value"))
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, hir.Span{}, err
 			}
 			stmts = append(stmts, hir.VarDecl{Name: w.Text(w.Field(s, "name")), Value: e, Span: w.span(s)})
 		case "var_typed_stmt":
@@ -727,7 +729,7 @@ func (w *walker) blockBody(block *gts.Node) (stmts []hir.Stmt, result hir.Expr, 
 			sizeText := w.Text(w.Field(typNode, "size"))
 			sz, err := strconv.Atoi(sizeText)
 			if err != nil || sz <= 0 {
-				return nil, nil, &Error{Message: fmt.Sprintf("array size must be a positive integer, got %q", sizeText), Span: w.span(s)}
+				return nil, nil, hir.Span{}, &Error{Message: fmt.Sprintf("array size must be a positive integer, got %q", sizeText), Span: w.span(s)}
 			}
 			stmts = append(stmts, hir.VarArrayDecl{
 				Name:     w.Text(w.Field(s, "name")),
@@ -738,17 +740,17 @@ func (w *walker) blockBody(block *gts.Node) (stmts []hir.Stmt, result hir.Expr, 
 		case "assign_stmt":
 			e, err := w.expr(w.Field(s, "value"))
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, hir.Span{}, err
 			}
 			stmts = append(stmts, hir.Assign{Name: w.Text(w.Field(s, "name")), Value: e, Span: w.span(s)})
 		case "index_assign_stmt":
 			idx, err := w.expr(w.Field(s, "index"))
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, hir.Span{}, err
 			}
 			val, err := w.expr(w.Field(s, "value"))
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, hir.Span{}, err
 			}
 			stmts = append(stmts, hir.IndexAssign{
 				Name:  w.Text(w.Field(s, "name")),
@@ -759,38 +761,42 @@ func (w *walker) blockBody(block *gts.Node) (stmts []hir.Stmt, result hir.Expr, 
 		case "if_stmt":
 			stmt, err := w.ifStmt(s)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, hir.Span{}, err
 			}
 			stmts = append(stmts, stmt)
 		case "for_stmt":
 			stmt, err := w.forStmt(s)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, hir.Span{}, err
 			}
 			stmts = append(stmts, stmt)
 		case "return_stmt":
 			e, err := w.expr(w.Field(s, "value"))
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, hir.Span{}, err
 			}
 			result = e
+			resultSpan = w.span(s)
 		case "discard_stmt":
 			stmts = append(stmts, hir.Discard{Span: w.span(s)})
 		case "break_stmt":
 			stmts = append(stmts, hir.Break{Span: w.span(s)})
 		}
 	}
-	return stmts, result, nil
+	return stmts, result, resultSpan, nil
 }
 
-// subBlock parses an if/for body block; errors if a return_stmt is found.
+// subBlock parses an if/for body block. A trailing return_stmt becomes a
+// hir.Return statement appended to the block's own stmts: an early return,
+// legal at any nesting depth. blockBody's own "return must be last" check
+// still rejects any statement after that return, at this block's level.
 func (w *walker) subBlock(block *gts.Node) ([]hir.Stmt, error) {
-	stmts, result, err := w.blockBody(block)
+	stmts, result, resultSpan, err := w.blockBody(block)
 	if err != nil {
 		return nil, err
 	}
 	if result != nil {
-		return nil, &Error{Message: "return statement is not allowed inside if/for body (B2a limitation)", Span: w.span(block)}
+		stmts = append(stmts, hir.Return{Value: result, Span: resultSpan})
 	}
 	return stmts, nil
 }

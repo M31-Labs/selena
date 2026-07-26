@@ -96,6 +96,14 @@ type Resolver struct {
 	// SceneSizeFn renders the vec2 pixel size of the scene-color target. Each
 	// post emitter sets it. When nil, SceneSize falls back to a dummy value.
 	SceneSizeFn func() string
+	// ReturnFn renders an early ir.ReturnCF statement given the already-
+	// rendered (already vec4-packed) result value. When nil, emitStmt falls
+	// back to "return <val>;" — correct for every stage whose entry function
+	// already declares a vec4/float4 return type (WGSL/Metal mesh, points,
+	// post). Stages whose entry is void (WGSL/Metal feedback compute; every
+	// GLSL/GLES fragment main, which writes gl_FragColor/fragColor instead of
+	// returning a value) set ReturnFn to write the output and then `return;`.
+	ReturnFn func(val string) string
 }
 
 // NewQualified builds a struct-qualified resolver (WGSL/Metal) for one stage.
@@ -398,6 +406,13 @@ func emitStmt(b *strings.Builder, s *ir.Stmt, d Resolver, indent string, wgsl bo
 	case ir.BreakCF:
 		// Same spelling on WGSL, GLSL, GLES and Metal.
 		fmt.Fprintf(b, "%sbreak;\n", indent)
+	case ir.ReturnCF:
+		val := ir.Print(cf.Value, d)
+		if d.ReturnFn != nil {
+			fmt.Fprintf(b, "%s%s\n", indent, d.ReturnFn(val))
+		} else {
+			fmt.Fprintf(b, "%sreturn %s;\n", indent, val)
+		}
 	case ir.DiscardCF:
 		// Fragment discard — spelling is backend-specific (Metal uses
 		// discard_fragment(); others use discard;).

@@ -538,3 +538,325 @@ func TestCompileSingleReturnStillCompiles(t *testing.T) {
 		t.Fatalf("WGSL fragment does not return the expected color:\n%s", wgsl.Source)
 	}
 }
+
+// fragmentSource returns the fragment-stage source for a compiled artifact:
+// Source for the single-file backends (WGSL, Metal), Fragment for the
+// split-file backends (GLSL, GLES).
+func fragmentSource(a Artifact) string {
+	if a.Source != "" {
+		return a.Source
+	}
+	return a.Fragment
+}
+
+// TestCompileEarlyReturnInIfProducesTwoReturnSites is the Phase 1 acceptance
+// test: `if (c) { return X }` followed by a trailing `return Y` must compile
+// on every backend, with X's return reachable only inside the if branch and
+// Y's return reachable only after it — a real conditional branch with two
+// distinct return sites, not a hoisted/overwritten single value (the exact
+// silent miscompile Phase 0 closed for the flat-sibling-return shape).
+func TestCompileEarlyReturnInIfProducesTwoReturnSites(t *testing.T) {
+	src := []byte(`material EarlyReturnIf kind mesh {
+    param cutoff : float = 0.5
+
+    surface(geo) -> color {
+        if (geo.uv.x < cutoff) {
+            return rgb(1.0, 0.0, 0.0)
+        }
+        return rgb(0.0, 1.0, 0.0)
+    }
+}`)
+	res, err := Compile(src, CompileOptions{Targets: AllTargets()})
+	if err != nil {
+		t.Fatalf("return inside if followed by a trailing return should compile: %v", err)
+	}
+	for _, target := range AllTargets() {
+		a, ok := res.Artifact(target)
+		if !ok {
+			t.Fatalf("missing %s artifact", target)
+		}
+		frag := fragmentSource(a)
+		if !strings.Contains(frag, "if (") {
+			t.Fatalf("%s fragment has no branch:\n%s", target, frag)
+		}
+		if !strings.Contains(frag, "1.0, 0.0, 0.0") {
+			t.Fatalf("%s fragment is missing the early (red) return:\n%s", target, frag)
+		}
+		if !strings.Contains(frag, "0.0, 1.0, 0.0") {
+			t.Fatalf("%s fragment is missing the trailing (green) return:\n%s", target, frag)
+		}
+	}
+}
+
+// TestCompileEarlyReturnInForLoop covers a conditional return nested inside a
+// for body, alongside an unrelated author `break` in the same loop — pinning
+// that return exits the whole surface (not just the loop) while break only
+// exits the loop, and that the two don't interfere with each other's lowering
+// (loopDepth tracking, in particular).
+func TestCompileEarlyReturnInForLoop(t *testing.T) {
+	src := []byte(`material EarlyReturnLoop kind mesh {
+    param limit : float = 3.0
+
+    surface(geo) -> color {
+        var hits = 0.0
+        for (var i = 0.0; i < 8.0; i = i + 1.0) {
+            if (i > limit) {
+                return rgb(1.0, 0.0, 0.0)
+            }
+            hits = hits + 1.0
+            if (hits > 6.0) {
+                break
+            }
+        }
+        return rgb(0.0, hits / 8.0, 0.0)
+    }
+}`)
+	res, err := Compile(src, CompileOptions{Targets: AllTargets()})
+	if err != nil {
+		t.Fatalf("early return inside a for body should compile: %v", err)
+	}
+	for _, target := range AllTargets() {
+		a, ok := res.Artifact(target)
+		if !ok {
+			t.Fatalf("missing %s artifact", target)
+		}
+		frag := fragmentSource(a)
+		if !strings.Contains(frag, "for (") {
+			t.Fatalf("%s fragment has no for loop:\n%s", target, frag)
+		}
+		if !strings.Contains(frag, "break;") {
+			t.Fatalf("%s fragment is missing the author break:\n%s", target, frag)
+		}
+		if !strings.Contains(frag, "1.0, 0.0, 0.0") {
+			t.Fatalf("%s fragment is missing the early (red) return:\n%s", target, frag)
+		}
+	}
+}
+
+// TestCompileFeedbackEarlyReturnWritesOutStateThenReturns covers the one
+// backend shape that cannot use a plain `return val;`: WGSL/Metal feedback
+// compute kernels return void, so an early ReturnCF must write outState then
+// bare-return (emit/wgsl and emit/metal's feedback ReturnFn), matching the
+// existing unconditional write at the end of the kernel.
+func TestCompileFeedbackEarlyReturnWritesOutStateThenReturns(t *testing.T) {
+	src := []byte(`material FeedbackEarlyReturn kind feedback {
+    param cutoff : float = 0.5
+    state water
+
+    feedback(cell) -> vec4 {
+        let here = state(0, 0)
+        let uv = cell.uv
+        if (uv.x < cutoff) {
+            return vec4f(0.0, 0.0, 0.0, 0.0)
+        }
+        return here
+    }
+}`)
+	res, err := Compile(src, CompileOptions{Targets: []Target{TargetWGSL, TargetMetal}})
+	if err != nil {
+		t.Fatalf("early return in a feedback body should compile: %v", err)
+	}
+	wgsl, ok := res.Artifact(TargetWGSL)
+	if !ok {
+		t.Fatal("missing WGSL artifact")
+	}
+	if !strings.Contains(wgsl.Source, "outState[cellIndex] = vec4<f32>(0.0, 0.0, 0.0, 0.0); return;") {
+		t.Fatalf("WGSL compute kernel does not write outState before the early return:\n%s", wgsl.Source)
+	}
+	metalArt, ok := res.Artifact(TargetMetal)
+	if !ok {
+		t.Fatal("missing Metal artifact")
+	}
+	if !strings.Contains(metalArt.Source, "outState[cellIndex] = float4(0.0, 0.0, 0.0, 0.0); return;") {
+		t.Fatalf("Metal compute kernel does not write outState before the early return:\n%s", metalArt.Source)
+	}
+}
+
+// TestCompileVertexEarlyReturnRejected pins the vertex() restriction the
+// design deliberately keeps: a varying assigned after an early return would
+// be undefined, so authored vertex() bodies reject Return at lowering time
+// even though the parser now accepts it structurally in every if/for body.
+func TestCompileVertexEarlyReturnRejected(t *testing.T) {
+	src := []byte(`material VertexEarlyReturn {
+    vertex(geo) -> vec4 {
+        if (geo.position.x > 0.0) {
+            return mvp * vec4f(geo.position, 1.0)
+        }
+        return mvp * vec4f(geo.position, 1.0)
+    }
+
+    surface(geo) -> color {
+        return rgb(1.0, 1.0, 1.0)
+    }
+}`)
+	_, err := Compile(src, CompileOptions{Targets: []Target{}})
+	if err == nil {
+		t.Fatal("Compile succeeded with an early return in vertex(); want a diagnostic")
+	}
+	var ce *CompileError
+	if !errors.As(err, &ce) {
+		t.Fatalf("error type = %T, want *CompileError", err)
+	}
+	d := ce.Diagnostics[0]
+	if !strings.Contains(d.Message, "vertex()") {
+		t.Fatalf("diagnostic message = %q, want it to name vertex()", d.Message)
+	}
+}
+
+// TestCompileSuperSurfaceChildEarlyReturnCompiles covers the composition
+// combination the design supports: the CHILD may use an early return whose
+// value calls super.surface(...), as long as the PARENT itself has no
+// control flow (the existing Let-only inline gate; see
+// TestCompileSuperSurfaceRejectsEarlyReturnInParent for the combination it
+// rejects).
+func TestCompileSuperSurfaceChildEarlyReturnCompiles(t *testing.T) {
+	src := []byte(`material Base {
+    param baseColor : color
+    surface(geo) -> color {
+        return baseColor
+    }
+}
+material Tinted extends Base {
+    param tint : color
+    surface(geo) -> color {
+        if (tint.r > 0.5) {
+            return super.surface(geo) * tint
+        }
+        return baseColor
+    }
+}`)
+	res, err := Compile(src, CompileOptions{Material: "Tinted", Targets: []Target{TargetWGSL}})
+	if err != nil {
+		t.Fatalf("child early return calling super.surface should compile: %v", err)
+	}
+	wgsl, ok := res.Artifact(TargetWGSL)
+	if !ok {
+		t.Fatal("missing WGSL artifact")
+	}
+	if !strings.Contains(wgsl.Source, "if (") {
+		t.Fatalf("WGSL fragment has no branch:\n%s", wgsl.Source)
+	}
+}
+
+// TestCompileSuperSurfaceRejectsEarlyReturnInParent covers the combination
+// the design deliberately does NOT support: a PARENT surface with an early
+// return has no statement stream super.surface(...) can splice a child's
+// usage into (inline.go's Let-only gate), so it stays rejected — with a
+// diagnostic that names control flow / early return instead of Phase 0's
+// retired "B2a limitation" wording.
+func TestCompileSuperSurfaceRejectsEarlyReturnInParent(t *testing.T) {
+	src := []byte(`material Base {
+    param baseColor : color
+    surface(geo) -> color {
+        if (baseColor.r > 0.5) {
+            return baseColor
+        }
+        return rgb(0.0, 0.0, 0.0)
+    }
+}
+material Tinted extends Base {
+    param tint : color
+    surface(geo) -> color {
+        return super.surface(geo) * tint
+    }
+}`)
+	_, err := Compile(src, CompileOptions{Material: "Tinted", Targets: []Target{}})
+	if err == nil {
+		t.Fatal("Compile succeeded with an early return in the parent surface; want a diagnostic")
+	}
+	var ce *CompileError
+	if !errors.As(err, &ce) {
+		t.Fatalf("error type = %T, want *CompileError", err)
+	}
+	d := ce.Diagnostics[0]
+	if !strings.Contains(d.Message, "early return") {
+		t.Fatalf("diagnostic message = %q, want it to name early returns", d.Message)
+	}
+	if strings.Contains(d.Message, "B2a") {
+		t.Fatalf("diagnostic message = %q, must not reference the retired B2a limitation label", d.Message)
+	}
+}
+
+// TestCompileRejectsDiscardAfterReturn closes a deduction from the Phase 0
+// investigation (never separately executed): a discard statement placed
+// after a return used to be hoisted into executed code by the same defect
+// two sibling returns exploited. Phase 0's generic "return must be last"
+// check covers any statement kind, including discard — verify it here.
+func TestCompileRejectsDiscardAfterReturn(t *testing.T) {
+	src := []byte(`material DiscardAfterReturn kind mesh {
+    surface(geo) -> color {
+        return rgb(1.0, 0.0, 0.0)
+        discard
+    }
+}`)
+	_, err := Compile(src, CompileOptions{Targets: []Target{}})
+	if err == nil {
+		t.Fatal("Compile succeeded with a discard after a return; want a diagnostic, not silently hoisted dead code")
+	}
+	var ce *CompileError
+	if !errors.As(err, &ce) {
+		t.Fatalf("error type = %T, want *CompileError", err)
+	}
+	d := ce.Diagnostics[0]
+	if !strings.Contains(d.Message, "unreachable statement after return") {
+		t.Fatalf("diagnostic message = %q, want it to name the unreachable statement", d.Message)
+	}
+}
+
+// TestCompileRejectsUnreachableStatementAfterNestedReturn extends Phase 0's
+// protection to nested blocks: a statement after a return inside an if body
+// is exactly as unreachable as one after a top-level return, and must be
+// rejected the same way. This is the case Phase 1 could have accidentally
+// weakened by legalizing return-in-if; it must not have.
+func TestCompileRejectsUnreachableStatementAfterNestedReturn(t *testing.T) {
+	src := []byte(`material UnreachableInIf kind mesh {
+    surface(geo) -> color {
+        if (geo.uv.x < 0.5) {
+            return rgb(1.0, 0.0, 0.0)
+            let dead = 0.25
+        }
+        return rgb(0.0, 1.0, 0.0)
+    }
+}`)
+	_, err := Compile(src, CompileOptions{Targets: []Target{}})
+	if err == nil {
+		t.Fatal("Compile succeeded with a let after a nested return; want a diagnostic")
+	}
+	var ce *CompileError
+	if !errors.As(err, &ce) {
+		t.Fatalf("error type = %T, want *CompileError", err)
+	}
+	d := ce.Diagnostics[0]
+	if !strings.Contains(d.Message, "unreachable statement after return") {
+		t.Fatalf("diagnostic message = %q, want it to name the unreachable statement", d.Message)
+	}
+	if d.Range.Start.Line != 5 {
+		t.Fatalf("range start line = %d, want 5 (the let after the nested return)", d.Range.Start.Line)
+	}
+}
+
+// TestCompileUnreachableReturnDiagnosticNoLongerClaimsSingleReturn locks in
+// the Phase 0 diagnostic narrowing Phase 1 requires: the message used to say
+// "a surface body may only return once, as its final statement", which
+// became false once early returns shipped. The message must still identify
+// the unreachable statement, but must no longer make that now-false claim.
+func TestCompileUnreachableReturnDiagnosticNoLongerClaimsSingleReturn(t *testing.T) {
+	src := []byte(`material TwoReturn kind mesh {
+    surface(geo) -> color {
+        return rgb(1.0, 0.0, 0.0)
+        return rgb(0.0, 1.0, 0.0)
+    }
+}`)
+	_, err := Compile(src, CompileOptions{Targets: []Target{}})
+	if err == nil {
+		t.Fatal("Compile succeeded with two sibling returns; want a diagnostic")
+	}
+	var ce *CompileError
+	if !errors.As(err, &ce) {
+		t.Fatalf("error type = %T, want *CompileError", err)
+	}
+	d := ce.Diagnostics[0]
+	if strings.Contains(d.Message, "may only return once") {
+		t.Fatalf("diagnostic message = %q, must not claim a body may only return once now that early returns are supported", d.Message)
+	}
+}

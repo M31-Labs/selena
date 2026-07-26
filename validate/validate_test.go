@@ -278,3 +278,96 @@ func TestConformanceGLESCompilesWithGlslang(t *testing.T) {
 		})
 	}
 }
+
+// TestWGSLSampleInsideNonUniformEarlyReturnValidatesWithNaga checks the naga
+// uniformity risk the Phase 1 investigation flagged: existing guidance
+// (ir.go's SampleLevel doc) warns that a sample() call living inside
+// non-uniform (data-dependent) control flow can fail naga's "must be called
+// from uniform control flow" validation for implicit-derivative texture
+// functions, and recommends sampleLevel() as the safe alternative. An early
+// return does not change that risk — the branch was already non-uniform
+// before the return existed — but Phase 1 makes this shape newly reachable
+// (`if (non-uniform) { return sample(...) }`), so it is verified here rather
+// than left as a deduction. With naga 29.0.3 (as installed for this repo)
+// this specific shape validates successfully; the test pins that empirical
+// result and will fail loudly (not silently) if a naga upgrade changes it.
+func TestWGSLSampleInsideNonUniformEarlyReturnValidatesWithNaga(t *testing.T) {
+	src := []byte(`material NonUniformEarlyReturnSample {
+    param tex : texture2d
+
+    surface(geo) -> color {
+        if (geo.uv.x < 0.5) {
+            return sample(tex, geo.uv)
+        }
+        return rgb(0.0, 0.0, 0.0)
+    }
+}`)
+	res, err := selena.Compile(src, selena.CompileOptions{Targets: []selena.Target{selena.TargetWGSL}})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	a, ok := res.Artifact(selena.TargetWGSL)
+	if !ok {
+		t.Fatal("no WGSL artifact")
+	}
+	prismvalidate.Shader(t, "naga", a.Source, ".wgsl", nil)
+}
+
+// TestWGSLSampleLevelInsideNonUniformEarlyReturnValidatesWithNaga is the
+// companion to the sample() case above, using the documented-safe
+// alternative (ir.go's SampleLevel guidance): sampleLevel() bypasses the
+// implicit-derivative LOD selection, so it is legal inside non-uniform
+// control flow on every backend, including an early-return branch.
+func TestWGSLSampleLevelInsideNonUniformEarlyReturnValidatesWithNaga(t *testing.T) {
+	src := []byte(`material NonUniformEarlyReturnSampleLevel {
+    param tex : texture2d
+
+    surface(geo) -> color {
+        if (geo.uv.x < 0.5) {
+            return sampleLevel(tex, geo.uv, 0.0)
+        }
+        return rgb(0.0, 0.0, 0.0)
+    }
+}`)
+	res, err := selena.Compile(src, selena.CompileOptions{Targets: []selena.Target{selena.TargetWGSL}})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	a, ok := res.Artifact(selena.TargetWGSL)
+	if !ok {
+		t.Fatal("no WGSL artifact")
+	}
+	prismvalidate.Shader(t, "naga", a.Source, ".wgsl", nil)
+}
+
+// TestFeedbackEarlyReturnValidatesWithNaga checks the one WGSL shape whose
+// early return cannot use a plain `return val;` (the entry is a void compute
+// kernel): the ReturnFn wired in emit/wgsl writes outState[cellIndex] then
+// bare-returns. Validated with naga rather than left to a string-compare
+// golden alone, since a malformed compute kernel is exactly the kind of
+// defect a golden test can't catch (see TestConformanceWGSLCompilesWithNaga's
+// doc comment for the same rationale).
+func TestFeedbackEarlyReturnValidatesWithNaga(t *testing.T) {
+	src := []byte(`material FeedbackEarlyReturnValidate kind feedback {
+    param cutoff : float = 0.5
+    state water
+
+    feedback(cell) -> vec4 {
+        let here = state(0, 0)
+        let uv = cell.uv
+        if (uv.x < cutoff) {
+            return vec4f(0.0, 0.0, 0.0, 0.0)
+        }
+        return here
+    }
+}`)
+	res, err := selena.Compile(src, selena.CompileOptions{Targets: []selena.Target{selena.TargetWGSL}})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	a, ok := res.Artifact(selena.TargetWGSL)
+	if !ok {
+		t.Fatal("no WGSL artifact")
+	}
+	prismvalidate.Shader(t, "naga", a.Source, ".wgsl", nil)
+}

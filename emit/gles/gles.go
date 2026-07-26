@@ -91,6 +91,7 @@ func emitFragmentAuthored(m ir.Module) string {
 	}
 	res := internal.NewBare(prismDialect)
 	res.StateSampleUVFn = func(uv string) string { return fmt.Sprintf("texture(stateTex, %s)", uv) }
+	res.ReturnFn = glesReturnFn
 	b.WriteString("out vec4 fragColor;\n\nvoid main() {\n")
 	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
 	fmt.Fprintf(&b, "  fragColor = %s;\n}\n", ir.Print(m.Fragment.Output, res))
@@ -139,6 +140,7 @@ func emitFeedbackFragment(m ir.Module) string {
 			return fmt.Sprintf("texture(stateTex, vUV + vec2(%s, %s) * texelSize)", glFloatLit(dx), glFloatLit(dy))
 		},
 		CellUVFn: func() string { return "vUV" },
+		ReturnFn: glesReturnFn,
 	}
 	b.WriteString("void main() {\n")
 	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
@@ -148,6 +150,16 @@ func emitFeedbackFragment(m ir.Module) string {
 
 // glFloatLit renders an integer cell offset as a GLSL float literal (1 -> 1.0).
 func glFloatLit(v int64) string { return fmt.Sprintf("%d.0", v) }
+
+// glesReturnFn renders an early ir.ReturnCF for GLSL ES 3.00 (GLES). Every
+// fragment main() here returns void and writes the fragment colour through
+// the explicit `out vec4 fragColor` global, so an early return must write it
+// too, before a bare `return;` — unlike WGSL/Metal mesh, points, and post,
+// where fragmentMain declares a vec4/float4 return type and a plain
+// `return val;` suffices (the emit/internal default ReturnFn covers those).
+func glesReturnFn(val string) string {
+	return "fragColor = " + val + "; return;"
+}
 
 func emitVertex(m ir.Module) string {
 	var b strings.Builder
@@ -198,6 +210,7 @@ func emitFragment(m ir.Module) string {
 		}
 	}
 	res := internal.NewBare(prismDialect)
+	res.ReturnFn = glesReturnFn
 	b.WriteString("out vec4 fragColor;\n\nvoid main() {\n")
 	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
 	fmt.Fprintf(&b, "  fragColor = %s;\n}\n", ir.Print(m.Fragment.Output, res))
@@ -296,6 +309,7 @@ func emitPointsFragment(m ir.Module) string {
 	}
 	b.WriteString("out vec4 fragColor;\n\n")
 	res := internal.NewBare(prismDialect)
+	res.ReturnFn = glesReturnFn
 	b.WriteString("void main() {\n")
 	// pt.pointUV → v_pointCoord in the IR; alias to gl_PointCoord (no dead varying).
 	b.WriteString("  vec2 v_pointCoord = gl_PointCoord;\n")
@@ -362,6 +376,7 @@ func emitPostFragment(m ir.Module) string {
 			}
 		},
 		SceneSizeFn: func() string { return "vec2(textureSize(_sceneColor, 0))" },
+		ReturnFn:    glesReturnFn,
 	}
 	b.WriteString("void main() {\n")
 	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)

@@ -251,6 +251,17 @@ type Discard struct {
 	Span Span
 }
 
+// Return exits the surface/feedback body early with Value as the result,
+// nested inside an if/for body (`return <expr>` that is not the last
+// statement of the top-level function). The top-level function body keeps
+// its single trailing return as Func.Result — Return only carries the early
+// exits nested inside control flow. Lowering rejects it in authored vertex()
+// bodies (varyings assigned after an early return would be undefined).
+type Return struct {
+	Value Expr
+	Span  Span
+}
+
 func (Let) isHIRStmt()          {}
 func (VarDecl) isHIRStmt()      {}
 func (Assign) isHIRStmt()       {}
@@ -260,6 +271,7 @@ func (VarArrayDecl) isHIRStmt() {}
 func (IndexAssign) isHIRStmt()  {}
 func (Discard) isHIRStmt()      {}
 func (Break) isHIRStmt()        {}
+func (Return) isHIRStmt()       {}
 func (IndexExpr) isExpr()       {}
 
 // Expr is the high-level expression tree.

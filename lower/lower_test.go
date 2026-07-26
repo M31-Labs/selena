@@ -754,3 +754,47 @@ func TestLowerUnknownFunctionNeverReachesEmittedOutput(t *testing.T) {
 		t.Fatalf("diagnostic message = %q, want it to name the unknown function", de.Message)
 	}
 }
+
+// TestLowerEarlyReturnCollectsGeoFieldUsage is the regression test for
+// collectGeoStmt (lower_helpers.go): geo.uv is referenced ONLY inside a
+// return nested in an if body, never in the trailing top-level return or any
+// plain Let/VarDecl. buildInterfacePlan walks surface.Body through
+// collectGeoStmt to decide which geometry fields need an attribute/varying;
+// without a case for hir.Return, this usage would be invisible and geo.uv
+// would fail to resolve inside the early return with "geo.uv is not
+// available in the surface" — dropping the varying silently is exactly the
+// failure mode the plan called out.
+func TestLowerEarlyReturnCollectsGeoFieldUsage(t *testing.T) {
+	p, err := parse.Program([]byte(`material EarlyReturnGeo {
+    param cutoff : float = 0.5
+    surface(geo) -> color {
+        if (geo.uv.x < cutoff) {
+            return rgb(1.0, 0.0, 0.0)
+        }
+        return rgb(0.0, 1.0, 0.0)
+    }
+}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mod, _, err := LowerProgram(p, 0)
+	if err != nil {
+		t.Fatalf("geo field used only inside an early return should lower cleanly: %v", err)
+	}
+	found := false
+	for _, v := range mod.Varyings {
+		if v.Name == "vUv" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("module varyings = %+v, want vUv wired from the geo.uv usage inside the early return", mod.Varyings)
+	}
+	out, err := wgsl.Emit(mod)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "in.vUv.x") {
+		t.Fatalf("WGSL fragment does not reference the uv varying inside the branch:\n%s", out)
+	}
+}

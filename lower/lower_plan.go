@@ -355,7 +355,7 @@ func buildInterfacePlan(surface hir.Func) (interfacePlan, error) {
 }
 
 func lowerFragment(surface hir.Func, reserved map[string]string, rs *resolver, tp *typer) ([]ir.Stmt, ir.Expr, error) {
-	lc := &lowerCtx{reserved: reserved, rs: rs, tp: tp, localKind: "surface local"}
+	lc := &lowerCtx{reserved: reserved, rs: rs, tp: tp, localKind: "surface local", allowReturn: true}
 	fragBody, err := lc.lowerStmts(surface.Body)
 	if err != nil {
 		return nil, nil, err
@@ -396,6 +396,11 @@ type lowerCtx struct {
 	// nil: surface() never writes varyings, so the Assign case always falls
 	// through to the ordinary mutable-local path.
 	varyingType map[string]ir.Type
+	// allowReturn enables early return (hir.Return) inside if/for bodies.
+	// True for surface/feedback fragment lowering (lowerFragment); false
+	// (the zero value) for authored vertex() lowering (lower_vertex.go),
+	// where a varying written after an early return would be undefined.
+	allowReturn bool
 }
 
 // checkNotVarying rejects a local declaration whose name collides with an
@@ -629,6 +634,33 @@ func (lc *lowerCtx) lowerStmt(s hir.Stmt) (ir.Stmt, error) {
 			)
 		}
 		return ir.Stmt{CF: ir.BreakCF{}}, nil
+
+	case hir.Return:
+		if !lc.allowReturn {
+			return ir.Stmt{}, diagnostic(
+				CodeUnsupportedFeat, x.Span,
+				"early return is not supported in vertex() bodies (a varying assigned after it would be undefined)",
+			)
+		}
+		rt, err := lc.tp.typeOf(x.Value)
+		if err != nil {
+			return ir.Stmt{}, fmt.Errorf("return: %w", err)
+		}
+		re, err := lc.rs.expr(x.Value)
+		if err != nil {
+			return ir.Stmt{}, fmt.Errorf("return: %w", err)
+		}
+		// Same vec3/vec4 packing lowerFragment applies to the final
+		// surface.Result (below): a vec4 return passes through unchanged; a
+		// vec3/color return is widened to vec4 with alpha 1.0.
+		switch rt {
+		case ir.Vec4:
+			return ir.Stmt{CF: ir.ReturnCF{Value: re}}, nil
+		case ir.Vec3:
+			return ir.Stmt{CF: ir.ReturnCF{Value: ir.Construct{Type: ir.Vec4, Args: []ir.Expr{re, ir.Lit{Value: 1.0}}}}}, nil
+		default:
+			return ir.Stmt{}, diagnostic(CodeTypeMismatch, x.Span, "return value must be color/vec3/vec4, got %s", rt)
+		}
 
 	case hir.For:
 		// Lower init value and declare the loop variable as mutable.
