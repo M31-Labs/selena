@@ -234,11 +234,15 @@ func TestConformanceGLSLCompilesWithGlslang(t *testing.T) {
 			if err != nil {
 				t.Fatalf("glsl.Emit: %v", err)
 			}
+			// Pin GLSL ES 1.00. Without a #version directive glslang validates
+			// against desktop GLSL 110, where derivatives are core and no
+			// extension is required — so the ES 1.00 rules the browser applies
+			// went unchecked. See essl100 in post_surface_test.go.
 			t.Run("vert", func(t *testing.T) {
-				prismvalidate.Shader(t, "glslangValidator", vert, ".vert", nil)
+				prismvalidate.Shader(t, "glslangValidator", essl100(vert), ".vert", nil)
 			})
 			t.Run("frag", func(t *testing.T) {
-				prismvalidate.Shader(t, "glslangValidator", frag, ".frag", nil)
+				prismvalidate.Shader(t, "glslangValidator", essl100(frag), ".frag", nil)
 			})
 		})
 	}

@@ -9,6 +9,7 @@ package parse
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -321,6 +322,9 @@ func (w *walker) material(n *gts.Node) (hir.Material, error) {
 			return m, fmt.Errorf("material %q: unknown kind %q (expected mesh, points, post, or feedback)", m.Name, kindVal)
 		}
 	}
+	if err := w.checkDroppedTokens(n); err != nil {
+		return m, err
+	}
 	for i := 0; i < n.NamedChildCount(); i++ {
 		c := n.NamedChild(i)
 		if w.Type(c) != "member" {
@@ -423,6 +427,103 @@ func (w *walker) vertexFn(n *gts.Node) (hir.Func, error) {
 		return f, fmt.Errorf("vertex() has no return (must return the clip-space position)")
 	}
 	return f, nil
+}
+
+// arrayBracketSuffix matches the C-style fixed-size array spelling `[N]`,
+// optionally surrounded by spaces: `param rects : vec4[8]`.
+var arrayBracketSuffix = regexp.MustCompile(`^\[\s*([0-9]+)\s*\]$`)
+
+// checkDroppedTokens reports source inside a material body that the parser
+// consumed without putting it in the tree.
+//
+// The Selena parse table silently skips a `[N]` suffix on a param type: the
+// material node reports no error, the member node ends at the type identifier,
+// and `param rects : vec4[8]` lowers as a plain scalar vec4. The first sign of
+// trouble then lands far away, at `rects[i]`, as SEL2001 "rects is not a local
+// array or uniform array param" — a diagnosis pointing at correct code.
+//
+// Rather than trust the tree to be complete, this walks the gaps between the
+// material's children. Anything in a gap other than whitespace or a comment was
+// dropped, so it is reported at its own position with the array spelling
+// suggested when the dropped text is a `[N]` suffix.
+func (w *walker) checkDroppedTokens(n *gts.Node) error {
+	count := n.ChildCount()
+	if count == 0 {
+		return nil
+	}
+	prevEnd := int(n.Child(0).EndByte())
+	prevText := strings.TrimSpace(w.Text(n.Child(0)))
+	for i := 1; i < count; i++ {
+		c := n.Child(i)
+		if c == nil {
+			continue
+		}
+		start := int(c.StartByte())
+		if start > prevEnd && prevEnd >= 0 && start <= len(w.Src) {
+			gap := strings.TrimSpace(stripComments(string(w.Src[prevEnd:start])))
+			if gap != "" {
+				return &Error{Message: droppedTokenMessage(gap, prevText), Span: w.byteSpan(prevEnd, start)}
+			}
+		}
+		prevEnd = int(c.EndByte())
+		prevText = strings.TrimSpace(w.Text(c))
+	}
+	return nil
+}
+
+// droppedTokenMessage explains dropped source, naming the correct spelling when
+// the dropped text is the C-style array suffix.
+func droppedTokenMessage(gap, prev string) string {
+	if m := arrayBracketSuffix.FindStringSubmatch(gap); m != nil {
+		elem := prev
+		if idx := strings.LastIndex(prev, " "); idx >= 0 {
+			elem = strings.TrimSpace(prev[idx+1:])
+		}
+		if elem == "" {
+			elem = "T"
+		}
+		return fmt.Sprintf(
+			"unexpected %q: a fixed-size array param is spelled `array<%s, %s>`, not `%s[%s]`",
+			gap, elem, m[1], elem, m[1],
+		)
+	}
+	return fmt.Sprintf("unexpected %q in material body", gap)
+}
+
+// stripComments removes `//` line comments from s so a gap that holds only a
+// comment is not mistaken for dropped source. Comments are lexer extras and
+// never appear in the tree.
+func stripComments(s string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(s, "\n") {
+		if idx := strings.Index(line, "//"); idx >= 0 {
+			line = line[:idx]
+		}
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// byteSpan builds a Span for the [start, end) byte range of the source.
+func (w *walker) byteSpan(start, end int) hir.Span {
+	return hir.Span{
+		Start: w.position(start),
+		End:   w.position(end),
+	}
+}
+
+func (w *walker) position(offset int) hir.Position {
+	line, col := 1, 1
+	for i := 0; i < offset && i < len(w.Src); i++ {
+		if w.Src[i] == '\n' {
+			line++
+			col = 1
+			continue
+		}
+		col++
+	}
+	return hir.Position{Offset: offset, Line: line, Column: col}
 }
 
 func (w *walker) param(n *gts.Node) (hir.Param, error) {

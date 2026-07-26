@@ -77,10 +77,7 @@ func emitVertexAuthored(m ir.Module) string {
 // (sampling stateTex) when the material declares a statefield.
 func emitFragmentAuthored(m ir.Module) string {
 	var b strings.Builder
-	if irUsesDerivatives(m.Fragment.Body, m.Fragment.Output) {
-		b.WriteString("#extension GL_OES_standard_derivatives : enable\n")
-	}
-	b.WriteString("precision mediump float;\n")
+	writeFragmentPrologue(&b, m, "mediump")
 	for _, u := range m.Uniforms {
 		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
 	}
@@ -128,7 +125,7 @@ func emitFeedbackVertex(m ir.Module) string {
 // float FBO via gl_FragColor (the host ping-pongs which texture/FBO is in/out).
 func emitFeedbackFragment(m ir.Module) string {
 	var b strings.Builder
-	b.WriteString("precision highp float;\n")
+	writeFragmentPrologue(&b, m, "highp")
 	b.WriteString("varying vec2 vUV;\n\n")
 	b.WriteString("uniform highp sampler2D stateTex;\n")
 	b.WriteString("uniform vec2 texelSize;\n")
@@ -188,12 +185,7 @@ func emitVertex(m ir.Module) string {
 
 func emitFragment(m ir.Module) string {
 	var b strings.Builder
-	// GLSL ES 1.00: dFdx/dFdy/fwidth require the OES_standard_derivatives
-	// extension. Add it only when the fragment stage actually uses them.
-	if irUsesDerivatives(m.Fragment.Body, m.Fragment.Output) {
-		b.WriteString("#extension GL_OES_standard_derivatives : enable\n")
-	}
-	b.WriteString("precision mediump float;\n")
+	writeFragmentPrologue(&b, m, "mediump")
 	for _, u := range m.Uniforms {
 		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
 	}
@@ -217,83 +209,31 @@ func emitFragment(m ir.Module) string {
 	return b.String()
 }
 
-// irUsesDerivatives reports whether the given stage body or output expression
-// contains any dpdx, dpdy, or fwidth calls. Used by the GLSL emitter to decide
-// whether to emit the OES_standard_derivatives extension request.
-func irUsesDerivatives(body []ir.Stmt, output ir.Expr) bool {
-	for _, s := range body {
-		if irStmtUsesDerivatives(s) {
-			return true
-		}
+// writeFragmentPrologue writes the preprocessor directives that must precede
+// every non-preprocessor statement of a GLSL ES 1.00 fragment shader, then the
+// default precision qualifier.
+//
+// GLSL ES 1.00 has no dFdx/dFdy/fwidth in core: they arrive with
+// GL_OES_standard_derivatives. Every fragment emitter in this package routes
+// through here so that no surface kind can accept a derivative builtin on WGSL
+// and then emit GLSL the WebGL driver rejects — the points and feedback
+// fragments used to skip the directive entirely.
+//
+// WebGL adds a second requirement the shader source cannot express: the host
+// must call gl.getExtension("OES_standard_derivatives") before compiling, or
+// the driver reports "extension is not supported" and every fwidth call fails
+// to resolve. bindings.Layout.Requires.GLExtensions carries that name so the
+// host can enable it (see docs/compatibility.md).
+func writeFragmentPrologue(b *strings.Builder, m ir.Module, precision string) {
+	if ir.UsesDerivatives(m) {
+		b.WriteString("#extension GL_OES_standard_derivatives : enable\n")
 	}
-	return irExprUsesDerivatives(output)
-}
-
-func irStmtUsesDerivatives(s ir.Stmt) bool {
-	if s.CF == nil {
-		return irExprUsesDerivatives(s.Value)
+	if ir.UsesSceneSampleLevel(m) {
+		// GLSL ES 1.00 defines texture2DLod in the vertex stage only;
+		// GL_EXT_shader_texture_lod adds the fragment-stage texture2DLodEXT form.
+		b.WriteString("#extension GL_EXT_shader_texture_lod : enable\n")
 	}
-	switch cf := s.CF.(type) {
-	case ir.AssignCF:
-		return irExprUsesDerivatives(cf.Value)
-	case ir.IfCF:
-		if irExprUsesDerivatives(cf.Cond) {
-			return true
-		}
-		for _, st := range cf.Then {
-			if irStmtUsesDerivatives(st) {
-				return true
-			}
-		}
-		for _, st := range cf.Else {
-			if irStmtUsesDerivatives(st) {
-				return true
-			}
-		}
-	case ir.ForCF:
-		if irExprUsesDerivatives(cf.Cond) || irExprUsesDerivatives(cf.InitValue) || irExprUsesDerivatives(cf.PostValue) {
-			return true
-		}
-		for _, st := range cf.Body {
-			if irStmtUsesDerivatives(st) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func irExprUsesDerivatives(e ir.Expr) bool {
-	switch x := e.(type) {
-	case ir.Call:
-		if x.Func == "dpdx" || x.Func == "dpdy" || x.Func == "fwidth" {
-			return true
-		}
-		for _, a := range x.Args {
-			if irExprUsesDerivatives(a) {
-				return true
-			}
-		}
-	case ir.Construct:
-		for _, a := range x.Args {
-			if irExprUsesDerivatives(a) {
-				return true
-			}
-		}
-	case ir.Binary:
-		return irExprUsesDerivatives(x.L) || irExprUsesDerivatives(x.R)
-	case ir.Unary:
-		return irExprUsesDerivatives(x.E)
-	case ir.Swizzle:
-		return irExprUsesDerivatives(x.E)
-	case ir.Sample:
-		return irExprUsesDerivatives(x.UV)
-	case ir.SceneSample:
-		return irExprUsesDerivatives(x.UV)
-	case ir.Conditional:
-		return irExprUsesDerivatives(x.Cond) || irExprUsesDerivatives(x.Then) || irExprUsesDerivatives(x.Alt)
-	}
-	return false
+	b.WriteString("precision " + precision + " float;\n")
 }
 
 // emitPointsVertex emits the WebGL1 points vertex shader.
@@ -379,7 +319,7 @@ func emitPointsVertex(m ir.Module) string {
 // pt.pointUV resolves to gl_PointCoord directly (no dead varying).
 func emitPointsFragment(m ir.Module) string {
 	var b strings.Builder
-	b.WriteString("precision mediump float;\n")
+	writeFragmentPrologue(&b, m, "mediump")
 	b.WriteString("varying vec3 v_color;\n")
 	b.WriteString("varying float v_alpha;\n")
 	b.WriteString("varying float v_fogFactor;\n")
@@ -425,16 +365,15 @@ func emitPostVertex(m ir.Module) string {
 // User uniforms follow.
 func emitPostFragment(m ir.Module) string {
 	var b strings.Builder
-	// GLSL ES 1.00: dFdx/dFdy/fwidth require the OES_standard_derivatives
-	// extension. It must precede every non-preprocessor statement, so emit it
-	// (only when the fragment actually uses a derivative) before `precision`.
-	if irUsesDerivatives(m.Fragment.Body, m.Fragment.Output) {
-		b.WriteString("#extension GL_OES_standard_derivatives : enable\n")
-	}
-	b.WriteString("precision mediump float;\n")
+	writeFragmentPrologue(&b, m, "mediump")
 	b.WriteString("varying vec2 v_uv;\n\n")
 	b.WriteString("uniform sampler2D _sceneColor;\n")
 	b.WriteString("uniform sampler2D _sceneDepth;\n")
+	if ir.UsesSceneSize(m) {
+		// GLSL ES 1.00 has no textureSize; the host supplies the backdrop
+		// resolution through this uniform (see Layout.Requires.GLSceneSizeUniform).
+		b.WriteString("uniform vec2 _sceneSize;\n")
+	}
 	// User uniforms.
 	for _, u := range m.Uniforms {
 		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
@@ -458,6 +397,20 @@ func emitPostFragment(m ir.Module) string {
 				return "vec4(0.0)"
 			}
 		},
+		// GL_EXT_shader_texture_lod (requested by writeFragmentPrologue) adds the
+		// fragment-stage explicit-LOD form; plain texture2DLod is vertex-only in
+		// GLSL ES 1.00.
+		SceneSampleLevelFn: func(name, uv, lod string) string {
+			switch name {
+			case "sceneColor":
+				return fmt.Sprintf("texture2DLodEXT(_sceneColor, %s, %s)", uv, lod)
+			case "sceneDepth":
+				return fmt.Sprintf("texture2DLodEXT(_sceneDepth, %s, %s)", uv, lod)
+			default:
+				return "vec4(0.0)"
+			}
+		},
+		SceneSizeFn: func() string { return "_sceneSize" },
 	}
 
 	b.WriteString("void main() {\n")

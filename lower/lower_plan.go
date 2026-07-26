@@ -593,7 +593,7 @@ func (lc *lowerCtx) lowerStmt(s hir.Stmt) (ir.Stmt, error) {
 			return ir.Stmt{}, fmt.Errorf("index of %q: %w", x.Name, err)
 		}
 		if idxT != ir.Int && idxT != ir.Uint {
-			return ir.Stmt{}, diagnostic(CodeTypeMismatch, x.Span, "array index must be int or uint, got %s", idxT)
+			return ir.Stmt{}, diagnostic(CodeTypeMismatch, x.Span, "%s", arrayIndexTypeMessage(idxT, x.Index))
 		}
 		valT, err := lc.tp.typeOf(x.Value)
 		if err != nil {

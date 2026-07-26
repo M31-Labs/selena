@@ -129,6 +129,7 @@ Params currently support:
 - `color`, lowered as `vec3`
 - `Sun`, expanded into uniforms
 - `texture2d`, emitted as backend-specific texture/sampler bindings
+- `array<T, N>`, a fixed-size uniform array (see below)
 
 Defaults currently support constant `float`, `vec2`, `vec3`, `vec4`, `mat3`,
 `mat4`, and `color` values. Matrix values are written in column-major order, the
@@ -142,6 +143,99 @@ param basis : mat3 = mat3(1, 0, 0, 0, 1, 0, 0, 0, 1)
 ```
 
 `Sun` and `texture2d` defaults are intentionally rejected for now.
+
+## Fixed-Size Array Params
+
+A param can be a fixed-size array of a scalar or vector type. Write the type as
+`array<T, N>`. The C-style spelling `vec4[8]` is not accepted; Selena reports it
+at the declaration and names the correct form.
+
+```selena
+param rects : array<vec4, 8>
+```
+
+Rules:
+
+- `N` must be a positive integer literal.
+- Array params take no default value.
+- Every element is packed at the std140 array stride of 16 bytes, whatever `T`
+  is. The descriptor field carries `count` and `stride` so the host can pack it.
+- Mesh, post and feedback materials support array params. Points materials do
+  not yet.
+
+Read an element with `rects[i]`. The index must be `int` or `uint`, so write the
+loop counter with the `i` integer-literal suffix — `0i`, not `0`. A bare `0` is
+a float literal, and `rects[i]` then reports `SEL2005: array index must be int
+or uint, got float`.
+
+```selena
+material Panels kind post {
+    param rects : array<vec4, 8>
+
+    surface(post) -> color {
+        var best = 1.0
+        for (var i = 0i; i < 8i; i = i + 1i) {
+            let r = rects[i]
+            let dx = abs(post.uv.x - r.x) - r.z
+            let dy = abs(post.uv.y - r.y) - r.w
+            best = min(best, length(vec2f(max(dx, 0.0), max(dy, 0.0))))
+            if (best < 0.0) {
+                break
+            }
+        }
+        let c = sceneColor(post.uv)
+        return rgb(c.r, c.g, c.b * best, c.a)
+    }
+}
+```
+
+## Numeric Literals
+
+Selena has three numeric literal forms, and the suffix chooses the type:
+
+| Literal | Type    | Use |
+|---------|---------|-----|
+| `0`, `1.5` | `float` | all shading math |
+| `0i`, `8i` | `int`   | loop counters, array indices |
+| `0u`, `8u` | `uint`  | unsigned counters |
+
+There is no implicit conversion between them. Convert explicitly with
+`float(x)`, `int(x)` or `uint(x)`. A `for` loop takes the type of its init
+value, so `for (var i = 0i; i < 8i; i = i + 1i)` gives an `int` counter and
+`for (var i = 0; i < 8; i = i + 1)` gives a `float` one. Use the `i` form
+whenever the counter indexes an array.
+
+## Post Materials
+
+A `kind post` material runs one fullscreen pass over the rendered scene. Its
+surface reads `post.uv` (screen UV in `[0,1]`) and these engine builtins:
+
+| Builtin | Result | Meaning |
+|---------|--------|---------|
+| `sceneColor(uv)` | `vec4` | the backdrop colour at `uv` |
+| `sceneDepth(uv)` | `float` | the backdrop depth at `uv` |
+| `sceneColorLevel(uv, lod)` | `vec4` | the backdrop colour at mip level `lod` |
+| `sceneSize()` | `vec2` | the backdrop size in pixels |
+
+`sceneColorLevel` replaces an N-tap blur kernel with one pre-filtered tap, which
+is the cost driver for frosted-glass passes. `sceneSize()` lets a kernel radius
+be written in pixels rather than UV corrected by an app-supplied aspect uniform.
+
+Both need the host to cooperate, and the compiled descriptor says so in
+`layout.requires`:
+
+- `sceneColorLevel` sets `requires.sceneColorMips`. The host must render the
+  post source into a texture that HAS a mip chain, regenerate the mips before
+  the pass, and bind a sampler whose minification filter walks mips. Without a
+  mip chain every backend clamps to level 0 and the pass renders unblurred.
+- `sceneSize()` sets `requires.glSceneSizeUniform` to `_sceneSize`. GLSL ES 1.00
+  has no `textureSize`, so the WebGL 1 artifact declares that uniform and the
+  host must set it. WGSL, GLES and Metal read the size off the bound texture.
+- Derivative builtins (`fwidth`, `dpdx`, `dpdy`) add `OES_standard_derivatives`
+  to `requires.glExtensions`. See [compatibility.md](compatibility.md).
+
+Post materials cannot declare `texture2d` params; the engine provides the scene
+textures. They can declare scalar, vector and `array<T, N>` params.
 
 ## Host Packing
 

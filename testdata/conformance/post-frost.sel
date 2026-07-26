@@ -1,0 +1,40 @@
+// post-frost exercises the post-surface additions together, on every backend:
+//
+//   sceneSize()                 backdrop resolution, so the kernel radius is
+//                               written in pixels instead of UV corrected by an
+//                               app-supplied aspect uniform
+//   sceneColorLevel(uv, lod)    one pre-filtered backdrop tap in place of an
+//                               N-tap blur kernel
+//   fwidth(...)                 resolution-correct SDF antialiasing (GLSL ES
+//                               1.00 needs GL_OES_standard_derivatives)
+//   param rects : array<vec4, N> one pass serving N glass panels
+//   for (var i = 0i; ...)       an integer loop counter, spelled with the `i`
+//                               literal suffix so it indexes the array directly
+//   break                       early exit once a panel is found
+material PostFrost kind post {
+    param rects     : array<vec4, 4>
+    param blurLevel : float = 3.0
+    param mixAmount : float = 0.85
+
+    surface(post) -> color {
+        let size = sceneSize()
+        let px = 1.0 / max(size.x, 1.0)
+        var best = 1.0
+        for (var i = 0i; i < 4i; i = i + 1i) {
+            let r = rects[i]
+            let dx = abs(post.uv.x - r.x) - r.z
+            let dy = abs(post.uv.y - r.y) - r.w
+            let d = length(vec2f(max(dx, 0.0), max(dy, 0.0))) + min(max(dx, dy), 0.0)
+            best = min(best, d)
+            if (d < 0.0) {
+                break
+            }
+        }
+        let aa = max(fwidth(best), px)
+        let inside = 1.0 - smoothstep(0.0 - aa, 0.0 + aa, best)
+        let blurred = sceneColorLevel(post.uv, blurLevel)
+        let plain = sceneColor(post.uv)
+        let k = inside * mixAmount
+        return rgb(mix(plain.r, blurred.r, k), mix(plain.g, blurred.g, k), mix(plain.b, blurred.b, k), plain.a)
+    }
+}

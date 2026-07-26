@@ -300,6 +300,32 @@ type SceneSample struct {
 	UV   Expr
 }
 
+// SceneSampleLevel samples an engine-provided post-pass texture at UV using an
+// explicit LOD (mip level). Name is "sceneColor" (the only mipped engine
+// target). It is the backdrop counterpart of SampleLevel: one tap of a
+// pre-filtered mip replaces an N-tap blur kernel.
+//
+// The host must supply a scene-color target that HAS mips and a sampler with a
+// mipmap min filter. Without them every backend clamps to level 0 and the pass
+// renders unblurred, so bindings.Layout records the requirement in
+// Layout.Requires (see bindings.Requirements.SceneColorMips) for the host to
+// honour or refuse.
+type SceneSampleLevel struct {
+	Name string // "sceneColor"
+	UV   Expr
+	LOD  Expr
+}
+
+// SceneSize is the pixel size (vec2) of the engine scene-color target. It lets a
+// post author write a kernel radius in pixels instead of hand-correcting UV by
+// an app-supplied aspect uniform.
+//
+// WGSL, GLSL ES 3.00 and Metal read the dimension off the bound texture.
+// GLSL ES 1.00 has no textureSize, so that emitter declares a `uniform vec2
+// _sceneSize` the host must set; bindings.Layout records it in
+// Layout.Requires.GLSceneSizeUniform.
+type SceneSize struct{}
+
 // Conditional is a ternary expression: Cond ? Then : Alt. Cond is bool;
 // Then and Alt have the same type; result is that type.
 // Backends render this differently: WGSL emits select(Alt, Then, Cond)
@@ -339,19 +365,23 @@ type StateSampleUV struct {
 // Result type is vec2.
 type CellUV struct{}
 
-func (Ref) isExpr()           {}
-func (Lit) isExpr()           {}
-func (IntLit) isExpr()        {}
-func (UintLit) isExpr()       {}
-func (Construct) isExpr()     {}
-func (Call) isExpr()          {}
-func (Binary) isExpr()        {}
-func (Unary) isExpr()         {}
-func (Swizzle) isExpr()       {}
-func (Sample) isExpr()        {}
-func (SampleLevel) isExpr()   {}
-func (SampleCube) isExpr()    {}
-func (SceneSample) isExpr()   {}
+func (Ref) isExpr()         {}
+func (Lit) isExpr()         {}
+func (IntLit) isExpr()      {}
+func (UintLit) isExpr()     {}
+func (Construct) isExpr()   {}
+func (Call) isExpr()        {}
+func (Binary) isExpr()      {}
+func (Unary) isExpr()       {}
+func (Swizzle) isExpr()     {}
+func (Sample) isExpr()      {}
+func (SampleLevel) isExpr() {}
+func (SampleCube) isExpr()  {}
+func (SceneSample) isExpr() {}
+
+func (SceneSampleLevel) isExpr() {}
+func (SceneSize) isExpr()        {}
+
 func (Conditional) isExpr()   {}
 func (StateSample) isExpr()   {}
 func (StateSampleUV) isExpr() {}
@@ -419,6 +449,22 @@ type Dialect interface {
 	Discard() string
 }
 
+// PostDialect is the optional part of Dialect that post-pass emitters
+// implement. It is kept separate from Dialect so that adding backdrop-LOD
+// sampling and the backdrop-size query does not invalidate an existing
+// Dialect implementation: Print type-asserts for it and falls back when absent.
+type PostDialect interface {
+	// SceneSampleLevel renders an engine post-pass texture sample at an
+	// explicit LOD. name is "sceneColor".
+	// WGSL:         textureSampleLevel(tex, samp, uv, lod)
+	// GLSL ES 3.00: textureLod(tex, uv, lod)
+	// GLSL ES 1.00: texture2DLodEXT(tex, uv, lod) (GL_EXT_shader_texture_lod)
+	// Metal:        tex.sample(samp, uv, level(lod))
+	SceneSampleLevel(name, uv, lod string) string
+	// SceneSize renders the vec2 pixel size of the scene-color target.
+	SceneSize() string
+}
+
 // Print renders e using d for the backend-specific spellings.
 func Print(e Expr, d Dialect) string {
 	switch x := e.(type) {
@@ -451,6 +497,18 @@ func Print(e Expr, d Dialect) string {
 		return d.SampleCube(x.Texture, Print(x.Dir, d))
 	case SceneSample:
 		return d.SceneSample(x.Name, Print(x.UV, d))
+	case SceneSampleLevel:
+		// PostDialect is an optional extension of Dialect so adding the
+		// backdrop-LOD form does not break existing Dialect implementations.
+		if pd, ok := d.(PostDialect); ok {
+			return pd.SceneSampleLevel(x.Name, Print(x.UV, d), Print(x.LOD, d))
+		}
+		return d.SceneSample(x.Name, Print(x.UV, d))
+	case SceneSize:
+		if pd, ok := d.(PostDialect); ok {
+			return pd.SceneSize()
+		}
+		return "vec2(0.0, 0.0)"
 	case Conditional:
 		return d.Ternary(Print(x.Cond, d), Print(x.Then, d), Print(x.Alt, d))
 	case StateSample:

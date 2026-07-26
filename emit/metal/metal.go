@@ -408,6 +408,19 @@ vertex PostOut vertexMain(uint vid [[vertex_id]]) {
 				return "float4(0)"
 			}
 		},
+		SceneSampleLevelFn: func(name, uv, lod string) string {
+			switch name {
+			case "sceneColor":
+				return fmt.Sprintf("_sceneColorTex.sample(_sceneColorSamp, %s, level(%s))", uv, lod)
+			case "sceneDepth":
+				return fmt.Sprintf("_sceneDepthTex.sample(_sceneDepthSamp, %s, level(%s))", uv, lod)
+			default:
+				return "float4(0)"
+			}
+		},
+		SceneSizeFn: func() string {
+			return "float2(_sceneColorTex.get_width(), _sceneColorTex.get_height())"
+		},
 	}
 
 	fragSig := "fragment float4 fragmentMain(PostOut in [[stage_in]], texture2d<float> _sceneColorTex [[texture(0)]], sampler _sceneColorSamp [[sampler(0)]], depth2d<float> _sceneDepthTex [[texture(2)]], sampler _sceneDepthSamp [[sampler(2)]]"

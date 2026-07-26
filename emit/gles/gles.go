@@ -349,6 +349,19 @@ func emitPostFragment(m ir.Module) string {
 				return "vec4(0.0)"
 			}
 		},
+		// GLSL ES 3.00 has textureLod and textureSize in core — no extension and
+		// no host-supplied size uniform, unlike the ES 1.00 emitter.
+		SceneSampleLevelFn: func(name, uv, lod string) string {
+			switch name {
+			case "sceneColor":
+				return fmt.Sprintf("textureLod(_sceneColor, %s, %s)", uv, lod)
+			case "sceneDepth":
+				return fmt.Sprintf("textureLod(_sceneDepth, %s, %s)", uv, lod)
+			default:
+				return "vec4(0.0)"
+			}
+		},
+		SceneSizeFn: func() string { return "vec2(textureSize(_sceneColor, 0))" },
 	}
 	b.WriteString("void main() {\n")
 	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
