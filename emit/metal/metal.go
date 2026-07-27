@@ -315,8 +315,9 @@ vertex PointsOut vertexMain(
   if (minPx > 0.0) pixelSize = max(pixelSize, minPx);
   if (pts.params.w > 0.0) pixelSize = min(pixelSize, pts.params.w);
   float4 clipPos = frame.projMatrix * viewPos;
-  float ndcX = quad.x * pixelSize / frame.viewportWidth  * clipPos.w * 2.0;
-  float ndcY = quad.y * pixelSize / frame.viewportHeight * clipPos.w * 2.0;
+  float2 viewport = max(float2(frame.viewportWidth, frame.viewportHeight), float2(1.0));
+  float ndcX = quad.x * pixelSize / viewport.x * clipPos.w * 2.0;
+  float ndcY = quad.y * pixelSize / viewport.y * clipPos.w * 2.0;
   PointsOut out;
   out.clipPos = float4(clipPos.x + ndcX, clipPos.y + ndcY, clipPos.z, clipPos.w);
   out.v_color = (pts.flags.x != 0u) ? p.color.rgb : pts.defaultColorAndSize.rgb;

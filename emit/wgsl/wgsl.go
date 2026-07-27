@@ -379,8 +379,9 @@ const _quadPos = array<vec2<f32>, 6>(
   if (_points.params.w > 0.0) { pixelSize = min(pixelSize, _points.params.w); }
 
   let clipPos    = _frame.projMatrix * viewPos;
-  let ndcOffsetX = quad.x * pixelSize / _frame.viewportWidth  * clipPos.w * 2.0;
-  let ndcOffsetY = quad.y * pixelSize / _frame.viewportHeight * clipPos.w * 2.0;
+  let viewport   = max(vec2<f32>(_frame.viewportWidth, _frame.viewportHeight), vec2<f32>(1.0));
+  let ndcOffsetX = quad.x * pixelSize / viewport.x * clipPos.w * 2.0;
+  let ndcOffsetY = quad.y * pixelSize / viewport.y * clipPos.w * 2.0;
 
   var out : PointsOutput;
   out.clipPos = vec4<f32>(clipPos.x + ndcOffsetX, clipPos.y + ndcOffsetY, clipPos.z, clipPos.w);
@@ -428,8 +429,9 @@ const _quadPos = array<vec2<f32>, 6>(
   if (_points.params.w > 0.0) { pixelSize = min(pixelSize, _points.params.w); }
 
   let clipPos    = _frame.projMatrix * viewPos;
-  let ndcOffsetX = quad.x * pixelSize / _frame.viewportWidth  * clipPos.w * 2.0;
-  let ndcOffsetY = quad.y * pixelSize / _frame.viewportHeight * clipPos.w * 2.0;
+  let viewport   = max(vec2<f32>(_frame.viewportWidth, _frame.viewportHeight), vec2<f32>(1.0));
+  let ndcOffsetX = quad.x * pixelSize / viewport.x * clipPos.w * 2.0;
+  let ndcOffsetY = quad.y * pixelSize / viewport.y * clipPos.w * 2.0;
 
   var out : PointsOutput;
   out.clipPos = vec4<f32>(clipPos.x + ndcOffsetX, clipPos.y + ndcOffsetY, clipPos.z, clipPos.w);
