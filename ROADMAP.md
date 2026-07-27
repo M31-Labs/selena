@@ -33,10 +33,11 @@ The next phase should make the project easier to adopt and harder to misuse.
 - Define the material/PBR interop boundary: extension hooks for standard lit
   materials, not a forked material system. The public interop note now pins the
   current custom-material boundary and the intended `StandardLit` hook model.
-- Add vertex hooks to the parser and lowering path, with clear rules for which
-  geometry fields are mutable. Programmatic HIR vertex hooks are now rejected
-  explicitly instead of being silently ignored; full parser/lowering support
-  remains the implementation target.
+- Add a composing vertex hook: `vertex(geo) { ... }` that mutates geometry and
+  keeps the default derived-field and interpolant pipeline running. The full
+  `vertex() -> vec4` replacement stage already shipped in v0.3.1: grammar,
+  lowering, all four emitters, and ten conformance materials author it today.
+  The composing hook is the item that remains.
 - Add arrays, bools, and integer types only after the binding descriptor can
   express them consistently across WGSL, GLSL, Metal, and GLES.
 - Build a conformance corpus of `.sel` inputs and golden outputs for every

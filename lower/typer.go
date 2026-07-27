@@ -31,6 +31,10 @@ type typer struct {
 	// allowStateAt enables stateAt(uv) reads (mesh/general materials that declare
 	// a statefield; valid in both the authored vertex stage and the surface). B4.
 	allowStateAt bool
+	// inVertexStage marks this typer as type-checking an authored vertex() body.
+	// See the identical field on resolver for why dpdx/dpdy/fwidth and
+	// sample/sampleLevel/sampleCube are rejected here rather than typed through.
+	inVertexStage bool
 	// arrayLocals tracks local fixed-size array variables (B2b).
 	arrayLocals map[string]arrayInfo
 	// paramArrays tracks uniform array params (B3.2): `param name : array<T, N>`.
@@ -192,6 +196,19 @@ func arrayIndexTypeMessage(idxT ir.Type, index hir.Expr) string {
 }
 
 func (t *typer) callType(c hir.Call) (ir.Type, error) {
+	// Fragment-only builtins are illegal in an authored vertex() body — see the
+	// inVertexStage doc comment above and the matching guard in resolver.go.
+	if t.inVertexStage {
+		if ir.DerivativeBuiltins[c.Func] {
+			return "", diagnostic(CodeInvalidCall, c.Span,
+				"%s is a fragment-stage builtin and is not available in vertex()", c.Func)
+		}
+		if c.Func == "sample" || c.Func == "sampleLevel" || c.Func == "sampleCube" {
+			return "", diagnostic(CodeInvalidCall, c.Span,
+				"%s() is not available in the vertex stage; no backend wires a texture binding into the authored vertex() stage yet", c.Func)
+		}
+	}
+
 	// Handle scene samplers before the general stdlib lookup.
 	if c.Func == "sceneColor" || c.Func == "sceneDepth" {
 		if !t.allowSceneSample {

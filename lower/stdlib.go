@@ -249,7 +249,9 @@ var stdlib = stdlibRegistry{
 		"atan":  {kind: builtinUnarySame, arity: 1},
 		"asin":  {kind: builtinUnarySame, arity: 1},
 		"acos":  {kind: builtinUnarySame, arity: 1},
-		// Screen-space derivative functions (fragment only in practice).
+		// Screen-space derivative functions. Registered stage-blind like every
+		// other builtin here; the fragment-only restriction is enforced by
+		// resolver.inVertexStage / typer.inVertexStage, not by this table.
 		"dpdx":   {kind: builtinUnarySame, arity: 1},
 		"dpdy":   {kind: builtinUnarySame, arity: 1},
 		"fwidth": {kind: builtinUnarySame, arity: 1},

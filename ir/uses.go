@@ -28,8 +28,10 @@ func StageCalls(stage Stage, names map[string]bool) bool {
 }
 
 // UsesDerivatives reports whether the fragment stage of m calls dpdx, dpdy or
-// fwidth. Derivatives are fragment-only in practice, so the vertex stage is not
-// scanned.
+// fwidth. Derivatives are illegal in a vertex shader on every backend — not
+// merely unflagged — so lower/resolver.go and lower/typer.go reject them at
+// compile time before an ir.Module can ever carry one in Vertex.Body; the
+// vertex stage is not scanned here because a derivative can never reach it.
 func UsesDerivatives(m Module) bool {
 	return StageCalls(m.Fragment, DerivativeBuiltins)
 }
