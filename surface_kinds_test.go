@@ -451,6 +451,107 @@ func TestPostPassthroughCompiles(t *testing.T) {
 	}
 }
 
+// ---- array param tests (post kind) ----
+
+// TestPostArrayParamCompilesAllTargets locks in fixed-size array `param`
+// support for post-kind materials (not just array context fields — see
+// testdata/conformance/water-compound-shadow.sel for the context-field case).
+// A post material may declare `param items : array<vec4, N>` and loop over it
+// in the fragment body; every backend emitter must declare the array uniform
+// and the host layout must report a std140-compatible offset for it.
+func TestPostArrayParamCompilesAllTargets(t *testing.T) {
+	src := []byte(`material PostArrayParam kind post {
+    param scale : float = 1.0
+    param items : array<vec4, 8>
+
+    surface(geo) -> color {
+        var acc = 0.0
+        for (var i = 0i; i < 8i; i = i + 1i) {
+            acc = acc + items[i].w
+        }
+        return rgb(acc * scale, acc * scale, acc * scale)
+    }
+}`)
+	res, err := Compile(src, CompileOptions{Targets: AllTargets()})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	if res.Layout.Kind != bindings.SurfaceKindPost {
+		t.Errorf("kind = %q, want post", res.Layout.Kind)
+	}
+
+	wgsl, ok := res.Artifact(TargetWGSL)
+	if !ok || !strings.Contains(wgsl.Source, "items : array<vec4<f32>, 8>") {
+		t.Errorf("WGSL missing array uniform declaration:\n%s", wgsl.Source)
+	}
+	if !strings.Contains(wgsl.Source, "u.items[i]") {
+		t.Errorf("WGSL array index does not resolve through the u. struct accessor:\n%s", wgsl.Source)
+	}
+
+	glsl, ok := res.Artifact(TargetGLSL)
+	if !ok || !strings.Contains(glsl.Fragment, "uniform vec4 items[8];") {
+		t.Errorf("GLSL missing array uniform declaration:\n%s", glsl.Fragment)
+	}
+
+	gles, ok := res.Artifact(TargetGLES)
+	if !ok || !strings.Contains(gles.Fragment, "uniform vec4 items[8];") {
+		t.Errorf("GLES missing array uniform declaration:\n%s", gles.Fragment)
+	}
+
+	metal, ok := res.Artifact(TargetMetal)
+	if !ok || !strings.Contains(metal.Source, "float4 items[8];") {
+		t.Errorf("Metal missing array uniform declaration:\n%s", metal.Source)
+	}
+	if !strings.Contains(metal.Source, "u.items[i]") {
+		t.Errorf("Metal array index does not resolve through the u. struct accessor:\n%s", metal.Source)
+	}
+
+	// std140/WGSL layout: scalar "scale" (offset 0) must be padded to 16 bytes
+	// before the vec4 array "items" begins (arrays always start on a 16-byte
+	// boundary), and the block size must round up to a 16-byte-stride multiple
+	// covering all 8 elements.
+	offsets := map[string]int{}
+	for _, f := range res.Layout.UniformBlock.Fields {
+		offsets[f.Name] = f.Offset
+	}
+	if offsets["scale"] != 0 {
+		t.Errorf("scale offset = %d, want 0", offsets["scale"])
+	}
+	if offsets["items"] != 16 {
+		t.Errorf("items offset = %d, want 16 (std140 array alignment)", offsets["items"])
+	}
+	if res.Layout.UniformBlock.Size != 16+8*16 {
+		t.Errorf("uniform block size = %d, want %d", res.Layout.UniformBlock.Size, 16+8*16)
+	}
+}
+
+// TestPostArrayParamRejectsUnsupportedElementType locks in a clear diagnostic
+// (CodeUnsupportedType / SEL1003) when a post-kind array param names an
+// element type that cannot live in a uniform array (textures, cube textures,
+// and the Sun record are all reference/record types, not scalar/vector data).
+func TestPostArrayParamRejectsUnsupportedElementType(t *testing.T) {
+	src := []byte(`material Bad kind post {
+    param lookups : array<texture2d, 4>
+
+    surface(geo) -> color { return rgb(0.0, 0.0, 0.0) }
+}`)
+	_, err := Compile(src, CompileOptions{Targets: []Target{}})
+	if err == nil {
+		t.Fatal("expected error for array<texture2d, N> param in post material")
+	}
+	var ce *CompileError
+	if !errors.As(err, &ce) {
+		t.Fatalf("error type = %T, want *CompileError", err)
+	}
+	d := ce.Diagnostics[0]
+	if d.Code != "SEL1003" {
+		t.Errorf("diagnostic code = %s, want SEL1003", d.Code)
+	}
+	if !strings.Contains(d.Message, `param "lookups"`) || !strings.Contains(d.Message, "unsupported array element type") {
+		t.Errorf("diagnostic message = %q, want it to name the param and say 'unsupported array element type'", d.Message)
+	}
+}
+
 func TestPointsMinimalCompiles(t *testing.T) {
 	// Simplest possible points material: just return the point color.
 	src := []byte(`material SimplePoint kind points {
