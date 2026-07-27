@@ -157,6 +157,52 @@ func TestLowerMeshAuthoredVertex(t *testing.T) {
 	}
 }
 
+// TestLowerMeshAuthoredVertexUsesVertexIndexInsideControlFlow is the
+// regression test for a bug where a vertexIndex read nested inside an `if`
+// reassignment (rather than a top-level `let`, as every other vertexIndex
+// material in this package/the conformance corpus happens to use) was
+// invisible to UsesVertexIndex. UsesVertexIndex now derives from
+// ir.StageUsesVertexIndexBuiltin (ir/uses.go), which walks the exhaustive
+// statement/expression walker and finds the reference inside the if's
+// AssignCF. See validate/validate_test.go's
+// TestPreFixVertexIndexInControlFlowWouldHaveFailedNagaValidation for the
+// empirical proof that the old behaviour emitted an invalid shader.
+func TestLowerMeshAuthoredVertexUsesVertexIndexInsideControlFlow(t *testing.T) {
+	p, err := parse.Program([]byte(`material ProceduralGridIndexed {
+    param gridSize : float = 16.0
+    varying shade : float
+    vertex() -> vec4 {
+        var fi = 0.0
+        if (gridSize > 0.0) {
+            fi = float(vertexIndex)
+        }
+        let col = fract(fi / gridSize)
+        shade = col
+        return mvp * vec4f(col, 0.0, 0.0, 1.0)
+    }
+    surface(geo) -> color {
+        return rgb(geo.shade, geo.shade, geo.shade)
+    }
+}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mod, _, err := LowerProgram(p, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !mod.UsesVertexIndex {
+		t.Fatal("module UsesVertexIndex = false, want true (vertexIndex is read inside an if)")
+	}
+	src, err := wgsl.Emit(mod)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(src, "@builtin(vertex_index) vertexIndex : u32") {
+		t.Errorf("WGSL vertexMain missing the vertex_index builtin parameter despite referencing vertexIndex\n--- got ---\n%s", src)
+	}
+}
+
 // TestLowerRejectsDerivativesInVertexStage checks the first half of the
 // fragment-only-builtins defect: dpdx/dpdy/fwidth are illegal in a vertex
 // shader on every backend (not merely un-flagged for the WebGL extension

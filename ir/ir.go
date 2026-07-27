@@ -124,8 +124,23 @@ type Stmt struct {
 	CF StmtCF
 }
 
-// StmtCF is the control-flow payload of an ir.Stmt.
-type StmtCF interface{ isStmtCF() }
+// StmtCF is the control-flow payload of an ir.Stmt. Every implementation must
+// also provide exprs and nestedStmts (see ir/uses.go), which every "does this
+// stage use X?" walker in this package dispatches through instead of a type
+// switch. A new control-flow variant that omits these methods does not
+// satisfy StmtCF, so any composite literal assigning it to a Stmt.CF field
+// fails to compile — the walker cannot silently forget a variant the way
+// ir/uses.go's stmtMatches once forgot ReturnCF (see
+// spore.2026-07-27.selena-ir-cf-walker-convention).
+type StmtCF interface {
+	isStmtCF()
+	// exprs returns the expressions this control-flow node evaluates directly
+	// (not including expressions nested inside child statement blocks).
+	exprs() []Expr
+	// nestedStmts returns the child statement blocks this control-flow node
+	// contains (e.g. an if's Then/Else, a for's Body). Leaf nodes return nil.
+	nestedStmts() [][]Stmt
+}
 
 // AssignCF reassigns an existing mutable variable: Target = Value.
 type AssignCF struct {
@@ -211,8 +226,17 @@ func (ReturnCF) isStmtCF()      {}
 func (Index) isExpr()           {}
 
 // Expr is the typed expression graph. It is total by construction (no loops,
-// no recursion) so every backend can emit it deterministically.
-type Expr interface{ isExpr() }
+// no recursion) so every backend can emit it deterministically. Every
+// implementation must also provide children (see ir/uses.go): the direct
+// child expressions a usage walker must recurse into. A new Expr variant that
+// omits children does not satisfy Expr, so any composite literal assigning it
+// to an Expr-typed field fails to compile instead of silently defeating a
+// usage walker that recurses over children by hand.
+type Expr interface {
+	isExpr()
+	// children returns e's direct child expressions (nil for leaves).
+	children() []Expr
+}
 
 // Ref references a uniform, attribute, varying, or stage-local by name.
 type Ref struct{ Name string }

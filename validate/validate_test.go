@@ -483,6 +483,66 @@ fn vertexMain() -> VertexOutput {
 	}
 }
 
+// TestPreFixVertexIndexInControlFlowWouldHaveFailedNagaValidation is not a
+// test of current Selena output — lower/lower_vertex.go now derives
+// UsesVertexIndex from ir.StageUsesVertexIndexBuiltin, which walks the
+// exhaustive ir/uses.go statement/expression walker and finds a vertexIndex
+// read anywhere in the body — it is the empirical proof that fix was
+// warranted.
+//
+// Before that fix, UsesVertexIndex came from a hand-rolled walker
+// (lower/lower_vertex.go's former irStageUsesVertexIndex) that only scanned
+// CF-less statements' Value field. A vertexIndex read reassigned inside an
+// `if`, like `x = float(vertexIndex) * 0.01`, was invisible to it: the vertex
+// entry point's @builtin(vertex_index) parameter was omitted while the body
+// still referenced vertexIndex. This WGSL is exactly that shape — the
+// material was:
+//
+//	material ProceduralAssign {
+//	    vertex() -> vec4 {
+//	        var x = 0.0
+//	        x = float(vertexIndex) * 0.01
+//	        return mvp * vec4f(x, 0.0, 0.0, 1.0)
+//	    }
+//	    surface(geo) -> color { return rgb(1.0, 1.0, 1.0) }
+//	}
+//
+// — and naga rejects the emitted vertexMain: vertexIndex has no definition in
+// scope. Confirmed with naga 29.0.3.
+func TestPreFixVertexIndexInControlFlowWouldHaveFailedNagaValidation(t *testing.T) {
+	src := `struct Uniforms {
+  mvp : mat4x4<f32>,
+  normalMatrix : mat3x3<f32>,
+};
+@group(0) @binding(0) var<uniform> u : Uniforms;
+
+struct VertexOutput {
+  @builtin(position) position : vec4<f32>,
+};
+
+@vertex
+fn vertexMain() -> VertexOutput {
+  var out : VertexOutput;
+  var x : f32 = 0.0;
+  x = (f32(vertexIndex) * 0.01);
+  out.position = (u.mvp * vec4<f32>(x, 0.0, 0.0, 1.0));
+  return out;
+}
+
+@fragment
+fn fragmentMain(in : VertexOutput) -> @location(0) vec4<f32> {
+  return vec4<f32>(vec3<f32>(1.0, 1.0, 1.0), 1.0);
+}
+`
+	r, err := prismvalidate.Run("naga", src, ".wgsl", nil)
+	if r.Skipped {
+		t.Skip("naga: skipped (not on PATH)")
+	}
+	if err == nil {
+		t.Fatalf("naga accepted an undeclared vertexIndex reference, want a validation error\n%s", r.Output)
+	}
+}
+
 // TestPreFixVertexSampleWouldHaveFailedGlslangValidation is the GLSL ES 1.00
 // counterpart, and the reason the fix rejects sample()/sampleLevel()/
 // sampleCube() rather than trying to "emit correctly": none of the three

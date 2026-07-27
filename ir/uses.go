@@ -6,6 +6,16 @@ package ir
 // own partial walker, which is how a fragment stage could call fwidth and still
 // emit no GL_OES_standard_derivatives directive on some surface kinds. One
 // walker in the IR keeps every emitter and the binding descriptor in agreement.
+//
+// stmtMatches and exprMatches dispatch through the StmtCF.exprs/nestedStmts and
+// Expr.children methods (implemented per variant below) instead of a type
+// switch. A type switch silently returns false for a case it forgot — the
+// defect that shipped ir.ReturnCF with no case here and made an early-return
+// derivative invisible to UsesDerivatives (see
+// spore.2026-07-27.selena-ir-cf-walker-convention). Dispatching through an
+// interface method makes that class of omission a compile error instead: a new
+// StmtCF or Expr implementation that does not provide these methods cannot be
+// assigned to a Stmt.CF or Expr field at all.
 
 // DerivativeBuiltins is the set of screen-space derivative builtins. GLSL ES
 // 1.00 (WebGL 1) provides them only through GL_OES_standard_derivatives; GLSL
@@ -54,6 +64,28 @@ func UsesSceneSize(m Module) bool { return StageUsesSceneSize(m.Fragment) }
 // at an explicit LOD.
 func UsesSceneSampleLevel(m Module) bool { return StageUsesSceneSampleLevel(m.Fragment) }
 
+// StageUsesVertexIndexBuiltin reports whether stage's body or output
+// expression references the vertexIndex builtin, including a reference nested
+// inside an if/for/assign/return — anywhere stmtMatches recurses.
+//
+// This replaces a hand-rolled walker that used to live in
+// lower/lower_vertex.go (irStageUsesVertexIndex / irExprUsesVertexIndex). That
+// walker only scanned CF-less statements' Value field, so a vertexIndex read
+// inside an authored vertex() reassignment, if, or for body was invisible to
+// it: UsesVertexIndex came back false, the backend omitted the
+// @builtin(vertex_index)/[[vertex_id]]/gl_VertexID wiring the reference
+// needed, and the emitted shader referenced vertexIndex as an undeclared
+// identifier — naga rejects it outright. Every conformance material happens to
+// read vertexIndex from a top-level `let`, so the corpus never exercised the
+// gap. Routing through the shared, exhaustive stmtMatches/exprMatches walker
+// closes it the same way UsesDerivatives already does for dpdx/dpdy/fwidth.
+func StageUsesVertexIndexBuiltin(stage Stage) bool {
+	return stageMatches(stage, func(e Expr) bool {
+		r, ok := e.(Ref)
+		return ok && r.Name == "vertexIndex"
+	})
+}
+
 func stmtCalls(s Stmt, names map[string]bool) bool {
 	return stmtMatches(s, func(e Expr) bool {
 		c, ok := e.(Call)
@@ -77,27 +109,24 @@ func stageMatches(stage Stage, pred func(Expr) bool) bool {
 	return exprMatches(stage.Output, pred)
 }
 
+// stmtMatches reports whether s (or, for a control-flow statement, any
+// expression it evaluates directly or in a nested statement block) matches
+// pred. It dispatches through StmtCF.exprs/nestedStmts (see ir.go) rather than
+// a type switch, so a new StmtCF variant is exhaustively handled by
+// construction — see the file doc comment.
 func stmtMatches(s Stmt, pred func(Expr) bool) bool {
 	if s.CF == nil {
 		return exprMatches(s.Value, pred)
 	}
-	switch cf := s.CF.(type) {
-	case AssignCF:
-		return exprMatches(cf.Value, pred)
-	case IndexAssignCF:
-		return exprMatches(cf.Index, pred) || exprMatches(cf.Value, pred)
-	case ReturnCF:
-		return exprMatches(cf.Value, pred)
-	case IfCF:
-		if exprMatches(cf.Cond, pred) {
+	for _, e := range s.CF.exprs() {
+		if exprMatches(e, pred) {
 			return true
 		}
-		return stmtsMatch(cf.Then, pred) || stmtsMatch(cf.Else, pred)
-	case ForCF:
-		if exprMatches(cf.Cond, pred) || exprMatches(cf.InitValue, pred) || exprMatches(cf.PostValue, pred) {
+	}
+	for _, block := range s.CF.nestedStmts() {
+		if stmtsMatch(block, pred) {
 			return true
 		}
-		return stmtsMatch(cf.Body, pred)
 	}
 	return false
 }
@@ -111,6 +140,10 @@ func stmtsMatch(stmts []Stmt, pred func(Expr) bool) bool {
 	return false
 }
 
+// exprMatches reports whether e or any expression reachable from e (via
+// Expr.children, see ir.go) matches pred. It dispatches through children
+// rather than a type switch so a new Expr variant is exhaustively handled by
+// construction — see the file doc comment.
 func exprMatches(e Expr, pred func(Expr) bool) bool {
 	if e == nil {
 		return false
@@ -118,42 +151,83 @@ func exprMatches(e Expr, pred func(Expr) bool) bool {
 	if pred(e) {
 		return true
 	}
-	switch x := e.(type) {
-	case Call:
-		return anyMatch(x.Args, pred)
-	case Construct:
-		return anyMatch(x.Args, pred)
-	case Binary:
-		return exprMatches(x.L, pred) || exprMatches(x.R, pred)
-	case Unary:
-		return exprMatches(x.E, pred)
-	case Swizzle:
-		return exprMatches(x.E, pred)
-	case Sample:
-		return exprMatches(x.UV, pred)
-	case SampleLevel:
-		return exprMatches(x.UV, pred) || exprMatches(x.LOD, pred)
-	case SampleCube:
-		return exprMatches(x.Dir, pred)
-	case SceneSample:
-		return exprMatches(x.UV, pred)
-	case SceneSampleLevel:
-		return exprMatches(x.UV, pred) || exprMatches(x.LOD, pred)
-	case StateSampleUV:
-		return exprMatches(x.UV, pred)
-	case Conditional:
-		return exprMatches(x.Cond, pred) || exprMatches(x.Then, pred) || exprMatches(x.Alt, pred)
-	case Index:
-		return exprMatches(x.Arr, pred) || exprMatches(x.Idx, pred)
-	}
-	return false
-}
-
-func anyMatch(args []Expr, pred func(Expr) bool) bool {
-	for _, a := range args {
-		if exprMatches(a, pred) {
+	for _, c := range e.children() {
+		if exprMatches(c, pred) {
 			return true
 		}
 	}
 	return false
 }
+
+// --- StmtCF.exprs / StmtCF.nestedStmts -------------------------------------
+//
+// Every StmtCF implementation in ir.go must provide both methods (the StmtCF
+// interface requires them), even when the answer is "none": that requirement
+// is what makes a missing case a compile error instead of a silently-false
+// walker result.
+
+func (cf AssignCF) exprs() []Expr         { return []Expr{cf.Value} }
+func (cf AssignCF) nestedStmts() [][]Stmt { return nil }
+
+func (cf IndexAssignCF) exprs() []Expr         { return []Expr{cf.Index, cf.Value} }
+func (cf IndexAssignCF) nestedStmts() [][]Stmt { return nil }
+
+func (cf ReturnCF) exprs() []Expr         { return []Expr{cf.Value} }
+func (cf ReturnCF) nestedStmts() [][]Stmt { return nil }
+
+func (cf IfCF) exprs() []Expr { return []Expr{cf.Cond} }
+func (cf IfCF) nestedStmts() [][]Stmt {
+	return [][]Stmt{cf.Then, cf.Else}
+}
+
+func (cf ForCF) exprs() []Expr {
+	return []Expr{cf.InitValue, cf.Cond, cf.PostValue}
+}
+func (cf ForCF) nestedStmts() [][]Stmt { return [][]Stmt{cf.Body} }
+
+// VarArrayCF declares a local array with no initializer — ElemType and Size
+// carry no expression, and it introduces no nested statement block.
+func (cf VarArrayCF) exprs() []Expr         { return nil }
+func (cf VarArrayCF) nestedStmts() [][]Stmt { return nil }
+
+// DiscardCF carries no payload.
+func (cf DiscardCF) exprs() []Expr         { return nil }
+func (cf DiscardCF) nestedStmts() [][]Stmt { return nil }
+
+// BreakCF carries no payload.
+func (cf BreakCF) exprs() []Expr         { return nil }
+func (cf BreakCF) nestedStmts() [][]Stmt { return nil }
+
+// --- Expr.children -----------------------------------------------------
+//
+// Every Expr implementation in ir.go must provide children (the Expr
+// interface requires it), even when the answer is nil (a leaf expression):
+// see the note on StmtCF above.
+
+func (Ref) children() []Expr     { return nil }
+func (Lit) children() []Expr     { return nil }
+func (IntLit) children() []Expr  { return nil }
+func (UintLit) children() []Expr { return nil }
+
+func (x Construct) children() []Expr { return x.Args }
+func (x Call) children() []Expr      { return x.Args }
+
+func (x Binary) children() []Expr  { return []Expr{x.L, x.R} }
+func (x Unary) children() []Expr   { return []Expr{x.E} }
+func (x Swizzle) children() []Expr { return []Expr{x.E} }
+
+func (x Sample) children() []Expr      { return []Expr{x.UV} }
+func (x SampleLevel) children() []Expr { return []Expr{x.UV, x.LOD} }
+func (x SampleCube) children() []Expr  { return []Expr{x.Dir} }
+
+func (x SceneSample) children() []Expr      { return []Expr{x.UV} }
+func (x SceneSampleLevel) children() []Expr { return []Expr{x.UV, x.LOD} }
+func (SceneSize) children() []Expr          { return nil }
+
+func (x Conditional) children() []Expr { return []Expr{x.Cond, x.Then, x.Alt} }
+
+func (StateSample) children() []Expr     { return nil }
+func (x StateSampleUV) children() []Expr { return []Expr{x.UV} }
+func (CellUV) children() []Expr          { return nil }
+
+func (x Index) children() []Expr { return []Expr{x.Arr, x.Idx} }
