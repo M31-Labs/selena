@@ -30,6 +30,44 @@ func TestPrintSampleLevel(t *testing.T) {
 	}
 }
 
+// TestPrintCellUVSwizzleParenthesizes is the regression test for a bug where
+// Print's Swizzle case appended ".field" straight to Dialect.CellUV()'s
+// output with no parentheses. WGSL's and Metal's real CellUVFn render CellUV
+// as an unparenthesized division expression (see emit/wgsl and emit/metal),
+// so cell.uv.x used to print as "a / b.x" — swizzling the denominator —
+// instead of "(a / b).x". compoundCellUVDialect reproduces that shape
+// directly, without a full compile.
+func TestPrintCellUVSwizzleParenthesizes(t *testing.T) {
+	got := Print(Swizzle{E: CellUV{}, Field: "x"}, compoundCellUVDialect{})
+	want := "(a / b).x"
+	if got != want {
+		t.Fatalf("Print(Swizzle{E: CellUV{}}) = %q, want %q", got, want)
+	}
+}
+
+// TestPrintCellUVBareUnaffected guards against an over-broad fix: a bare
+// (non-swizzled) CellUV must print exactly what the dialect returns, with no
+// added parens. Every existing feedback material binds `let uv = cell.uv`
+// this way, and testdata/conformance goldens pin that output byte-for-byte —
+// parenthesizing CellUVFn's return value at the source (rather than only in
+// Print's Swizzle case) was the first fix attempted here and it moved three
+// existing goldens; this test is what a source-level fix would have failed.
+func TestPrintCellUVBareUnaffected(t *testing.T) {
+	got := Print(CellUV{}, compoundCellUVDialect{})
+	want := "a / b"
+	if got != want {
+		t.Fatalf("Print(CellUV{}) = %q, want %q (no parens added when not swizzled)", got, want)
+	}
+}
+
+// compoundCellUVDialect wraps testDialect but overrides CellUV to return an
+// unparenthesized division expression, matching the real WGSL/Metal dialects'
+// CellUVFn shape (every other testDialect method already renders an atomic
+// form, so it is not representative of the bug on its own).
+type compoundCellUVDialect struct{ testDialect }
+
+func (compoundCellUVDialect) CellUV() string { return "a / b" }
+
 type testDialect struct{}
 
 func (testDialect) TypeName(t Type) string { return string(t) }

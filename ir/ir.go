@@ -523,6 +523,20 @@ func Print(e Expr, d Dialect) string {
 	case Unary:
 		return "(" + x.Op + Print(x.E, d) + ")"
 	case Swizzle:
+		// Every Expr's Print output is already atomic — a bare reference, a
+		// call, an index, or (for Binary/Unary/Conditional) an expression the
+		// case itself parenthesizes — except CellUV: Dialect.CellUV's WGSL and
+		// Metal implementations render an unparenthesized division expression
+		// (see emit/wgsl and emit/metal's CellUVFn), so appending ".field"
+		// straight to it binds the swizzle to the denominator instead of the
+		// whole UV. Parenthesize defensively for CellUV specifically, so an
+		// inline cell.uv.x renders correctly without changing the output of
+		// every other (already-atomic) swizzle base — see
+		// testdata/conformance/water-sim-inline-cell-uv.sel, the corpus
+		// material that exercises this directly.
+		if _, ok := x.E.(CellUV); ok {
+			return "(" + Print(x.E, d) + ")." + x.Field
+		}
 		return Print(x.E, d) + "." + x.Field
 	case Sample:
 		return d.Sample(x.Texture, Print(x.UV, d))

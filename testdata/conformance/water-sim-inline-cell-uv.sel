@@ -1,0 +1,21 @@
+// water-sim-inline-cell-uv: regression material for a Print bug where
+// ir.Print's Swizzle case appended ".field" straight to Dialect.CellUV()'s
+// output with no parentheses. WGSL/Metal render CellUV as an unparenthesized
+// division expression, so an inline cell.uv.x used to mis-render as
+// "... / f32(_grid.gridWidth).x" (swizzling the denominator) instead of
+// dividing first and swizzling the whole UV.
+//
+// Every other feedback material in this corpus binds `let uv = cell.uv`
+// before using it, which is a bare (non-swizzled) Print(CellUV) and never hit
+// this path. This material swizzles cell.uv inline instead, on purpose.
+material WaterSimInlineCellUV kind feedback {
+    state water
+
+    feedback(cell) -> vec4 {
+        let here = state(0, 0)
+        let cx   = cell.uv.x
+        let cy   = cell.uv.y
+        let bump = sin(cx * 6.283185307179586) * cos(cy * 6.283185307179586) * 0.01
+        return vec4f(here.x + bump, here.y, here.z, here.w)
+    }
+}
