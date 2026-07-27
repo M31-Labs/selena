@@ -1,0 +1,20 @@
+// early-return-loop.sel — early return inside a for body, alongside an
+// author break in the same loop (Phase 1). Pins the interaction: return
+// exits the whole surface immediately, while break only exits the loop.
+material EarlyReturnLoop {
+    param limit : float = 3.0
+
+    surface(geo) -> color {
+        var hits = 0.0
+        for (var i = 0.0; i < 8.0; i = i + 1.0) {
+            if (i > limit) {
+                return rgb(1.0, 0.0, 0.0)
+            }
+            hits = hits + 1.0
+            if (hits > 6.0) {
+                break
+            }
+        }
+        return rgb(0.0, hits / 8.0, 0.0)
+    }
+}

@@ -122,6 +122,12 @@ func (in *inliner) stmt(s hir.Stmt, env map[string]hir.Expr) (hir.Stmt, error) {
 	case hir.Break:
 		// Likewise: a bare break carries no expressions.
 		return x, nil
+	case hir.Return:
+		v, err := in.expr(x.Value, env)
+		if err != nil {
+			return nil, err
+		}
+		return hir.Return{Value: v, Span: x.Span}, nil
 	case hir.IndexAssign:
 		idx, err := in.expr(x.Index, env)
 		if err != nil {
@@ -249,14 +255,16 @@ func (in *inliner) expr(e hir.Expr, env map[string]hir.Expr) (hir.Expr, error) {
 		}
 		// inline the parent surface with its geo param bound to the passed arg.
 		// Only Let statements in the parent body are supported for inlining;
-		// imperative control-flow (var/assign/if/for) in a parent surface that is
-		// called via super.surface(...) is not yet supported (B2a limitation).
+		// control flow in a parent surface (var/assign/if/for, including an
+		// early return) is expression-substituted, not compiled, so it has no
+		// statement stream to splice a child's usage into — super.surface(...)
+		// on such a parent is not yet supported.
 		env2 := map[string]hir.Expr{in.parent.Geo: geoArg}
 		for _, s := range in.parent.Body {
 			l, ok := s.(hir.Let)
 			if !ok {
 				return nil, diagnostic(CodeInvalidCall, x.Span,
-					"super.surface: parent surface body contains imperative statements that cannot be inlined (B2a limitation)")
+					"super.surface: parent surface body contains control flow (if, for, or an early return) that cannot be inlined; only let bindings are supported here")
 			}
 			v, err := in.expr(l.Value, env2)
 			if err != nil {

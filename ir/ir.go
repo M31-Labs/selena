@@ -183,6 +183,16 @@ type DiscardCF struct{}
 // `break;` on every backend (WGSL, GLSL, GLES, Metal all spell it the same).
 type BreakCF struct{}
 
+// ReturnCF exits the current fragment/compute entry immediately with Value as
+// the packed (vec4) result. Backends render it through Resolver.ReturnFn (see
+// emit/internal): WGSL/Metal mesh, points, and post entries default to
+// `return Value;` since their entry functions already return a vec4/float4.
+// WGSL/Metal feedback compute kernels return void, so their ReturnFn writes
+// `outState[cellIndex] = Value; return;` instead. GLSL/GLES fragment mains
+// also return void, so their ReturnFn writes the output global assignment
+// (`gl_FragColor = Value;` / `fragColor = Value;`) followed by `return;`.
+type ReturnCF struct{ Value Expr }
+
 // Index reads an array element: Arr[Idx].
 // Emits identically across all four backends as Arr[Idx].
 type Index struct {
@@ -197,6 +207,7 @@ func (VarArrayCF) isStmtCF()    {}
 func (IndexAssignCF) isStmtCF() {}
 func (DiscardCF) isStmtCF()     {}
 func (BreakCF) isStmtCF()       {}
+func (ReturnCF) isStmtCF()      {}
 func (Index) isExpr()           {}
 
 // Expr is the typed expression graph. It is total by construction (no loops,

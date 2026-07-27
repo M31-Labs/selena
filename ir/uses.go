@@ -84,6 +84,8 @@ func stmtMatches(s Stmt, pred func(Expr) bool) bool {
 		return exprMatches(cf.Value, pred)
 	case IndexAssignCF:
 		return exprMatches(cf.Index, pred) || exprMatches(cf.Value, pred)
+	case ReturnCF:
+		return exprMatches(cf.Value, pred)
 	case IfCF:
 		if exprMatches(cf.Cond, pred) {
 			return true

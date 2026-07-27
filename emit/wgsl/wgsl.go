@@ -79,6 +79,11 @@ func emitFeedback(m ir.Module) (string, error) {
 		CellUVFn: func() string {
 			return "(vec2<f32>(f32(cellIndex % _grid.gridWidth), f32(cellIndex / _grid.gridWidth)) + vec2<f32>(0.5, 0.5)) / f32(_grid.gridWidth)"
 		},
+		// computeMain returns void — an early ir.ReturnCF writes outState then
+		// bare-returns, matching the final unconditional write below it.
+		ReturnFn: func(val string) string {
+			return "outState[cellIndex] = " + val + "; return;"
+		},
 	}
 
 	b.WriteString("\n@compute @workgroup_size(64)\nfn computeMain(@builtin(global_invocation_id) gid : vec3<u32>) {\n")

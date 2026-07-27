@@ -1,0 +1,14 @@
+// early-return.sel — early return inside an if body (Phase 1). The if branch
+// returns immediately when geo.uv.x is left of cutoff; otherwise control
+// falls through to the trailing top-level return. Pins both the branching
+// emitted code and the vec3->vec4 packing at each return site independently.
+material EarlyReturn {
+    param cutoff : float = 0.5
+
+    surface(geo) -> color {
+        if (geo.uv.x < cutoff) {
+            return rgb(1.0, 0.0, 0.0)
+        }
+        return rgb(0.0, 1.0, 0.0)
+    }
+}

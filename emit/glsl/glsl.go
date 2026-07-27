@@ -99,6 +99,7 @@ func emitFragmentAuthored(m ir.Module) string {
 	}
 	res := internal.NewBare(prismDialect)
 	res.StateSampleUVFn = func(uv string) string { return fmt.Sprintf("texture2D(stateTex, %s)", uv) }
+	res.ReturnFn = glReturnFn
 	b.WriteString("\nvoid main() {\n")
 	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
 	fmt.Fprintf(&b, "  gl_FragColor = %s;\n}\n", ir.Print(m.Fragment.Output, res))
@@ -145,6 +146,7 @@ func emitFeedbackFragment(m ir.Module) string {
 			return fmt.Sprintf("texture2D(stateTex, vUV + vec2(%s, %s) * texelSize)", glFloatLit(dx), glFloatLit(dy))
 		},
 		CellUVFn: func() string { return "vUV" },
+		ReturnFn: glReturnFn,
 	}
 	b.WriteString("void main() {\n")
 	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
@@ -154,6 +156,16 @@ func emitFeedbackFragment(m ir.Module) string {
 
 // glFloatLit renders an integer cell offset as a GLSL float literal (1 -> 1.0).
 func glFloatLit(v int64) string { return fmt.Sprintf("%d.0", v) }
+
+// glReturnFn renders an early ir.ReturnCF for GLSL ES 1.00 (WebGL1). Every
+// fragment main() here returns void and writes the fragment colour through
+// the built-in gl_FragColor global, so an early return must write it too,
+// before a bare `return;` — unlike WGSL/Metal mesh, points, and post, where
+// fragmentMain declares a vec4/float4 return type and a plain `return val;`
+// suffices (the emit/internal default ReturnFn covers those).
+func glReturnFn(val string) string {
+	return "gl_FragColor = " + val + "; return;"
+}
 
 func emitVertex(m ir.Module) string {
 	var b strings.Builder
@@ -203,6 +215,7 @@ func emitFragment(m ir.Module) string {
 		}
 	}
 	res := internal.NewBare(prismDialect)
+	res.ReturnFn = glReturnFn
 	b.WriteString("\nvoid main() {\n")
 	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
 	fmt.Fprintf(&b, "  gl_FragColor = %s;\n}\n", ir.Print(m.Fragment.Output, res))
@@ -338,6 +351,7 @@ func emitPointsFragment(m ir.Module) string {
 	// host draws GL_POINTS so the per-fragment UV is gl_PointCoord; we alias it
 	// via a local so the author's emitted code references the right value.
 	res := internal.NewBare(prismDialect)
+	res.ReturnFn = glReturnFn
 
 	b.WriteString("void main() {\n")
 	// pt.pointUV → v_pointCoord in the IR; alias to gl_PointCoord (no dead varying).
@@ -411,6 +425,7 @@ func emitPostFragment(m ir.Module) string {
 			}
 		},
 		SceneSizeFn: func() string { return "_sceneSize" },
+		ReturnFn:    glReturnFn,
 	}
 
 	b.WriteString("void main() {\n")
