@@ -44,6 +44,17 @@ func TestEmitDirectionalDiffuse(t *testing.T) {
 // emitted shader would fail to compile.
 func TestEmitEarlyReturnValueUsingDerivativeEnablesExtension(t *testing.T) {
 	mod := ir.Module{
+		// A real compiled Module always has a non-nil Vertex.Output (the
+		// default mvp*position transform, or an authored vertex() result);
+		// this hand-built module needs one too so emitVertex's unconditional
+		// ir.Print(m.Vertex.Output, ...) has something to render. A zero-value
+		// Stage{} used to work here only because ir.Print's old default case
+		// silently printed a placeholder comment for the resulting nil Expr.
+		Vertex: ir.Stage{
+			Output: ir.Construct{Type: ir.Vec4, Args: []ir.Expr{
+				ir.Lit{Value: 0.0}, ir.Lit{Value: 0.0}, ir.Lit{Value: 0.0}, ir.Lit{Value: 1.0},
+			}},
+		},
 		Fragment: ir.Stage{
 			Body: []ir.Stmt{
 				{CF: ir.IfCF{

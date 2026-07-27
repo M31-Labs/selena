@@ -531,7 +531,16 @@ func Print(e Expr, d Dialect) string {
 	case Index:
 		return Print(x.Arr, d) + "[" + Print(x.Idx, d) + "]"
 	default:
-		return "/* unknown expr */"
+		// Every Expr variant in this package has a case above. Reaching here
+		// means a new variant's Print case was never added — the emission
+		// counterpart of the compile-time-exhaustive Expr.children guard in
+		// ir/uses.go, which only covers usage-scanning, not rendering. A
+		// silently-emitted "/* unknown expr */" comment would be exactly the
+		// class of defect this project exists to remove: a compile that
+		// reports success and emits a shader that does not match the
+		// authored source. See EmitError and CodeEmitUnknownExpr.
+		emitPanic(CodeEmitUnknownExpr, "ir.Print: no rendering for expression of type %T", e)
+		return ""
 	}
 }
 

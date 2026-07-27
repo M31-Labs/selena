@@ -7,17 +7,18 @@ import (
 )
 
 const (
-	CodeDuplicateParam  = "SEL1001"
-	CodeDuplicateLocal  = "SEL1002"
-	CodeUnsupportedType = "SEL1003"
-	CodeReservedName    = "SEL1004"
-	CodeUnsupportedFeat = "SEL1005"
-	CodeUnknownName     = "SEL2001"
-	CodeInvalidMember   = "SEL2002"
-	CodeInvalidCall     = "SEL2003"
-	CodeInvalidSwizzle  = "SEL2004"
-	CodeTypeMismatch    = "SEL2005"
-	CodeInvalidDefault  = "SEL3001"
+	CodeDuplicateParam     = "SEL1001"
+	CodeDuplicateLocal     = "SEL1002"
+	CodeUnsupportedType    = "SEL1003"
+	CodeReservedName       = "SEL1004"
+	CodeUnsupportedFeat    = "SEL1005"
+	CodeInterfaceCollision = "SEL1006"
+	CodeUnknownName        = "SEL2001"
+	CodeInvalidMember      = "SEL2002"
+	CodeInvalidCall        = "SEL2003"
+	CodeInvalidSwizzle     = "SEL2004"
+	CodeTypeMismatch       = "SEL2005"
+	CodeInvalidDefault     = "SEL3001"
 )
 
 // DiagnosticError is a lowerer error that can be anchored back to source.

@@ -245,7 +245,7 @@ func (r Resolver) SceneSample(name, uv string) string {
 	if r.SceneSampleFn != nil {
 		return r.SceneSampleFn(name, uv)
 	}
-	return "vec4<f32>(0.0)" // unreachable in valid programs; guard only
+	return r.unwired("SceneSample")
 }
 
 // SceneSampleLevel renders a post-pass engine scene texture sample at an
@@ -264,7 +264,7 @@ func (r Resolver) SceneSize() string {
 	if r.SceneSizeFn != nil {
 		return r.SceneSizeFn()
 	}
-	return "vec2(0.0, 0.0)" // unreachable in valid programs; guard only
+	return r.unwired("SceneSize")
 }
 
 // StateSample renders a feedback-kind previous-state read at the constant cell
@@ -273,7 +273,7 @@ func (r Resolver) StateSample(dx, dy int64) string {
 	if r.StateSampleFn != nil {
 		return r.StateSampleFn(dx, dy)
 	}
-	return "vec4<f32>(0.0)" // unreachable in valid programs; guard only
+	return r.unwired("StateSample")
 }
 
 // StateSampleUV renders a by-uv statefield read given the rendered uv expression.
@@ -281,7 +281,7 @@ func (r Resolver) StateSampleUV(uv string) string {
 	if r.StateSampleUVFn != nil {
 		return r.StateSampleUVFn(uv)
 	}
-	return "vec4<f32>(0.0)" // unreachable in valid programs; guard only
+	return r.unwired("StateSampleUV")
 }
 
 // CellUV renders the normalized [0,1]×[0,1] UV of the current feedback cell.
@@ -289,7 +289,25 @@ func (r Resolver) CellUV() string {
 	if r.CellUVFn != nil {
 		return r.CellUVFn()
 	}
-	return "vec2(0.0, 0.0)" // unreachable in valid programs; guard only
+	return r.unwired("CellUV")
+}
+
+// unwired reports that an ir.Expr node reached this Resolver stage without the
+// Fn field its rendering needs (fnName names that field's method, e.g.
+// "CellUV" for CellUVFn). lower/ only ever produces one of these nodes inside
+// a stage/kind whose emitter wires the matching Fn, so every one of these five
+// call sites is unreachable for a program lower/ accepts today. Each used to
+// return a plausible-looking zero value here instead — exactly the silent
+// "compile succeeds, shader is wrong" failure mode this project exists to
+// remove — so a lowering bug that let one leak into the wrong stage would
+// have rendered a black/zero pixel with no diagnostic. Fail loudly instead;
+// each backend's top-level Emit recovers this into a normal error (see
+// ir.EmitError, ir.CodeEmitUnwiredNode).
+func (r Resolver) unwired(fnName string) string {
+	panic(&ir.EmitError{
+		Code:    ir.CodeEmitUnwiredNode,
+		Message: fmt.Sprintf("%s: no renderer wired for this stage (nil %sFn)", fnName, fnName),
+	})
 }
 
 // Ternary renders a conditional expression, delegating to the backend dialect.
@@ -442,5 +460,55 @@ func emitStmt(b *strings.Builder, s *ir.Stmt, d Resolver, indent string, wgsl bo
 			indent, initDecl, cond, cf.PostTarget, postVal)
 		EmitStmtList(b, cf.Body, d, indent+"  ", wgsl)
 		fmt.Fprintf(b, "%s}\n", indent)
+	default:
+		// Every ir.StmtCF variant has a case above. Reaching here means a new
+		// variant's rendering was never added: the switch would otherwise
+		// just skip the statement, silently dropping it from the emitted
+		// source while the compile still reports success — worse than a
+		// missing extension directive, the class of bug this switch already
+		// caused once (see ir/uses.go's file doc comment). Fail loudly
+		// instead; each backend's top-level Emit recovers this into a normal
+		// error (see ir.EmitError, ir.CodeEmitUnknownStmt).
+		panic(&ir.EmitError{
+			Code:    ir.CodeEmitUnknownStmt,
+			Message: fmt.Sprintf("emitStmt: no rendering for control-flow statement of type %T", s.CF),
+		})
 	}
+}
+
+// Recover runs fn and converts a panicked *ir.EmitError into a normal error
+// return. ir.Print and this package's shared statement emitter raise
+// *ir.EmitError by panicking (see ir.EmitError's doc comment) rather than
+// threading an error return through every call in an expression tree; each
+// backend's single-source Emit function (wgsl.Emit, metal.Emit) wraps its
+// whole body in this so that mechanism never crosses its package boundary as
+// anything other than a normal Go error. A panic that is not an *ir.EmitError
+// is a real bug, not a diagnosed emission failure, and is re-raised unchanged
+// rather than swallowed.
+func Recover(fn func() (string, error)) (out string, err error) {
+	defer func() {
+		if r := recover(); r == nil {
+			return
+		} else if ee, ok := r.(*ir.EmitError); ok {
+			err = ee
+		} else {
+			panic(r)
+		}
+	}()
+	return fn()
+}
+
+// RecoverSplit is Recover for the vertex+fragment backends (glsl.Emit,
+// gles.Emit), which return two source strings instead of one.
+func RecoverSplit(fn func() (string, string, error)) (vertex, fragment string, err error) {
+	defer func() {
+		if r := recover(); r == nil {
+			return
+		} else if ee, ok := r.(*ir.EmitError); ok {
+			err = ee
+		} else {
+			panic(r)
+		}
+	}()
+	return fn()
 }

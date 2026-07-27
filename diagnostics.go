@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"m31labs.dev/selena/hir"
+	"m31labs.dev/selena/ir"
 	"m31labs.dev/selena/lower"
 	"m31labs.dev/selena/parse"
 )
@@ -77,6 +78,21 @@ func compileError(err error) error {
 			}},
 		}
 	}
+	var ee *ir.EmitError
+	if errors.As(err, &ee) {
+		// ir.Module carries no source spans (lowering strips them; see
+		// ir.Stmt/ir.Expr), so Range is always zero here — an honestly empty
+		// span, not a missing one. See ir.EmitError's doc comment.
+		return &CompileError{
+			Err: err,
+			Diagnostics: []Diagnostic{{
+				Code:     ee.Code,
+				Severity: SeverityError,
+				Message:  ee.Message,
+				Hint:     diagnosticHint(ee.Code, ee.Message),
+			}},
+		}
+	}
 	return err
 }
 
@@ -110,6 +126,8 @@ func diagnosticHint(code, message string) string {
 		return "Choose a name that is not a shader keyword, generated binding, or Selena stdlib builtin."
 	case "SEL1005":
 		return "This feature is not available here; author vertex()/varying/statefield only in mesh materials, and keep vertex() bodies to let bindings and varying writes."
+	case "SEL1006":
+		return "Rename one of the two declarations; they land on the same emitted uniform, texture, attribute, or varying slot."
 	case "SEL2001":
 		return "Declare a material param or let binding with this name, or correct the identifier."
 	case "SEL2002":
@@ -122,6 +140,8 @@ func diagnosticHint(code, message string) string {
 		return "Make the operand and argument types match, or introduce an explicit scalar/vector conversion."
 	case "SEL3001":
 		return "Use a constant scalar or vector default that matches the parameter type."
+	case "SEL4001", "SEL4002", "SEL4003":
+		return "This is a Selena backend defect, not an authoring mistake — please file an issue with the material source that triggered it."
 	default:
 		return ""
 	}

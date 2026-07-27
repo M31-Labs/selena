@@ -1,7 +1,6 @@
 package lower
 
 import (
-	"fmt"
 	"sort"
 
 	"m31labs.dev/selena/bindings"
@@ -120,11 +119,30 @@ func sortedSet(m map[string]bool) []string {
 	return ks
 }
 
+// interfaceNames claims one emitted-interface namespace slot per name across
+// every uniform, texture (+ its Sampler suffix), attribute, and varying a
+// material lowers to, and rejects a second claim on the same name. This is
+// how a param and a synthesized varying (or a texture and its own sampler
+// suffix) colliding gets caught, in addition to — not instead of —
+// validateAuthorName's check against generated symbols/keywords/stdlib
+// builtins (lower/reserved.go): that check runs per-declaration against a
+// fixed list, while this one runs once, across every name a material's own
+// declarations actually produced, so it also catches two AUTHORED names
+// landing on the same emitted slot (e.g. a param and a `let` sharing a name
+// that only collides after the uniform/varying split — see
+// TestLowerRejectsInterfaceNameCollisions).
+//
+// The rejection carries no source span: interfaceNames runs after HIR spans
+// have already been left behind by the ir.Binding/bindings.NamedType shapes
+// it operates on. CodeInterfaceCollision (SEL1006) still gives it the same
+// structured Code/Message shape as every other lowering diagnostic, instead
+// of the plain fmt.Errorf that used to bypass CompileError's Diagnostics
+// entirely (errors.As(err, &ce) failed for this one specific rejection).
 func interfaceNames(uniforms []bindings.NamedType, textures []string, attributes, varyings []ir.Binding) (map[string]string, error) {
 	seen := map[string]string{}
 	claim := func(kind, name string) error {
 		if prev, ok := seen[name]; ok {
-			return fmt.Errorf("%s %q conflicts with %s", kind, name, prev)
+			return diagnostic(CodeInterfaceCollision, hir.Span{}, "%s %q conflicts with %s", kind, name, prev)
 		}
 		seen[name] = kind
 		return nil
