@@ -136,11 +136,46 @@ func firstError(n *gts.Node) *gts.Node {
 }
 
 func syntaxError(w *walker, root *gts.Node) *Error {
+	if err := bracketArraySyntaxError(w.Src); err != nil {
+		return err
+	}
 	n := firstError(root)
 	if expected, span, ok := expectedFromSource(w.Src); ok {
 		return &Error{Message: "syntax error in .sel source; expected " + expected, Span: span}
 	}
 	return &Error{Message: syntaxMessage(w, n), Span: w.span(n)}
+}
+
+// bracketArrayParamLine matches a param declaration written with the C-style
+// array suffix `type[N]`. A newer grammar release stopped silently dropping
+// this suffix (see checkDroppedTokens) and instead cascades it into a hard
+// parse error covering the rest of the material. Checked here, ahead of the
+// generic syntax-error heuristics, so the fix is still the first thing an
+// author sees.
+var bracketArrayParamLine = regexp.MustCompile(`^param\s+\S+\s*:\s*(\S+?)\s*(\[\s*[0-9]+\s*\])`)
+
+// bracketArraySyntaxError scans src line by line for the C-style array param
+// spelling and, when found, reports it with the same correction as
+// droppedTokenMessage. It returns nil when no line matches.
+func bracketArraySyntaxError(src []byte) *Error {
+	offset := 0
+	lineNo := 1
+	for _, line := range strings.SplitAfter(string(src), "\n") {
+		body := strings.TrimRight(line, "\r\n")
+		trimmed := strings.TrimSpace(body)
+		indent := firstNonSpace(body)
+		if m := bracketArrayParamLine.FindStringSubmatch(trimmed); m != nil {
+			elem, bracket := m[1], m[2]
+			pos := strings.Index(trimmed, bracket)
+			return &Error{
+				Message: droppedTokenMessage(bracket, elem),
+				Span:    spanAt(lineNo, offset+indent+pos, indent+pos+1, len(bracket)),
+			}
+		}
+		offset += len(line)
+		lineNo++
+	}
+	return nil
 }
 
 func syntaxMessage(w *walker, n *gts.Node) string {
