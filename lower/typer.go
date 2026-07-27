@@ -288,8 +288,9 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 		// zero-argument call "has no arguments") reported a downstream type
 		// mismatch — for example `sceneColorLevel(uv, lod)` surfaced as "surface
 		// must return color/vec3/vec4, got vec2" — and let an unknown name pass
-		// straight through into every emitted backend source.
-		return "", diagnostic(CodeUnknownName, c.Span, "unknown function %q", c.Func)
+		// straight through into every emitted backend source. unknownFunctionError
+		// also names the fix for common mistakes, such as color -> rgb.
+		return "", unknownFunctionError(c.Func, c.Span)
 	}
 
 	switch spec.kind {

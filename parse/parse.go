@@ -689,6 +689,12 @@ func (w *walker) fn(n *gts.Node) (hir.Func, error) {
 // blockBody parses the statements inside a block node into (HIR body stmts, return expr).
 // return_stmt sets the result expression; all other statement kinds go into stmts.
 // Sub-blocks (inside if/for) call subBlock which wraps blockBody and errors on return_stmt.
+//
+// A return_stmt must be the last statement in the block: nothing may follow it.
+// Without this check a later statement (including a second return) would
+// silently overwrite an earlier return's result, or hoist unreachable code
+// into the executed body. Until early returns are supported, a return
+// followed by any statement is a compile error rather than a miscompile.
 func (w *walker) blockBody(block *gts.Node) (stmts []hir.Stmt, result hir.Expr, err error) {
 	for i := 0; i < block.NamedChildCount(); i++ {
 		st := block.NamedChild(i)
@@ -696,6 +702,12 @@ func (w *walker) blockBody(block *gts.Node) (stmts []hir.Stmt, result hir.Expr, 
 			continue
 		}
 		s := st.NamedChild(0)
+		if result != nil {
+			return nil, nil, &Error{
+				Message: "unreachable statement after return (a surface body may only return once, as its final statement)",
+				Span:    w.span(s),
+			}
+		}
 		switch w.Type(s) {
 		case "let_stmt":
 			e, err := w.expr(w.Field(s, "value"))

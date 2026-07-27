@@ -690,3 +690,67 @@ func TestLowerRejectsSampleLevelBadArgs(t *testing.T) {
 		})
 	}
 }
+
+// TestLowerUnknownFunctionNamesTheCall is the regression test for a
+// fabricated type: callType used to fall back to the type of the first
+// argument for any unknown function name, so color(1.0, 0.0, 0.0, 1.0) --
+// "color" is not a registered builtin; the real constructor is rgb -- typed
+// as float and surfaced the nonsense "surface must return color/vec3/vec4,
+// got float" error. The diagnostic must name the unknown function instead of
+// fabricating a type, and point at rgb for this specific mistake.
+func TestLowerUnknownFunctionNamesTheCall(t *testing.T) {
+	src := `material Bad {
+    surface(geo) -> color { return color(1.0, 0.0, 0.0, 1.0) }
+}`
+	p, err := parse.Program([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = LowerProgram(p, 0)
+	if err == nil {
+		t.Fatal("LowerProgram succeeded on an unknown function, want a diagnostic error")
+	}
+	var de *DiagnosticError
+	if !errors.As(err, &de) {
+		t.Fatalf("error type = %T, want *DiagnosticError", err)
+	}
+	if !strings.Contains(de.Message, `unknown function "color"`) {
+		t.Fatalf("diagnostic message = %q, want it to name the unknown function", de.Message)
+	}
+	if !strings.Contains(de.Message, "rgb(") {
+		t.Fatalf("diagnostic message = %q, want it to point at rgb", de.Message)
+	}
+	if strings.Contains(err.Error(), "got float") {
+		t.Fatalf("error = %q, must not fabricate a type from the first argument", err)
+	}
+}
+
+// TestLowerUnknownFunctionNeverReachesEmittedOutput is the regression test
+// for lower/resolver.go's unknown-call fallback: it used to pass an
+// unresolved call straight through into the IR, so a material calling
+// shadeMe(...) survived lowering and landed verbatim in emitted WGSL -- an
+// invalid shader that only --validate-shaders would have caught. Lowering
+// must reject the call before any emitter ever sees it.
+func TestLowerUnknownFunctionNeverReachesEmittedOutput(t *testing.T) {
+	src := `material Bad {
+    surface(geo) -> color { return shadeMe(rgb(1.0, 0.0, 0.0), 0.5) }
+}`
+	p, err := parse.Program([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mod, _, err := LowerProgram(p, 0)
+	if err == nil {
+		if out, emitErr := wgsl.Emit(mod); emitErr == nil && strings.Contains(out, "shadeMe(") {
+			t.Fatalf("shadeMe reached emitted WGSL verbatim:\n%s", out)
+		}
+		t.Fatal("LowerProgram succeeded on an unknown function call, want a diagnostic error")
+	}
+	var de *DiagnosticError
+	if !errors.As(err, &de) {
+		t.Fatalf("error type = %T, want *DiagnosticError", err)
+	}
+	if !strings.Contains(de.Message, `unknown function "shadeMe"`) {
+		t.Fatalf("diagnostic message = %q, want it to name the unknown function", de.Message)
+	}
+}

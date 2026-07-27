@@ -211,8 +211,10 @@ func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
 		if _, known := stdlib.builtin(x.Func); !known {
 			// Mirror the typer: an unregistered callee is an unknown name. The
 			// resolver is reached directly (without a typeOf pass) from a few
-			// lowering sites, so the guard lives on both paths.
-			return nil, diagnostic(CodeUnknownName, x.Span, "unknown function %q", x.Func)
+			// lowering sites, so the guard lives on both paths. This is also
+			// defense in depth for direct/API resolver use, so an unresolved
+			// name never reaches emitted shader source verbatim.
+			return nil, unknownFunctionError(x.Func, x.Span)
 		}
 		args, err := r.args(x.Args)
 		if err != nil {
@@ -248,6 +250,8 @@ func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
 		// For builtinSameOrScalar and builtinStep, populate ArgTypes so the
 		// WGSL emitter can auto-splat scalar args to the base vector type.
 		// GLSL/GLES/Metal broadcast scalar args natively and ignore ArgTypes.
+		// x.Func is already a known builtin here: the guard above rejects any
+		// other name before this point runs.
 		if r.tp != nil {
 			if spec, ok := stdlib.builtin(x.Func); ok {
 				switch spec.kind {

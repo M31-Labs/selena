@@ -456,3 +456,85 @@ func TestBreakOutsideLoopIsRejected(t *testing.T) {
 		t.Fatal("break outside a loop compiled; want a diagnostic")
 	}
 }
+
+// TestCompileRejectsUnreachableReturn is the regression test for a real
+// silent miscompile: parse.blockBody assigned result = e for every
+// return_stmt with no check, so a second sibling return silently overwrote
+// the first one, and Selena emitted a valid-but-wrong shader with exit code
+// 0 and no diagnostic. Two sibling top-level returns must now fail to
+// compile, anchored at the second (unreachable) return.
+func TestCompileRejectsUnreachableReturn(t *testing.T) {
+	src := []byte(`material TwoReturn kind mesh {
+    surface(geo) -> color {
+        return rgb(1.0, 0.0, 0.0)
+        return rgb(0.0, 1.0, 0.0)
+    }
+}`)
+	_, err := Compile(src, CompileOptions{Targets: []Target{}})
+	if err == nil {
+		t.Fatal("Compile succeeded with two sibling returns; want a diagnostic, not a silent miscompile")
+	}
+	var ce *CompileError
+	if !errors.As(err, &ce) {
+		t.Fatalf("error type = %T, want *CompileError", err)
+	}
+	d := ce.Diagnostics[0]
+	if !strings.Contains(d.Message, "unreachable statement after return") {
+		t.Fatalf("diagnostic message = %q, want it to name the unreachable statement", d.Message)
+	}
+	if d.Range.Start.Line != 4 {
+		t.Fatalf("range start line = %d, want 4 (the second, unreachable return)", d.Range.Start.Line)
+	}
+}
+
+// TestCompileRejectsStatementAfterReturn covers the other shape of the same
+// defect: a statement between two returns used to be hoisted into executed
+// code (dead code that ran anyway) while only the final return's value
+// escaped. Any statement after a return must fail to compile, not just a
+// second return.
+func TestCompileRejectsStatementAfterReturn(t *testing.T) {
+	src := []byte(`material FlatReturn kind mesh {
+    surface(geo) -> color {
+        return rgb(1.0, 0.0, 0.0)
+        let later = 0.25
+        return rgb(0.0, later, 0.0)
+    }
+}`)
+	_, err := Compile(src, CompileOptions{Targets: []Target{}})
+	if err == nil {
+		t.Fatal("Compile succeeded with a let after a return; want a diagnostic, not silently hoisted dead code")
+	}
+	var ce *CompileError
+	if !errors.As(err, &ce) {
+		t.Fatalf("error type = %T, want *CompileError", err)
+	}
+	d := ce.Diagnostics[0]
+	if !strings.Contains(d.Message, "unreachable statement after return") {
+		t.Fatalf("diagnostic message = %q, want it to name the unreachable statement", d.Message)
+	}
+	if d.Range.Start.Line != 4 {
+		t.Fatalf("range start line = %d, want 4 (the let after the return)", d.Range.Start.Line)
+	}
+}
+
+// TestCompileSingleReturnStillCompiles pins the non-regressed case: a
+// surface body ending in exactly one return must keep compiling and emitting
+// the same shader as before Defect A's fix.
+func TestCompileSingleReturnStillCompiles(t *testing.T) {
+	src := []byte(`material OneReturn kind mesh {
+    surface(geo) -> color {
+        return rgb(1.0, 0.0, 0.0)
+    }
+}`)
+	res, err := Compile(src, CompileOptions{Targets: []Target{TargetWGSL}})
+	if err != nil {
+		t.Fatalf("single return should still compile: %v", err)
+	}
+	wgsl, ok := res.Artifact(TargetWGSL)
+	if !ok {
+		t.Fatal("missing WGSL artifact")
+	}
+	if !strings.Contains(wgsl.Source, "return vec4<f32>(vec3<f32>(1.0, 0.0, 0.0), 1.0);") {
+		t.Fatalf("WGSL fragment does not return the expected color:\n%s", wgsl.Source)
+	}
+}
