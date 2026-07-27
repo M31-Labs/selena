@@ -1,0 +1,32 @@
+// vertex-index-in-control-flow.sel — authored VERTEX stage that reads the
+// vertexIndex builtin from inside control flow (an `if` reassignment), not a
+// top-level `let`.
+//
+// Regression material for a bug where UsesVertexIndex only scanned CF-less
+// statements' Value field: a vertexIndex read nested inside an if/for/assign
+// was invisible to it, so the backend omitted the per-target vertex-index
+// wiring (@builtin(vertex_index) in WGSL, [[vertex_id]] in Metal, gl_VertexID
+// in GLES, a_vertexIndex in GLSL) even though the emitted body still
+// referenced vertexIndex — naga rejects the resulting WGSL as an undeclared
+// identifier. Every other vertexIndex-using material in this corpus reads it
+// from a top-level `let`, which is why the gap was latent.
+material ProceduralGridIndexed {
+    param gridSize : float = 16.0
+
+    varying shade : float
+
+    vertex() -> vec4 {
+        var fi = 0.0
+        if (gridSize > 0.0) {
+            fi = float(vertexIndex)
+        }
+        let col = fract(fi / gridSize)
+        let row = floor(fi / gridSize) / gridSize
+        shade = col
+        return mvp * vec4f(col * 2.0 - 1.0, 0.0, row * 2.0 - 1.0, 1.0)
+    }
+
+    surface(geo) -> color {
+        return rgb(geo.shade, geo.shade, geo.shade)
+    }
+}

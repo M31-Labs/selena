@@ -201,6 +201,7 @@ func lowerMeshWithVertex(m hir.Material) (ir.Module, bindings.Layout, error) {
 		irTextures[i] = ir.Texture{Name: t, Cube: uniforms.cubeTextures[t]}
 	}
 
+	vertexStage := ir.Stage{Body: vertexBody, Output: vertexOut}
 	mod := ir.Module{
 		Name:            m.Name,
 		Kind:            ir.KindMesh,
@@ -209,11 +210,11 @@ func lowerMeshWithVertex(m hir.Material) (ir.Module, bindings.Layout, error) {
 		Attributes:      attributes,
 		Varyings:        varyings,
 		Textures:        irTextures,
-		Vertex:          ir.Stage{Body: vertexBody, Output: vertexOut},
+		Vertex:          vertexStage,
 		Fragment:        ir.Stage{Body: fragBody, Output: fragOut},
 		StateField:      stateName,
 		VertexAuthored:  true,
-		UsesVertexIndex: irStageUsesVertexIndex(vertexBody, vertexOut),
+		UsesVertexIndex: ir.StageUsesVertexIndexBuiltin(vertexStage),
 	}
 
 	ub := bindings.ComputeUniformBlock(uniforms.uniforms)
@@ -276,45 +277,6 @@ func lowerVertexStage(vfn *hir.Func, reserved map[string]string, rs *resolver, t
 	return lc.lowerStmts(vfn.Body)
 }
 
-// irStageUsesVertexIndex reports whether the vertex stage references the
-// vertexIndex builtin, so the emitters know to wire the per-backend index source.
-func irStageUsesVertexIndex(body []ir.Stmt, output ir.Expr) bool {
-	for i := range body {
-		if irExprUsesVertexIndex(body[i].Value) {
-			return true
-		}
-	}
-	return irExprUsesVertexIndex(output)
-}
-
-func irExprUsesVertexIndex(e ir.Expr) bool {
-	switch x := e.(type) {
-	case ir.Ref:
-		return x.Name == "vertexIndex"
-	case ir.Construct:
-		for _, a := range x.Args {
-			if irExprUsesVertexIndex(a) {
-				return true
-			}
-		}
-	case ir.Call:
-		for _, a := range x.Args {
-			if irExprUsesVertexIndex(a) {
-				return true
-			}
-		}
-	case ir.Binary:
-		return irExprUsesVertexIndex(x.L) || irExprUsesVertexIndex(x.R)
-	case ir.Unary:
-		return irExprUsesVertexIndex(x.E)
-	case ir.Swizzle:
-		return irExprUsesVertexIndex(x.E)
-	case ir.Conditional:
-		return irExprUsesVertexIndex(x.Cond) || irExprUsesVertexIndex(x.Then) || irExprUsesVertexIndex(x.Alt)
-	case ir.StateSampleUV:
-		return irExprUsesVertexIndex(x.UV)
-	case ir.Index:
-		return irExprUsesVertexIndex(x.Arr) || irExprUsesVertexIndex(x.Idx)
-	}
-	return false
-}
+// vertexIndex usage is detected via ir.StageUsesVertexIndexBuiltin, which
+// walks the exhaustive ir/uses.go statement/expression walker instead of a
+// hand-rolled one — see that function's doc comment for the bug this replaced.
