@@ -13,17 +13,22 @@ var prismDialect = dialect.WGSL{}
 
 // Emit renders m as a single WGSL source string exposing vertexMain and
 // fragmentMain, for the WebGPU backend (browser + GoSX desktop via Chromium).
+// The internal.Recover wrapper converts a structured emission failure
+// (ir.EmitError, raised by ir.Print or emit/internal's shared statement
+// emitter — see their doc comments) into this function's normal error return.
 func Emit(m ir.Module) (string, error) {
-	switch m.Kind {
-	case ir.KindPoints:
-		return emitPoints(m)
-	case ir.KindPost:
-		return emitPost(m)
-	case ir.KindFeedback:
-		return emitFeedback(m)
-	default:
-		return emitMesh(m)
-	}
+	return internal.Recover(func() (string, error) {
+		switch m.Kind {
+		case ir.KindPoints:
+			return emitPoints(m)
+		case ir.KindPost:
+			return emitPost(m)
+		case ir.KindFeedback:
+			return emitFeedback(m)
+		default:
+			return emitMesh(m)
+		}
+	})
 }
 
 // emitFeedback emits a WGSL compute kernel for a feedback-kind simulation step.

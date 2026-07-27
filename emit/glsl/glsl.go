@@ -15,20 +15,25 @@ var prismDialect = dialect.GLSL{}
 // backend (browser + GoSX desktop via Chromium). Unlike WGSL, GLSL ships the
 // two stages as separate sources and addresses everything through bare globals
 // (attribute/uniform/varying) — the divergence this slice exists to surface.
+// The internal.RecoverSplit wrapper converts a structured emission failure
+// (ir.EmitError, raised by ir.Print or emit/internal's shared statement
+// emitter — see their doc comments) into this function's normal error return.
 func Emit(m ir.Module) (vertex, fragment string, err error) {
-	switch m.Kind {
-	case ir.KindPoints:
-		return emitPointsVertex(m), emitPointsFragment(m), nil
-	case ir.KindPost:
-		return emitPostVertex(m), emitPostFragment(m), nil
-	case ir.KindFeedback:
-		return emitFeedbackVertex(m), emitFeedbackFragment(m), nil
-	default:
-		if m.VertexAuthored {
-			return emitVertexAuthored(m), emitFragmentAuthored(m), nil
+	return internal.RecoverSplit(func() (string, string, error) {
+		switch m.Kind {
+		case ir.KindPoints:
+			return emitPointsVertex(m), emitPointsFragment(m), nil
+		case ir.KindPost:
+			return emitPostVertex(m), emitPostFragment(m), nil
+		case ir.KindFeedback:
+			return emitFeedbackVertex(m), emitFeedbackFragment(m), nil
+		default:
+			if m.VertexAuthored {
+				return emitVertexAuthored(m), emitFragmentAuthored(m), nil
+			}
+			return emitVertex(m), emitFragment(m), nil
 		}
-		return emitVertex(m), emitFragment(m), nil
-	}
+	})
 }
 
 // emitVertexAuthored emits the WebGL1 (GLSL ES 1.00) vertex shader for a material

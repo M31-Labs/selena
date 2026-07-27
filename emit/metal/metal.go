@@ -12,18 +12,23 @@ import (
 var prismDialect = dialect.Metal{}
 
 // Emit renders m as a single Metal Shading Language source with vertexMain and
-// fragmentMain, for the iOS SceneKit backend consumed by gosx-native.
+// fragmentMain, for the iOS SceneKit backend consumed by gosx-native. The
+// internal.Recover wrapper converts a structured emission failure
+// (ir.EmitError, raised by ir.Print or emit/internal's shared statement
+// emitter — see their doc comments) into this function's normal error return.
 func Emit(m ir.Module) (string, error) {
-	switch m.Kind {
-	case ir.KindPoints:
-		return emitPoints(m)
-	case ir.KindPost:
-		return emitPost(m)
-	case ir.KindFeedback:
-		return emitFeedback(m)
-	default:
-		return emitMesh(m)
-	}
+	return internal.Recover(func() (string, error) {
+		switch m.Kind {
+		case ir.KindPoints:
+			return emitPoints(m)
+		case ir.KindPost:
+			return emitPost(m)
+		case ir.KindFeedback:
+			return emitFeedback(m)
+		default:
+			return emitMesh(m)
+		}
+	})
 }
 
 // emitFeedback emits a Metal compute kernel for a feedback-kind simulation step,

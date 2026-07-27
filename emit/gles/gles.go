@@ -15,20 +15,25 @@ var prismDialect = dialect.GLES{}
 // GLSurfaceView backend consumed by gosx-native. Like the WebGL GLSL emitter it
 // uses bare globals, but the GLES3 IO model differs: in/out instead of
 // attribute/varying, and an explicit fragment output instead of gl_FragColor.
+// The internal.RecoverSplit wrapper converts a structured emission failure
+// (ir.EmitError, raised by ir.Print or emit/internal's shared statement
+// emitter — see their doc comments) into this function's normal error return.
 func Emit(m ir.Module) (vertex, fragment string, err error) {
-	switch m.Kind {
-	case ir.KindPoints:
-		return emitPointsVertex(m), emitPointsFragment(m), nil
-	case ir.KindPost:
-		return emitPostVertex(m), emitPostFragment(m), nil
-	case ir.KindFeedback:
-		return emitFeedbackVertex(m), emitFeedbackFragment(m), nil
-	default:
-		if m.VertexAuthored {
-			return emitVertexAuthored(m), emitFragmentAuthored(m), nil
+	return internal.RecoverSplit(func() (string, string, error) {
+		switch m.Kind {
+		case ir.KindPoints:
+			return emitPointsVertex(m), emitPointsFragment(m), nil
+		case ir.KindPost:
+			return emitPostVertex(m), emitPostFragment(m), nil
+		case ir.KindFeedback:
+			return emitFeedbackVertex(m), emitFeedbackFragment(m), nil
+		default:
+			if m.VertexAuthored {
+				return emitVertexAuthored(m), emitFragmentAuthored(m), nil
+			}
+			return emitVertex(m), emitFragment(m), nil
 		}
-		return emitVertex(m), emitFragment(m), nil
-	}
+	})
 }
 
 // emitVertexAuthored emits the GLES3 (GLSL ES 3.00) vertex shader for a material

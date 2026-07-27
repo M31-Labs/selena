@@ -189,6 +189,46 @@ func TestCompileErrorRejectsSuperWithoutExtends(t *testing.T) {
 	}
 }
 
+// TestCompileErrorRejectsInterfaceNameCollisionAsStructuredDiagnostic is the
+// end-to-end (through Compile, not hand-built HIR) regression test for a
+// legibility gap: lower/lower_helpers.go's interfaceNames used to reject a
+// name collision — here, a texture param and its own compiler-synthesized
+// "<name>Sampler" binding landing on the same emitted name — with a plain
+// fmt.Errorf. That error carried no SEL code, no Diagnostic, and no hint: it
+// passed through compileError unwrapped, so errors.As(err, &ce) for
+// *CompileError failed even though the material was correctly rejected. See
+// lower.TestLowerRejectsInterfaceNameCollisions for the lower-package-level
+// cases across every interface kind (uniform/texture/attribute/varying/local).
+func TestCompileErrorRejectsInterfaceNameCollisionAsStructuredDiagnostic(t *testing.T) {
+	src := []byte(`material Bad {
+    param albedo : texture2d
+    param albedoSampler : color
+    surface(geo) -> color { return sample(albedo, geo.uv) }
+}`)
+
+	_, err := Compile(src, CompileOptions{Targets: []Target{}})
+	if err == nil {
+		t.Fatal("Compile succeeded, want diagnostic error")
+	}
+	var ce *CompileError
+	if !errors.As(err, &ce) {
+		t.Fatalf("error type = %T, want *CompileError", err)
+	}
+	d := ce.Diagnostics[0]
+	if d.Code != "SEL1006" {
+		t.Fatalf("diagnostic code = %s, want SEL1006", d.Code)
+	}
+	if !d.Range.IsZero() {
+		t.Fatalf("diagnostic range = %+v, want zero (interfaceNames runs past HIR spans)", d.Range)
+	}
+	if !strings.Contains(d.Message, `texture sampler "albedoSampler" conflicts with uniform`) {
+		t.Fatalf("diagnostic message = %q", d.Message)
+	}
+	if d.Hint == "" {
+		t.Fatal("diagnostic hint is empty, want a hint")
+	}
+}
+
 func TestCompileErrorRejectsReservedNames(t *testing.T) {
 	src := []byte(`material Bad {
     param var : float
