@@ -33,6 +33,20 @@ type resolver struct {
 	// fragment stage of mesh and post kinds; left false for vertex stages and for
 	// kinds (points, feedback) that do not support discard.
 	allowDiscard bool
+	// inVertexStage marks this resolver as building an authored vertex() body
+	// (lower_vertex.go's vrs). It rejects dpdx/dpdy/fwidth and the texture-sample
+	// family (sample/sampleLevel/sampleCube) rather than lowering them: derivatives
+	// are illegal in a vertex shader on every target language (not merely
+	// unflagged — see ir.UsesDerivatives), and none of the four backends today
+	// wire a texture/sampler binding into the authored-vertex scaffold (GLSL ES
+	// 1.00 and GLES 3.00 declare textures only in emitVertexAuthored's fragment
+	// counterpart; Metal's emitMeshAuthored omits texture/sampler params from
+	// vertexMain's signature). Before this guard, calling any of them from
+	// vertex() type-checked and resolved, then failed validation on every
+	// backend: naga rejects textureSample/dFdx-family calls outside the fragment
+	// stage, and GLSL/GLES/Metal reference an undeclared identifier. See
+	// validate/validate_test.go for the naga/glslangValidator proof.
+	inVertexStage bool
 
 	// loopDepth counts enclosing for loops. `break` is only meaningful inside one;
 	// emitting it outside would produce backend code that does not compile.
@@ -89,6 +103,16 @@ func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
 		}
 		return ir.Swizzle{E: inner, Field: x.Field}, nil
 	case hir.Call:
+		if r.inVertexStage {
+			if ir.DerivativeBuiltins[x.Func] {
+				return nil, diagnostic(CodeInvalidCall, x.Span,
+					"%s is a fragment-stage builtin and is not available in vertex()", x.Func)
+			}
+			if x.Func == "sample" || x.Func == "sampleLevel" || x.Func == "sampleCube" {
+				return nil, diagnostic(CodeInvalidCall, x.Span,
+					"%s() is not available in the vertex stage; no backend wires a texture binding into the authored vertex() stage yet", x.Func)
+			}
+		}
 		if x.Func == "sceneColor" || x.Func == "sceneDepth" {
 			if !r.allowSceneSample {
 				return nil, diagnostic(CodeInvalidCall, x.Span, "%s is only available in post-kind materials", x.Func)

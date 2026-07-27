@@ -8,6 +8,7 @@
 package validate
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -370,4 +371,140 @@ func TestFeedbackEarlyReturnValidatesWithNaga(t *testing.T) {
 		t.Fatal("no WGSL artifact")
 	}
 	prismvalidate.Shader(t, "naga", a.Source, ".wgsl", nil)
+}
+
+// TestVertexStageRejectsFragmentOnlyBuiltins is the compile-time half of the
+// silent-invalid-shader defect: dpdx/dpdy/fwidth and the sample/sampleLevel/
+// sampleCube family used to type-check and resolve inside an authored
+// vertex() body, so Selena reported a successful compile while emitting a
+// shader that failed validation on every backend — see
+// TestPreFixVertexDerivativeWouldHaveFailedNagaValidation and
+// TestPreFixVertexSampleWouldHaveFailedNagaValidation /
+// TestPreFixVertexSampleWouldHaveFailedGlslangValidation below for the
+// empirical proof. lower/resolver.go's and lower/typer.go's inVertexStage
+// guard now rejects all six at compile time instead.
+func TestVertexStageRejectsFragmentOnlyBuiltins(t *testing.T) {
+	cases := []struct {
+		name string
+		call string
+	}{
+		{"dpdx", "dpdx(vec3f(1.0, 2.0, 3.0))"},
+		{"dpdy", "dpdy(vec3f(1.0, 2.0, 3.0))"},
+		{"fwidth", "fwidth(vec3f(1.0, 2.0, 3.0))"},
+		{"sample", "sample(albedo, vec2f(0.0, 0.0))"},
+		{"sampleLevel", "sampleLevel(albedo, vec2f(0.0, 0.0), 0.0)"},
+		{"sampleCube", "sampleCube(sky, vec3f(0.0, 1.0, 0.0))"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			src := []byte(`material Bad {
+    param albedo : texture2d
+    param sky    : textureCube
+    vertex() -> vec4 {
+        let s = ` + c.call + `
+        return vec4f(1.0, 1.0, 1.0, 1.0)
+    }
+    surface(geo) -> color {
+        return rgb(1.0, 1.0, 1.0)
+    }
+}`)
+			_, err := selena.Compile(src, selena.CompileOptions{Targets: []selena.Target{}})
+			if err == nil {
+				t.Fatalf("%s in vertex() compiled, want a diagnostic (it used to reach every emitter and fail validation there)", c.name)
+			}
+			var ce *selena.CompileError
+			if !errors.As(err, &ce) {
+				t.Fatalf("error type = %T, want *selena.CompileError", err)
+			}
+			if len(ce.Diagnostics) == 0 || ce.Diagnostics[0].Code != "SEL2003" {
+				t.Fatalf("diagnostics = %+v, want a SEL2003", ce.Diagnostics)
+			}
+		})
+	}
+}
+
+// TestPreFixVertexDerivativeWouldHaveFailedNagaValidation is not a test of
+// current Selena output — the guard above means Selena can no longer produce
+// this shader — it is the empirical proof that the guard is warranted. This
+// WGSL is exactly the shape emitMeshAuthored would render for a `dpdx(...)`
+// call inside vertex() (ir.Print's generic Call path has no stage awareness;
+// see wgsl.go's emitMeshAuthored), and naga rejects it: WGSL's derivative
+// builtins are fragment-stage only. Confirmed with naga 29.0.3.
+func TestPreFixVertexDerivativeWouldHaveFailedNagaValidation(t *testing.T) {
+	src := `struct VertexOutput {
+  @builtin(position) position : vec4<f32>,
+};
+
+@vertex
+fn vertexMain() -> VertexOutput {
+  var out : VertexOutput;
+  let d = dpdx(vec3<f32>(1.0, 2.0, 3.0));
+  out.position = vec4<f32>(d, 1.0);
+  return out;
+}
+`
+	r, err := prismvalidate.Run("naga", src, ".wgsl", nil)
+	if r.Skipped {
+		t.Skip("naga: skipped (not on PATH)")
+	}
+	if err == nil {
+		t.Fatalf("naga accepted dpdx() in a vertex stage, want a validation error\n%s", r.Output)
+	}
+}
+
+// TestPreFixVertexSampleWouldHaveFailedNagaValidation is the sample()
+// counterpart: naga rejects textureSample (implicit-derivative sampling)
+// outside the fragment stage. This is exactly the WGSL emitMeshAuthored would
+// render for `sample(tex, uv)` inside vertex() (resolver.go's Sample case
+// lowers to the same ir.Sample regardless of stage; wgsl.go's Dialect.Sample
+// always renders textureSample). Confirmed with naga 29.0.3.
+func TestPreFixVertexSampleWouldHaveFailedNagaValidation(t *testing.T) {
+	src := `@group(0) @binding(1) var tex : texture_2d<f32>;
+@group(0) @binding(2) var texSampler : sampler;
+
+struct VertexOutput {
+  @builtin(position) position : vec4<f32>,
+};
+
+@vertex
+fn vertexMain() -> VertexOutput {
+  var out : VertexOutput;
+  let c = textureSample(tex, texSampler, vec2<f32>(0.5, 0.5));
+  out.position = vec4<f32>(c.xyz, 1.0);
+  return out;
+}
+`
+	r, err := prismvalidate.Run("naga", src, ".wgsl", nil)
+	if r.Skipped {
+		t.Skip("naga: skipped (not on PATH)")
+	}
+	if err == nil {
+		t.Fatalf("naga accepted sample() (textureSample) in a vertex stage, want a validation error\n%s", r.Output)
+	}
+}
+
+// TestPreFixVertexSampleWouldHaveFailedGlslangValidation is the GLSL ES 1.00
+// counterpart, and the reason the fix rejects sample()/sampleLevel()/
+// sampleCube() rather than trying to "emit correctly": none of the three
+// non-WGSL authored-vertex emitters declare a texture/sampler binding in the
+// vertex source at all (glsl.go's and gles.go's emitVertexAuthored, and
+// metal.go's emitMeshAuthored, only loop over m.Textures for the FRAGMENT
+// half). A sample() call in vertex() referenced an undeclared identifier —
+// this .vert source is exactly that shape. Confirmed with glslangValidator
+// 11:15.1.0.
+func TestPreFixVertexSampleWouldHaveFailedGlslangValidation(t *testing.T) {
+	src := `attribute vec3 position;
+
+void main() {
+  vec4 c = texture2D(tex, vec2(0.5, 0.5));
+  gl_Position = vec4(c.xyz + position, 1.0);
+}
+`
+	r, err := prismvalidate.Run("glslangValidator", src, ".vert", nil)
+	if r.Skipped {
+		t.Skip("glslangValidator: skipped (not on PATH)")
+	}
+	if err == nil {
+		t.Fatalf("glslangValidator accepted an undeclared sampler in the vertex stage, want a validation error\n%s", r.Output)
+	}
 }

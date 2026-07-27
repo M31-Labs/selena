@@ -90,6 +90,10 @@ func diagnosticHint(code, message string) string {
 		return "Write a fixed-size array param as `param name : array<T, N>`; the C-style `T[N]` form is not accepted."
 	case strings.Contains(message, "array index must be int or uint"):
 		return "Selena integer literals carry an `i` suffix: write `for (var i = 0i; i < 8i; i = i + 1i)` so the counter indexes the array directly."
+	case strings.Contains(message, "is a fragment-stage builtin and is not available in vertex()"):
+		return "Move the derivative call into surface(); a vertex shader has no neighboring screen-space pixels to derive against."
+	case strings.Contains(message, "is not available in the vertex stage"):
+		return "Sample the texture in surface() instead, or read live simulation state in vertex() with stateAt(uv)."
 	}
 	switch code {
 	case "SEL0001":

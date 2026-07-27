@@ -141,6 +141,7 @@ func lowerMeshWithVertex(m hir.Material) (ir.Module, bindings.Layout, error) {
 		geoFields:        meshVertexGeometry,
 		allowVertexIndex: true,
 		allowStateAt:     hasState,
+		inVertexStage:    true,
 	}
 	vtp := &typer{
 		paramKind:        vParamKind,
@@ -151,6 +152,7 @@ func lowerMeshWithVertex(m hir.Material) (ir.Module, bindings.Layout, error) {
 		allowVertexIndex: true,
 		allowStateAt:     hasState,
 		paramArrays:      uniforms.paramArrays,
+		inVertexStage:    true,
 	}
 	vrs.tp = vtp
 	vertexBody, err := lowerVertexStage(m.Vertex, reserved, vrs, vtp, varyingType)

@@ -157,6 +157,127 @@ func TestLowerMeshAuthoredVertex(t *testing.T) {
 	}
 }
 
+// TestLowerRejectsDerivativesInVertexStage checks the first half of the
+// fragment-only-builtins defect: dpdx/dpdy/fwidth are illegal in a vertex
+// shader on every backend (not merely un-flagged for the WebGL extension
+// directive; see ir.UsesDerivatives), so authoring one inside vertex() must be
+// a compile-time diagnostic rather than a shader that type-checks in Selena
+// and then fails naga/glslangValidator. See validate/validate_test.go for the
+// empirical proof that the old, unguarded behaviour fails validation.
+func TestLowerRejectsDerivativesInVertexStage(t *testing.T) {
+	for _, fn := range []string{"dpdx", "dpdy", "fwidth"} {
+		t.Run(fn, func(t *testing.T) {
+			src := `material Bad {
+    vertex() -> vec4 {
+        let d = ` + fn + `(vec3f(1.0, 2.0, 3.0))
+        return vec4f(d, 1.0)
+    }
+    surface(geo) -> color {
+        return rgb(1.0, 1.0, 1.0)
+    }
+}`
+			program, err := parse.Program([]byte(src))
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _, err = LowerProgram(program, 0)
+			if err == nil {
+				t.Fatalf("%s in vertex() lowered, want a diagnostic", fn)
+			}
+			var de *DiagnosticError
+			if !errors.As(err, &de) {
+				t.Fatalf("error type = %T, want *DiagnosticError", err)
+			}
+			if de.Code != CodeInvalidCall {
+				t.Fatalf("code = %s, want %s", de.Code, CodeInvalidCall)
+			}
+			want := fn + " is a fragment-stage builtin and is not available in vertex()"
+			if de.Message != want {
+				t.Fatalf("message = %q, want %q", de.Message, want)
+			}
+		})
+	}
+}
+
+// TestLowerAllowsDerivativesInSurface guards against an over-broad fix:
+// dpdx/dpdy/fwidth must stay legal in the fragment stage of a material that
+// also authors a vertex() (the inVertexStage guard is per-resolver/typer
+// instance, so the fragment resolver/typer for lowerMeshWithVertex must not
+// be affected by the new vertex-side rejection).
+func TestLowerAllowsDerivativesInSurface(t *testing.T) {
+	src := `material Fine {
+    param tint : float
+    vertex() -> vec4 {
+        return vec4f(0.0, 0.0, 0.0, 1.0)
+    }
+    surface(geo) -> color {
+        let w = fwidth(tint)
+        return rgb(w, w, w)
+    }
+}`
+	program, err := parse.Program([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := LowerProgram(program, 0); err != nil {
+		t.Fatalf("fwidth() in surface() with an authored vertex() should compile: %v", err)
+	}
+}
+
+// TestLowerRejectsTextureSamplingInVertexStage checks the second half of the
+// defect: sample/sampleLevel/sampleCube type-checked and resolved inside an
+// authored vertex() body, but no backend wires a texture/sampler binding into
+// the vertex scaffold — GLSL ES 1.00 and GLES 3.00 declare textures only in
+// their fragment counterpart of emitVertexAuthored, and Metal's
+// emitMeshAuthored omits texture/sampler params from vertexMain's signature —
+// so the emitted shader referenced an undeclared identifier on three of four
+// backends, and WGSL's textureSample fails naga's fragment-stage-only rule on
+// the fourth. All three calls are rejected at compile time instead.
+func TestLowerRejectsTextureSamplingInVertexStage(t *testing.T) {
+	cases := []struct {
+		name string
+		call string
+	}{
+		{name: "sample", call: "sample(albedo, vec2f(0.0, 0.0))"},
+		{name: "sampleLevel", call: "sampleLevel(albedo, vec2f(0.0, 0.0), 0.0)"},
+		{name: "sampleCube", call: "sampleCube(sky, vec3f(0.0, 1.0, 0.0))"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			src := `material Bad {
+    param albedo : texture2d
+    param sky    : textureCube
+    vertex() -> vec4 {
+        let s = ` + c.call + `
+        return vec4f(s.xyz, 1.0)
+    }
+    surface(geo) -> color {
+        return rgb(1.0, 1.0, 1.0)
+    }
+}`
+			program, err := parse.Program([]byte(src))
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _, err = LowerProgram(program, 0)
+			if err == nil {
+				t.Fatalf("%s in vertex() lowered, want a diagnostic", c.name)
+			}
+			var de *DiagnosticError
+			if !errors.As(err, &de) {
+				t.Fatalf("error type = %T, want *DiagnosticError", err)
+			}
+			if de.Code != CodeInvalidCall {
+				t.Fatalf("code = %s, want %s", de.Code, CodeInvalidCall)
+			}
+			want := c.name + "() is not available in the vertex stage; no backend wires a texture binding into the authored vertex() stage yet"
+			if de.Message != want {
+				t.Fatalf("message = %q, want %q", de.Message, want)
+			}
+		})
+	}
+}
+
 func TestLowerTextured(t *testing.T) {
 	mod, layout, err := Lower(hir.Textured())
 	if err != nil {
