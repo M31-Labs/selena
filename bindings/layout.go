@@ -96,13 +96,14 @@ type Requirements struct {
 	// The GLES (GLSL ES 3.00), WGSL and Metal artifacts have all of this in
 	// core and need nothing.
 	GLExtensions []string `json:"glExtensions,omitempty"`
-	// SceneColorMips is true when the material samples the backdrop at an
-	// explicit mip level (sceneColorLevel). The host must render the post source
-	// into a texture WITH a mip chain, regenerate the mips each frame before the
-	// pass, and bind a sampler whose minification filter walks mips
+	// SceneColorMips is true when the material samples the backdrop at an explicit
+	// non-zero or dynamic mip level (sceneColorLevel). The host must render the
+	// post source into a texture WITH a mip chain, regenerate the mips each frame
+	// before the pass, and bind a sampler whose minification filter walks mips
 	// (LINEAR_MIPMAP_LINEAR / GPUFilterMode "linear" with mipmapFilter
 	// "linear"). Without a mip chain every backend clamps to level 0 and the
-	// pass renders unblurred.
+	// pass renders unblurred. Literal level-zero taps still use explicit LOD, but
+	// do not require the host to create mips.
 	SceneColorMips bool `json:"sceneColorMips,omitempty"`
 	// GLSceneSizeUniform is non-empty when the GLSL (WebGL 1 / GLSL ES 1.00)
 	// artifact declares a host-set backdrop-size uniform, because GLSL ES 1.00

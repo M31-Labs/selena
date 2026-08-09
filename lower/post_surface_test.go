@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"m31labs.dev/selena/emit/wgsl"
 	"m31labs.dev/selena/hir"
 	"m31labs.dev/selena/ir"
 )
@@ -84,6 +85,44 @@ func TestSceneColorLevelLowersToSceneSampleLevel(t *testing.T) {
 	}
 	if !layout.Requires.SceneColorMips {
 		t.Fatal("Requires.SceneColorMips = false; a host with no mip chain renders this unblurred")
+	}
+}
+
+func TestSceneColorLevelZeroLODDoesNotRequireSceneColorMips(t *testing.T) {
+	m := postMaterial(nil, nil, hir.Call{Func: "sceneColorLevel", Args: []hir.Expr{
+		hir.Member{E: hir.Ref{Name: "post"}, Field: "uv"},
+		hir.Lit{Value: 0.0},
+	}})
+	mod, layout, err := Lower(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if layout.Requires.SceneColorMips {
+		t.Fatal("Requires.SceneColorMips = true; literal level-zero backdrop taps do not need host mips")
+	}
+	if len(layout.Requires.GLExtensions) != 1 || layout.Requires.GLExtensions[0] != "EXT_shader_texture_lod" {
+		t.Fatalf("Requires.GLExtensions = %v, want EXT_shader_texture_lod", layout.Requires.GLExtensions)
+	}
+	src, err := wgsl.Emit(mod)
+	if err != nil {
+		t.Fatalf("wgsl emit: %v", err)
+	}
+	if want := "textureSampleLevel(_sceneColorTex, _sceneColorSamp, in.v_uv, 0.0)"; !strings.Contains(src, want) {
+		t.Fatalf("WGSL missing %q\n--- got ---\n%s", want, src)
+	}
+}
+
+func TestSceneColorLevelDynamicLODRequiresSceneColorMips(t *testing.T) {
+	m := postMaterial([]hir.Param{{Name: "lod", Type: hir.Float}}, nil, hir.Call{Func: "sceneColorLevel", Args: []hir.Expr{
+		hir.Member{E: hir.Ref{Name: "post"}, Field: "uv"},
+		hir.Ref{Name: "lod"},
+	}})
+	_, layout, err := Lower(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !layout.Requires.SceneColorMips {
+		t.Fatal("Requires.SceneColorMips = false; dynamic backdrop LOD still needs host mips")
 	}
 }
 

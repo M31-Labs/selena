@@ -79,7 +79,7 @@ func hostRequirements(mod ir.Module) bindings.Requirements {
 	}
 	if ir.UsesSceneSampleLevel(mod) {
 		req.GLExtensions = append(req.GLExtensions, "EXT_shader_texture_lod")
-		req.SceneColorMips = true
+		req.SceneColorMips = ir.RequiresSceneColorMips(mod)
 	}
 	if ir.UsesSceneSize(mod) {
 		req.GLSceneSizeUniform = "_sceneSize"
