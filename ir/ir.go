@@ -340,11 +340,13 @@ type SceneSample struct {
 // target). It is the backdrop counterpart of SampleLevel: one tap of a
 // pre-filtered mip replaces an N-tap blur kernel.
 //
-// The host must supply a scene-color target that HAS mips and a sampler with a
-// mipmap min filter. Without them every backend clamps to level 0 and the pass
-// renders unblurred, so bindings.Layout records the requirement in
-// Layout.Requires (see bindings.Requirements.SceneColorMips) for the host to
-// honour or refuse.
+// A non-zero or dynamic LOD requires the host to supply a scene-color target
+// that HAS mips and a sampler with a mipmap min filter. Without them every
+// backend clamps to level 0 and the pass renders unblurred, so bindings.Layout
+// records the requirement in Layout.Requires (see
+// bindings.Requirements.SceneColorMips) for the host to honour or refuse. A
+// literal level-zero tap is still useful because WGSL permits
+// textureSampleLevel in non-uniform control flow.
 type SceneSampleLevel struct {
 	Name string // "sceneColor"
 	UV   Expr

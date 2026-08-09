@@ -71,4 +71,6 @@ func emitPanic(code, format string, args ...any) {
 // constructed explicitly, as the test does.
 type UnrenderableStmtCFForTests struct{}
 
-func (UnrenderableStmtCFForTests) isStmtCF() {}
+func (UnrenderableStmtCFForTests) isStmtCF()             {}
+func (UnrenderableStmtCFForTests) exprs() []Expr         { return nil }
+func (UnrenderableStmtCFForTests) nestedStmts() [][]Stmt { return nil }

@@ -52,9 +52,21 @@ func StageUsesSceneSize(stage Stage) bool {
 }
 
 // StageUsesSceneSampleLevel reports whether stage samples the backdrop at an
-// explicit LOD (which requires a mipped scene-color target on the host).
+// explicit LOD. WebGL still needs its explicit-LOD extension for level-zero
+// taps, even when the host does not need to build scene-color mips.
 func StageUsesSceneSampleLevel(stage Stage) bool {
 	return stageMatches(stage, func(e Expr) bool { _, ok := e.(SceneSampleLevel); return ok })
+}
+
+// StageRequiresSceneColorMips reports whether a stage samples the backdrop at
+// an explicit, non-zero or dynamic LOD. A literal level-zero tap emits
+// textureSampleLevel, which is valid in non-uniform WGSL control flow, but does
+// not need a host-side mip chain.
+func StageRequiresSceneColorMips(stage Stage) bool {
+	return stageMatches(stage, func(e Expr) bool {
+		lvl, ok := e.(SceneSampleLevel)
+		return ok && !isLiteralZero(lvl.LOD)
+	})
 }
 
 // UsesSceneSize reports whether m's fragment stage reads the backdrop resolution.
@@ -63,6 +75,10 @@ func UsesSceneSize(m Module) bool { return StageUsesSceneSize(m.Fragment) }
 // UsesSceneSampleLevel reports whether m's fragment stage samples the backdrop
 // at an explicit LOD.
 func UsesSceneSampleLevel(m Module) bool { return StageUsesSceneSampleLevel(m.Fragment) }
+
+// RequiresSceneColorMips reports whether m's fragment stage needs the host to
+// provide a scene-color mip chain.
+func RequiresSceneColorMips(m Module) bool { return StageRequiresSceneColorMips(m.Fragment) }
 
 // StageUsesVertexIndexBuiltin reports whether stage's body or output
 // expression references the vertexIndex builtin, including a reference nested
@@ -98,6 +114,11 @@ func exprCalls(e Expr, names map[string]bool) bool {
 		c, ok := x.(Call)
 		return ok && names[c.Func]
 	})
+}
+
+func isLiteralZero(e Expr) bool {
+	lit, ok := e.(Lit)
+	return ok && lit.Value == 0
 }
 
 func stageMatches(stage Stage, pred func(Expr) bool) bool {

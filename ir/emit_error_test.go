@@ -12,7 +12,8 @@ import (
 // counterpart does need to be exported).
 type unrenderableExprForTest struct{}
 
-func (unrenderableExprForTest) isExpr() {}
+func (unrenderableExprForTest) isExpr()          {}
+func (unrenderableExprForTest) children() []Expr { return nil }
 
 // TestPrintPanicsWithEmitErrorForUnknownExpr is the direct test for
 // CodeEmitUnknownExpr: Print's default case used to silently return the
