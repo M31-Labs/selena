@@ -455,7 +455,7 @@ func SelenaGrammar() *grammargen.Grammar {
 		seq(sym("conditional_expression"), s(";")),
 	))
 
-	// _comment: a `//` line comment, declared as a hidden named Token rule and
+	// comment: a `//` line comment, declared as a visible named Token rule and
 	// wired into extras below. Declaring it as a first-class Token (rather than a
 	// bare `Pat("//[^\n]*")` extra) is what makes `//` skip correctly EVERYWHERE.
 	// As a plain pattern extra, the lexer in expression-continuation states
@@ -463,9 +463,16 @@ func SelenaGrammar() *grammargen.Grammar {
 	// `/` division operator instead of the longer `//` comment, mis-lexing the
 	// comment as a division and turning its words into identifiers (SEL0001 /
 	// SEL2001). A Token rule gets first-class maximal-munch priority, so `//...`
-	// always wins over `/`. The leading underscore keeps it hidden, so comments
-	// never appear as nodes and every existing golden parses byte-identically.
-	g.Define("_comment", grammargen.Token(grammargen.Pat(`//[^\n]*`)))
+	// always wins over `/`.
+	//
+	// The rule MUST stay visible — it was `_comment`, and a leading underscore
+	// hides a rule. Hidden extras produce no node, so their bytes belonged to no
+	// child. gotreesitter v0.49.0 added a leaf-tiling invariant that declines any
+	// subtree whose span contains bytes no child covers, and from that version on
+	// every .sel source containing a comment failed with SEL0001 while
+	// comment-free sources still parsed. Visible comment nodes tile the source
+	// and satisfy the invariant. See parse/comment_tiling_test.go.
+	g.Define("comment", grammargen.Token(grammargen.Pat(`//[^\n]*`)))
 
 	// context_field: one scalar/vector/matrix field inside a `context { ... }`
 	// block — `name : type [= default]`. Structurally identical to `param`
@@ -539,7 +546,7 @@ func SelenaGrammar() *grammargen.Grammar {
 
 	g.SetWord("identifier")
 	g.SetSupertypes("expression")
-	g.SetExtras(grammargen.Pat(`\s`), sym("_comment"))
+	g.SetExtras(grammargen.Pat(`\s`), sym("comment"))
 
 	return g
 }

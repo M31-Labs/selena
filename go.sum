@@ -1,7 +1,7 @@
 github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
-github.com/odvcencio/gotreesitter v0.47.0 h1:M4n0d9JPqHUGeZubI8Rzd21cxKqCwA33ULSqoFFznGc=
-github.com/odvcencio/gotreesitter v0.47.0/go.mod h1:hBVkghd0paaYAVwd2087vfwdeU984bQbMo9LvpE0moo=
+github.com/odvcencio/gotreesitter v0.50.1 h1:NAqsvBHOV+MW/gj9TpDqOaqH1CJ4xd/drDwJRAZXxA4=
+github.com/odvcencio/gotreesitter v0.50.1/go.mod h1:hBVkghd0paaYAVwd2087vfwdeU984bQbMo9LvpE0moo=
 github.com/odvcencio/turboquant v0.1.3 h1:ec4FowLEwU2us/TderujmxI9nxMbFaLJTsPaa/TRs3o=
 github.com/odvcencio/turboquant v0.1.3/go.mod h1:ty5h3EkX85p64iBnvWzUGvDuRr6kplOcCE2KBZLtAf8=
 m31labs.dev/gosx v0.25.2 h1:F6aJPLPNIwhQC4CTgwOLNmIrFdV0OBGMlRZagWOUpzA=

@@ -3,7 +3,7 @@ module m31labs.dev/selena
 go 1.26
 
 require (
-	github.com/odvcencio/gotreesitter v0.47.0
+	github.com/odvcencio/gotreesitter v0.50.1
 	m31labs.dev/gosx v0.25.2
 	m31labs.dev/prism v0.1.3
 )
