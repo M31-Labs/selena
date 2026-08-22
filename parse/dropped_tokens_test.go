@@ -83,3 +83,37 @@ func TestCommentsBetweenMembersAreNotDroppedTokens(t *testing.T) {
 		t.Fatalf("comments in the material body were reported as dropped tokens: %v", err)
 	}
 }
+
+// TestCommentAfterDivisionIsNotLexedAsDivision pins the maximal-munch fix in
+// grammar/sel.go's `_comment` Token rule.
+//
+// A `//` line comment appearing anywhere AFTER a `/` division token used to be
+// mis-lexed: in expression-continuation states the lexer preferred the single
+// `/` division operator over the longer `//` comment, turning the comment's
+// words into identifiers (SEL0001 / SEL2001). Because a Selena compile failure
+// falls the caller back to a builtin shader, the symptom downstream was a
+// plausible-looking render with the authored material silently missing —
+// gosx's galaxy point materials carried a "keep the .sel comment-free" rule
+// for months because of it.
+//
+// The case the older test above does not reach is a comment in the SAME source
+// as a division, which is why this one exercises several placements.
+func TestCommentAfterDivisionIsNotLexedAsDivision(t *testing.T) {
+	_, err := Program([]byte(`material CommentAfterDivision kind points {
+    param k : float = 1.0
+    surface(pt) -> color {
+        let ratio = (pt.pointSize - 4.0) / 48.0
+        // a comment on its own line after a division
+        let tinted = rgb(1.0, 1.0, 1.0) // a comment right after a close paren
+        let scaled = ratio / 2.0 // a comment on the same line as a division
+        // consecutive
+        // comment lines following divisions
+        let a = clamp(scaled, 0.0, 1.0)
+        return rgb(tinted.r * a, tinted.g * a, tinted.b * a, a)
+    }
+}
+`))
+	if err != nil {
+		t.Fatalf("a comment following a division was mis-lexed: %v", err)
+	}
+}
