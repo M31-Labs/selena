@@ -171,18 +171,22 @@ func TestGlowPointsWGSLParityContract(t *testing.T) {
 		}
 	}
 
-	// PointsOutput varyings match the builtin PointsOutput struct.
+	// PointsOutput varyings match the builtin PointsOutput struct. Per-point
+	// values are flat (see emitPoints); only the quad UV interpolates.
 	requiredVaryings := []string{
-		"@location(0) v_color",
-		"@location(1) v_fogFactor",
-		"@location(2) v_alpha",
+		"@location(0) @interpolate(flat) v_color",
+		"@location(1) @interpolate(flat) v_fogFactor",
+		"@location(2) @interpolate(flat) v_alpha",
 		"@location(3) v_pointCoord",
-		"@location(4) v_pointSize",
+		"@location(4) @interpolate(flat) v_pointSize",
 	}
 	for _, v := range requiredVaryings {
-		if !strings.Contains(src2, v) {
-			t.Errorf("WGSL missing varying %q", v)
+		if strings.Count(src2, v) != 2 {
+			t.Errorf("WGSL varying %q must appear in both PointsOutput and PointsInput, found %d", v, strings.Count(src2, v))
 		}
+	}
+	if strings.Contains(src2, "@interpolate(flat) v_pointCoord") {
+		t.Error("v_pointCoord must keep default interpolation: it is the quad UV, not a per-point constant")
 	}
 
 	// Entry points.
