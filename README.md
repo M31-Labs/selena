@@ -189,5 +189,5 @@ the baseline for broader material/PBR interop and runtime conformance work. The
 standard-material interop boundary is now documented so future PBR hooks extend
 GoSX's renderer instead of forking it.
 
-See [ROADMAP.md](ROADMAP.md) for the public next-step plan and
-[CONTRIBUTING.md](CONTRIBUTING.md) for development notes.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development notes. Planning lives in
+the project's knowledge space, not in this repository.
