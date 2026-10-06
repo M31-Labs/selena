@@ -22,6 +22,9 @@ const BRDF Module = "brdf"
 // Procedural provides hashes, differentiable noise, filtering and grain.
 const Procedural Module = "procedural"
 
+// Shapes provides signed-distance graphics and fragment coverage helpers.
+const Shapes Module = "shapes"
+
 //go:embed modules/*.sel
 var sources embed.FS
 var cache sync.Map

@@ -31,7 +31,7 @@ fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[b
   float2 st = in.vUv;
   float3 n = normalize(in.vWorldNormal);
   float3 ri = refract(n, n, u.ior);
-  float m = fmod(st.x, 0.5);
+  float m = (st.x - (0.5 * floor(st.x / 0.5)));
   float rnd = round(st.y);
   float a1 = atan(st.x);
   float a2 = atan2(st.y, st.x);

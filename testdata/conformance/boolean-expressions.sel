@@ -1,0 +1,9 @@
+material BooleanExpressions {
+    surface(geo) -> color {
+        let parity = false
+        let toggled = parity != true
+        let same = (geo.uv.x < 0.5) == toggled
+        let visible = !parity && (same || false)
+        return visible ? rgb(0.9, 0.7, 0.2) : rgb(0.1, 0.2, 0.4)
+    }
+}

@@ -53,6 +53,9 @@ func (t *typer) typeOf(e hir.Expr) (ir.Type, error) {
 		_ = x
 		return ir.Uint, nil
 	case hir.Ref:
+		if x.Name == "true" || x.Name == "false" {
+			return ir.Bool, nil
+		}
 		if lt, ok := t.locals[x.Name]; ok {
 			return lt, nil
 		}
@@ -585,7 +588,8 @@ func (t *typer) binaryType(b hir.Binary) (ir.Type, error) {
 		if err != nil {
 			return "", err
 		}
-		if !isNumericScalar(lt) || lt != rt {
+		booleanEquality := (b.Op == "==" || b.Op == "!=") && lt == ir.Bool && rt == ir.Bool
+		if !booleanEquality && (!isNumericScalar(lt) || lt != rt) {
 			return "", diagnostic(CodeTypeMismatch, b.Span, "comparison operator %s requires matching numeric operands, got %s and %s", b.Op, lt, rt)
 		}
 		return ir.Bool, nil
@@ -615,6 +619,9 @@ func (t *typer) binaryType(b hir.Binary) (ir.Type, error) {
 	rt, err := t.typeOf(b.R)
 	if err != nil {
 		return "", err
+	}
+	if lt == ir.Bool || rt == ir.Bool {
+		return "", diagnostic(CodeTypeMismatch, b.Span, "arithmetic operator %s requires numeric operands, got %s and %s", b.Op, lt, rt)
 	}
 	if lt == rt {
 		return lt, nil

@@ -1,0 +1,100 @@
+// Negative inside, positive outside; coordinates and widths share units.
+fn mlSDCircle(p: vec2, radius: float) -> float {
+    return length(p) - max(radius, 0.0)
+}
+fn mlSDRect(p: vec2, halfExtent: vec2) -> float {
+    let q = abs(p) - max(halfExtent, 0.0)
+    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0)
+}
+fn mlSDRoundedRect(p: vec2, halfExtent: vec2, radius: float) -> float {
+    let r = clamp(radius, 0.0, min(abs(halfExtent.x), abs(halfExtent.y)))
+    return mlSDRect(p, abs(halfExtent) - r) - r
+}
+fn mlSDSegment(p: vec2, a: vec2, b: vec2) -> float {
+    let ab = b - a
+    let projection = clamp(dot(p - a, ab) / max(dot(ab, ab), 0.00000001), 0.0, 1.0)
+    return length(p - a - ab * projection)
+}
+fn mlSDTriangle(p: vec2, a: vec2, b: vec2, c: vec2) -> float {
+    let ab = b - a
+    let bc = c - b
+    let ca = a - c
+    let pa = p - a
+    let pb = p - b
+    let pc = p - c
+    let area = ab.x * (c.y - a.y) - ab.y * (c.x - a.x)
+    let direction = area < 0.0 ? -1.0 : 1.0
+    let ea = direction * (ab.x * pa.y - ab.y * pa.x)
+    let eb = direction * (bc.x * pb.y - bc.y * pb.x)
+    let ec = direction * (ca.x * pc.y - ca.y * pc.x)
+    let inside = min(min(ea, eb), ec) >= 0.0 && abs(area) > 0.00000001
+    let distance = min(min(mlSDSegment(p, a, b), mlSDSegment(p, b, c)), mlSDSegment(p, c, a))
+    return distance * (inside ? -1.0 : 1.0)
+}
+// radius is the apothem; rotation points the first face normal in radians.
+fn mlSDRegularPolygon(p: vec2, radius: float, sides: float, rotation: float) -> float {
+    let n = clamp(floor(sides), 3.0, 64.0)
+    let sector = 6.28318530718 / n
+    let angle = atan2(p.y, p.x + (dot(p, p) < 0.000000000001 ? 0.000001 : 0.0)) - rotation
+    let folded = mod(angle + sector * 0.5, sector) - sector * 0.5
+    let q = length(p) * vec2f(cos(folded), sin(folded))
+    let r = max(radius, 0.0)
+    let side = r * tan(sector * 0.5)
+    let nearest = vec2f(r, clamp(q.y, -side, side))
+    return length(q - nearest) * (q.x > r ? 1.0 : -1.0)
+}
+// rotation points the first outer tip; innerRadius controls concavity.
+fn mlSDStar(p: vec2, outerRadius: float, innerRadius: float, points: float, rotation: float) -> float {
+    let n = clamp(floor(points), 3.0, 64.0)
+    let halfSector = 3.14159265359 / n
+    let sector = halfSector * 2.0
+    let angle = atan2(p.y, p.x + (dot(p, p) < 0.000000000001 ? 0.000001 : 0.0)) - rotation
+    let folded = mod(angle + halfSector, sector) - halfSector
+    let q = length(p) * vec2f(cos(folded), abs(sin(folded)))
+    let outer = max(outerRadius, 0.0)
+    let inner = clamp(innerRadius, 0.0, outer)
+    let a = vec2f(outer, 0.0)
+    let b = inner * vec2f(cos(halfSector), sin(halfSector))
+    let edge = b - a
+    let relative = q - a
+    let side = edge.x * relative.y - edge.y * relative.x
+    return mlSDSegment(q, a, b) * (side >= 0.0 && outer > 0.00000001 ? -1.0 : 1.0)
+}
+fn mlSDStripe(p: vec2, normal: vec2, offset: float, halfWidth: float) -> float {
+    let n = normal / max(length(normal), 0.000001)
+    return abs(dot(p, n) - offset) - max(halfWidth, 0.0)
+}
+fn mlSDSaltire(p: vec2, halfExtent: vec2, halfWidth: float) -> float {
+    let extent = max(halfExtent, 0.000001)
+    let a = mlSDStripe(p, vec2f(extent.y, -extent.x), 0.0, halfWidth)
+    let b = mlSDStripe(p, vec2f(extent.y, extent.x), 0.0, halfWidth)
+    return max(mlSDRect(p, extent), min(a, b))
+}
+// For an arbitrary polygon, fold min(edge.x) and multiply edge.y over all
+// edges, then call mlSDPolygonFinish. Horizontal/zero-length edges are safe.
+fn mlPolygonEdge(p: vec2, a: vec2, b: vec2) -> vec2 {
+    let dy = b.y - a.y
+    let divisor = abs(dy) > 0.00000001 ? dy : 1.0
+    let crossingX = a.x + (b.x - a.x) * (p.y - a.y) / divisor
+    let crosses = ((a.y > p.y) != (b.y > p.y)) && p.x < crossingX
+    return vec2f(mlSDSegment(p, a, b), crosses ? -1.0 : 1.0)
+}
+fn mlSDPolygonFinish(distance: float, parity: float) -> float {
+    return abs(distance) * (parity < 0.0 ? -1.0 : 1.0)
+}
+fn mlSDUnion(a: float, b: float) -> float { return min(a, b) }
+fn mlSDIntersection(a: float, b: float) -> float { return max(a, b) }
+fn mlSDSubtract(a: float, b: float) -> float { return max(a, -b) }
+fn mlSDOutline(distance: float, halfWidth: float) -> float { return abs(distance) - max(halfWidth, 0.0) }
+fn mlSDSmoothUnion(a: float, b: float, radius: float) -> float {
+    let k = max(radius, 0.000001)
+    let h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0)
+    return mix(b, a, h) - k * h * (1.0 - h)
+}
+fn mlSDFMaskWidth(distance: float, pixelWidth: float) -> float {
+    let width = max(abs(pixelWidth) * 0.5, 0.000001)
+    return 1.0 - smoothstep(-width, width, distance)
+}
+fn mlSDFMask(distance: float) -> float {
+    return mlSDFMaskWidth(distance, fwidth(distance))
+}

@@ -1,0 +1,20 @@
+// Compile with materiallib.Shapes. Aspect-correct saltire, star and triangle.
+material FlagGallery {
+    param flyToHoist : float = 2.0
+    surface(geo) -> color {
+        let section = floor(geo.uv.x * 3.0)
+        let localUV = vec2f(fract(geo.uv.x * 3.0), geo.uv.y)
+        let p = (localUV - vec2f(0.5, 0.5)) * vec2f(flyToHoist, 1.0)
+        let halfExtent = vec2f(flyToHoist * 0.5, 0.5)
+        let diagonal = mlSDFMask(mlSDSaltire(p, halfExtent, 0.065))
+        let wedges = abs(p.x) / max(flyToHoist, 0.01) > abs(p.y) ? vec3f(0.012, 0.018, 0.015) : vec3f(0.02, 0.31, 0.12)
+        let saltire = mix(wedges, vec3f(0.98, 0.73, 0.055), diagonal)
+        let starMask = mlSDFMask(mlSDStar(p, 0.37, 0.15, 5.0, 1.57079632679))
+        let stripe = mlSDFMask(mlSDStripe(p, vec2f(0.0, 1.0), 0.0, 0.085))
+        let starFlag = mix(mix(vec3f(0.04, 0.18, 0.45), vec3f(0.86, 0.08, 0.11), stripe), vec3f(0.98, 0.93, 0.79), starMask)
+        let outer = mlSDFMask(mlSDTriangle(p, vec2f(-0.34, -0.36), vec2f(0.34, -0.36), vec2f(0.0, 0.4)))
+        let inner = mlSDFMask(mlSDTriangle(p, vec2f(-0.27, -0.3), vec2f(0.27, -0.3), vec2f(0.0, 0.3)))
+        let triangular = mix(mix(vec3f(0.13, 0.55, 0.76), vec3f(0.95, 0.93, 0.84), outer), vec3f(0.035, 0.035, 0.035), inner)
+        return section < 1.0 ? saltire : (section < 2.0 ? starFlag : triangular)
+    }
+}
