@@ -9,10 +9,10 @@ import (
 )
 
 type uniformPlan struct {
-	uniforms    []bindings.NamedType
-	defaults    []bindings.DefaultValue
-	uniformOf   map[string]string
-	textures    []string
+	uniforms  []bindings.NamedType
+	defaults  []bindings.DefaultValue
+	uniformOf map[string]string
+	textures  []string
 	// cubeTextures records which texture params are cube-map types (textureCube).
 	// A name present in cubeTextures with value true emits texture_cube<f32>
 	// (WGSL), samplerCube (GLSL/GLES), or texturecube<float> (Metal) and is
@@ -453,6 +453,12 @@ func (lc *lowerCtx) lowerStmt(s hir.Stmt) (ir.Stmt, error) {
 		t, err := lc.tp.typeOf(x.Value)
 		if err != nil {
 			return ir.Stmt{}, fmt.Errorf("%s %q: %w", lc.localKind, x.Name, err)
+		}
+		if x.Expected != "" {
+			want, ok := hirToIRType(x.Expected)
+			if !ok || t != want {
+				return ir.Stmt{}, diagnostic(CodeInvalidCall, x.Span, "library binding expects %s, got %s", x.Expected, t)
+			}
 		}
 		ve, err := lc.rs.expr(x.Value)
 		if err != nil {
