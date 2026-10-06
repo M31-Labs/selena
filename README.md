@@ -79,9 +79,9 @@ descriptor contract, and
 [docs/standard-material-interop.md](docs/standard-material-interop.md) for the
 PBR/standard-material boundary.
 
-The opt-in [`materiallib` package](docs/material-library/brdf.md) provides typed
-direct-light BRDF helpers authored in Selena. Use its functions with the GoSX
-adapter or compile a material with `materiallib.Compile`. Unused helpers add no
+The opt-in [`materiallib` package](docs/material-library/README.md) provides typed
+BRDF, procedural, shape, normal and effect helpers authored in Selena. Use its
+functions with the GoSX adapter or compile a material with `materiallib.Compile`. Unused helpers add no
 shader source and the host binding descriptor stays unchanged.
 
 ## Use as a library

@@ -84,8 +84,10 @@ substitution; WGSL source grows from 5,716 to 7,153 bytes. Retained locals bound
 repeated-expression growth in larger helpers, but are not a blanket size win.
 These counts use Naga followed by `spirv-opt -O`, counting function instructions
 except function declarations, parameters and labels. They are a portable compiler
-proxy, not native GPU instruction counts. The existing CLI executable's size is
-unchanged; it does not import the opt-in package. A warm library compile of the
+proxy, not native GPU instruction counts. The core CLI does not import the
+opt-in package; the complete stack's compiler changes add 11,005 bytes compared
+with an untouched origin/main build. See the [cost report](README.md).
+A warm library compile of the
 example takes about 8.3 ms in a 20-iteration local sample; this is not a runtime
 frame-time measurement.
 

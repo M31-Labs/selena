@@ -1,0 +1,55 @@
+// Well depth and radius are in tangent-plane units, not screen pixels.
+fn mlPipWellHeight(p: vec2, radius: float, depth: float) -> float {
+    let r = max(radius, 0.000001)
+    let d = max(depth, 0.0) * (radius > 0.0 ? 1.0 : 0.0)
+    let profile = max(1.0 - dot(p, p) / (r * r), 0.0)
+    return -d * profile * profile
+}
+fn mlPipWellGradient(p: vec2, radius: float, depth: float) -> vec2 {
+    let r = max(radius, 0.000001)
+    let d = max(depth, 0.0) * (radius > 0.0 ? 1.0 : 0.0)
+    let profile = max(1.0 - dot(p, p) / (r * r), 0.0)
+    return p * (4.0 * d * profile / (r * r))
+}
+fn mlPipWellNormal(p: vec2, radius: float, depth: float) -> vec3 {
+    let gradient = mlPipWellGradient(p, radius, depth)
+    return normalize(vec3f(-gradient.x, -gradient.y, 1.0))
+}
+fn mlPipWellNormalAA(p: vec2, radius: float, depth: float) -> vec3 {
+    let r = max(radius, 0.000001)
+    let width = length(fwidth(p))
+    let filter = 1.0 - smoothstep(r * 0.5, r * 2.0, width)
+    return mlPipWellNormal(p, radius, depth * filter)
+}
+fn mlTangentFromUV(n: vec3, positionWorld: vec3, uv: vec2) -> vec3 {
+    let axis = abs(n.x) > 0.9 ? vec3f(0.0, 0.0, 1.0) : vec3f(1.0, 0.0, 0.0)
+    let backup = normalize(axis - n * dot(axis, n))
+    let ux = dpdx(uv)
+    let uy = dpdy(uv)
+    let determinant = ux.x * uy.y - ux.y * uy.x
+    let raw = (dpdx(positionWorld) * uy.y - dpdy(positionWorld) * ux.y) * sign(determinant)
+    let projected = raw - n * dot(raw, n)
+    let usable = dot(projected, projected) > 0.000000000001
+    return normalize(usable ? projected : backup)
+}
+fn mlNormalToWorld(tangentNormal: vec3, n: vec3, tangent: vec3, handedness: float) -> vec3 {
+    let bitangent = cross(n, tangent) * (handedness < 0.0 ? -1.0 : 1.0)
+    return normalize(tangent * tangentNormal.x + bitangent * tangentNormal.y + n * tangentNormal.z)
+}
+fn mlBumpNormal(height: float, n: vec3, positionWorld: vec3) -> vec3 {
+    let px = dpdx(positionWorld)
+    let py = dpdy(positionWorld)
+    let rx = cross(py, n)
+    let ry = cross(n, px)
+    let area = dot(px, rx)
+    let gradient = (rx * dpdx(height) + ry * dpdy(height)) * sign(area) / max(abs(area), 0.0000001)
+    return normalize(n - gradient)
+}
+// Positive height is depth into the surface. Offset is bounded at grazing.
+fn mlParallaxUV(uv: vec2, viewTangent: vec3, height: float, scale: float, maxOffset: float) -> vec2 {
+    let offset = viewTangent.xy * (height * scale / max(viewTangent.z, 0.15))
+    let bounded = offset * min(1.0, max(maxOffset, 0.0) / max(length(offset), 0.000001))
+    return uv - bounded
+}
+// Select this in the phone program, so no height fetch or parallax is emitted.
+fn mlParallaxUVPhone(uv: vec2) -> vec2 { return uv }

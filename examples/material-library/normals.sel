@@ -1,0 +1,20 @@
+// Compile with materiallib.Normals and materiallib.BRDF.
+material EngravedTile {
+    param depth : float = 0.055
+    param radius : float = 0.16
+    surface(geo) -> color {
+        let p = geo.uv * vec2f(2.0, 1.0) - vec2f(1.0, 0.5)
+        let left = p - vec2f(-0.48, 0.0)
+        let right = p - vec2f(0.48, 0.0)
+        let l = normalize(vec3f(-0.5, 0.6, 1.0))
+        let height = -mlPipWellHeight(right, radius, depth)
+        let shifted = mlParallaxUV(geo.uv, normalize(vec3f(0.6, 0.2, 1.0)), height, 0.7, 0.035)
+        let displaced = shifted * vec2f(2.0, 1.0) - vec2f(1.48, 0.5)
+        let normal = mlPipWellNormalAA(p.x < 0.0 ? left : displaced, radius, depth)
+        let well = p.x < 0.0 ? mlPipWellHeight(left, radius, depth) : mlPipWellHeight(displaced, radius, depth)
+        let paint = 1.0 - smoothstep(-depth * 0.6, -depth * 0.15, well)
+        let base = mix(vec3f(0.9, 0.84, 0.7), vec3f(0.035, 0.025, 0.018), paint)
+        let lit = 0.16 + mlWrapDiffuse(dot(normal, l), 0.2) * 2.8
+        return base * lit
+    }
+}
