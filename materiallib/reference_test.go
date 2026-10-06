@@ -10,7 +10,11 @@ import (
 
 // Evaluate the authored functions for numerical invariants. Shader compilation
 // is checked separately; this interpreter does not replace GPU validation.
-type reference map[string]hir.FuncDecl
+type reference struct {
+	functions map[string]hir.FuncDecl
+	// Optional per-expression rounding models shader arithmetic precision.
+	round func(float64) float64
+}
 
 func referenceLibrary(t *testing.T) reference {
 	t.Helper()
@@ -18,15 +22,15 @@ func referenceLibrary(t *testing.T) reference {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := reference{}
+	r := reference{functions: map[string]hir.FuncDecl{}}
 	for _, f := range functions {
-		r[f.Name] = f
+		r.functions[f.Name] = f
 	}
 	return r
 }
 
 func (r reference) call(name string, args ...[]float64) []float64 {
-	f, ok := r[name]
+	f, ok := r.functions[name]
 	if !ok {
 		panic("unknown reference helper " + name)
 	}
@@ -54,7 +58,22 @@ func truth(b bool) float64 {
 	return 0
 }
 
-func (r reference) eval(e hir.Expr, env map[string][]float64) []float64 {
+func (r reference) rounded(x float64) float64 {
+	if r.round != nil {
+		return r.round(x)
+	}
+	return x
+}
+
+func (r reference) eval(e hir.Expr, env map[string][]float64) (result []float64) {
+	defer func() {
+		if r.round != nil {
+			result = append([]float64(nil), result...)
+			for i, v := range result {
+				result[i] = r.round(v)
+			}
+		}
+	}()
 	switch x := e.(type) {
 	case hir.Lit:
 		return scalar(x.Value)
@@ -138,7 +157,7 @@ func (r reference) eval(e hir.Expr, env map[string][]float64) []float64 {
 			args[i] = r.eval(a, env)
 			width = max(width, len(args[i]))
 		}
-		if _, ok := r[x.Func]; ok {
+		if _, ok := r.functions[x.Func]; ok {
 			return r.call(x.Func, args...)
 		}
 		switch x.Func {
@@ -147,11 +166,17 @@ func (r reference) eval(e hir.Expr, env map[string][]float64) []float64 {
 			for _, a := range args {
 				out = append(out, a...)
 			}
+			if len(out) == 1 && x.Func != "rgb" {
+				out = make([]float64, int(x.Func[3]-'0'))
+				for i := range out {
+					out[i] = args[0][0]
+				}
+			}
 			return out
 		case "dot":
 			total := 0.0
 			for i, a := range args[0] {
-				total += a * args[1][i]
+				total = r.rounded(total + r.rounded(a*args[1][i]))
 			}
 			return scalar(total)
 		case "length", "normalize":
@@ -209,6 +234,11 @@ func (r reference) eval(e hir.Expr, env map[string][]float64) []float64 {
 				out[i] = math.Max(b, math.Min(c, a))
 			case "mix":
 				out[i] = a*(1-c) + b*c
+			case "select":
+				out[i] = a
+				if c != 0 {
+					out[i] = b
+				}
 			case "step":
 				out[i] = truth(b >= a)
 			case "smoothstep":
