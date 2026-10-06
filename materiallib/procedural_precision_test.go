@@ -33,7 +33,7 @@ func mediumpRound(truncate bool) func(float64) float64 {
 }
 
 var emittedVector = regexp.MustCompile(`\b(?:vec([234])(?:<f32>)?|float([234]))\(`)
-var emittedLocal = regexp.MustCompile(`(?:let|float[234]?|vec[234]) (selenaLib[0-9]+) = ([^;]+);`)
+var emittedLocal = regexp.MustCompile(`(?:let|bool|float[234]?|vec[234]) (selenaLib[0-9]+) = ([^;]+);`)
 var emittedOutput = regexp.MustCompile(`(?m)^\s*(?:return|gl_FragColor =|fragColor =) ([^;]+);`)
 
 // Read the actual emitted fragment's local expressions and output. Only type
@@ -42,6 +42,10 @@ var emittedOutput = regexp.MustCompile(`(?m)^\s*(?:return|gl_FragColor =|fragCol
 // This checks target output, not just the common authored helper or IR. It is
 // a numerical model, not a substitute for native shader execution/validation.
 func emittedProbe(t *testing.T, result selena.Result, target selena.Target) hir.FuncDecl {
+	return emittedFunction(t, result, target, "p:vec2")
+}
+
+func emittedFunction(t *testing.T, result selena.Result, target selena.Target, parameters string) hir.FuncDecl {
 	t.Helper()
 	a, ok := result.Artifact(target)
 	if !ok {
@@ -52,7 +56,8 @@ func emittedProbe(t *testing.T, result selena.Result, target selena.Target) hir.
 		source = a.Fragment
 	}
 	normalize := func(expression string) string {
-		expression = strings.ReplaceAll(expression, "u.p", "p")
+		expression = strings.ReplaceAll(expression, "u.", "")
+		expression = strings.NewReplacer("dFdx(", "dpdx(", "dFdy(", "dpdy(", "dfdx(", "dpdx(", "dfdy(", "dpdy(").Replace(expression)
 		return emittedVector.ReplaceAllStringFunc(expression, func(s string) string {
 			m := emittedVector.FindStringSubmatch(s)
 			return "vec" + m[1] + m[2] + "f("
@@ -71,7 +76,7 @@ func emittedProbe(t *testing.T, result selena.Result, target selena.Target) hir.
 		t.Fatal("missing fragment output", target)
 	}
 	fmt.Fprintf(&body, "return %s\n", normalize(outputs[len(outputs)-1][1]))
-	p, err := parse.Program([]byte("fn probe(p:vec2) -> vec4 {\n" + body.String() + "}\n"))
+	p, err := parse.Program([]byte("fn probe(" + parameters + ") -> vec4 {\n" + body.String() + "}\n"))
 	if err != nil || len(p.Funcs) != 1 {
 		t.Fatalf("parse %s numerical probe: %v", target, err)
 	}

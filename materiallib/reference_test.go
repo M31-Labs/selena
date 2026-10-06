@@ -14,6 +14,9 @@ type reference struct {
 	functions map[string]hir.FuncDecl
 	// Optional per-expression rounding models shader arithmetic precision.
 	round func(float64) float64
+	// Synthetic screen derivatives, propagated through emitted parameter aliases.
+	derivatives map[string][2][]float64
+	observe     func([]float64)
 }
 
 func referenceLibrary(t *testing.T) reference {
@@ -35,11 +38,21 @@ func (r reference) call(name string, args ...[]float64) []float64 {
 		panic("unknown reference helper " + name)
 	}
 	env := map[string][]float64{}
+	derivatives := make(map[string][2][]float64, len(r.derivatives))
+	for name, d := range r.derivatives {
+		derivatives[name] = d
+	}
+	r.derivatives = derivatives
 	for i, p := range f.Params {
 		env[p.Name] = args[i]
 	}
 	for _, l := range f.Body {
 		env[l.Name] = r.eval(l.Value, env)
+		if alias, ok := l.Value.(hir.Ref); ok {
+			if d, ok := derivatives[alias.Name]; ok {
+				derivatives[l.Name] = d
+			}
+		}
 	}
 	return r.eval(f.Result, env)
 }
@@ -60,7 +73,10 @@ func truth(b bool) float64 {
 
 func (r reference) rounded(x float64) float64 {
 	if r.round != nil {
-		return r.round(x)
+		x = r.round(x)
+	}
+	if r.observe != nil {
+		r.observe(scalar(x))
 	}
 	return x
 }
@@ -73,11 +89,17 @@ func (r reference) eval(e hir.Expr, env map[string][]float64) (result []float64)
 				result[i] = r.round(v)
 			}
 		}
+		if r.observe != nil {
+			r.observe(result)
+		}
 	}()
 	switch x := e.(type) {
 	case hir.Lit:
 		return scalar(x.Value)
 	case hir.Ref:
+		if x.Name == "true" || x.Name == "false" {
+			return scalar(truth(x.Name == "true"))
+		}
 		v, ok := env[x.Name]
 		if !ok {
 			panic("unknown ref " + x.Name)
@@ -151,6 +173,28 @@ func (r reference) eval(e hir.Expr, env map[string][]float64) (result []float64)
 		}
 		return out
 	case hir.Call:
+		if x.Func == "dpdx" || x.Func == "dpdy" || x.Func == "fwidth" {
+			ref, ok := x.Args[0].(hir.Ref)
+			if !ok {
+				panic("derivative probe requires a parameter alias")
+			}
+			d, ok := r.derivatives[ref.Name]
+			if !ok {
+				panic("missing derivatives for " + ref.Name)
+			}
+			out := make([]float64, len(d[0]))
+			for i := range out {
+				switch x.Func {
+				case "dpdx":
+					out[i] = d[0][i]
+				case "dpdy":
+					out[i] = d[1][i]
+				case "fwidth":
+					out[i] = r.rounded(math.Abs(r.rounded(d[0][i])) + math.Abs(r.rounded(d[1][i])))
+				}
+			}
+			return out
+		}
 		args := make([][]float64, len(x.Args))
 		width := 1
 		for i, a := range x.Args {
@@ -182,9 +226,9 @@ func (r reference) eval(e hir.Expr, env map[string][]float64) (result []float64)
 		case "length", "normalize":
 			total := 0.0
 			for _, a := range args[0] {
-				total += a * a
+				total = r.rounded(total + r.rounded(a*a))
 			}
-			n := math.Sqrt(total)
+			n := r.rounded(math.Sqrt(total))
 			if x.Func == "length" {
 				return scalar(n)
 			}
@@ -195,7 +239,11 @@ func (r reference) eval(e hir.Expr, env map[string][]float64) (result []float64)
 			return out
 		case "cross":
 			a, b := args[0], args[1]
-			return []float64{a[1]*b[2] - a[2]*b[1], a[2]*b[0] - a[0]*b[2], a[0]*b[1] - a[1]*b[0]}
+			return []float64{
+				r.rounded(r.rounded(a[1]*b[2]) - r.rounded(a[2]*b[1])),
+				r.rounded(r.rounded(a[2]*b[0]) - r.rounded(a[0]*b[2])),
+				r.rounded(r.rounded(a[0]*b[1]) - r.rounded(a[1]*b[0])),
+			}
 		}
 		out := make([]float64, width)
 		for i := range out {
@@ -242,8 +290,8 @@ func (r reference) eval(e hir.Expr, env map[string][]float64) (result []float64)
 			case "step":
 				out[i] = truth(b >= a)
 			case "smoothstep":
-				q := math.Max(0, math.Min(1, (c-a)/(b-a)))
-				out[i] = q * q * (3 - 2*q)
+				q := math.Max(0, math.Min(1, r.rounded(r.rounded(c-a)/r.rounded(b-a))))
+				out[i] = r.rounded(q*q) * r.rounded(3-r.rounded(2*q))
 			case "atan2":
 				out[i] = math.Atan2(a, b)
 			case "mod":

@@ -25,6 +25,13 @@ const Procedural Module = "procedural"
 // Shapes provides signed-distance graphics and fragment coverage helpers.
 const Shapes Module = "shapes"
 
+// Normals provides pip wells, tangent/bump normals and bounded parallax.
+const Normals Module = "normals"
+
+// Effects provides event envelopes, ripple, dust and flash masks. It also
+// loads Procedural, which supplies its filtered dust noise.
+const Effects Module = "effects"
+
 //go:embed modules/*.sel
 var sources embed.FS
 var cache sync.Map
@@ -35,23 +42,29 @@ var cache sync.Map
 func Functions(modules ...Module) ([]hir.FuncDecl, error) {
 	var out []hir.FuncDecl
 	seen := map[Module]bool{}
-	for _, module := range modules {
+	var visit func(Module) error
+	visit = func(module Module) error {
 		if seen[module] {
-			continue
+			return nil
 		}
 		seen[module] = true
 		if strings.ContainsAny(string(module), "/\\.") {
-			return nil, fmt.Errorf("unknown material library module %q", module)
+			return fmt.Errorf("unknown material library module %q", module)
+		}
+		if module == Effects {
+			if err := visit(Procedural); err != nil {
+				return err
+			}
 		}
 		cached, ok := cache.Load(module)
 		if !ok {
 			source, err := sources.ReadFile("modules/" + string(module) + ".sel")
 			if err != nil {
-				return nil, fmt.Errorf("unknown material library module %q", module)
+				return fmt.Errorf("unknown material library module %q", module)
 			}
 			program, err := parse.Program(source)
 			if err != nil {
-				return nil, fmt.Errorf("material library %s: %w", module, err)
+				return fmt.Errorf("material library %s: %w", module, err)
 			}
 			for i := range program.Funcs {
 				program.Funcs[i].BindLocals = true
@@ -59,6 +72,12 @@ func Functions(modules ...Module) ([]hir.FuncDecl, error) {
 			cached, _ = cache.LoadOrStore(module, program.Funcs)
 		}
 		out = append(out, cached.([]hir.FuncDecl)...)
+		return nil
+	}
+	for _, module := range modules {
+		if err := visit(module); err != nil {
+			return nil, err
+		}
 	}
 	return out, nil
 }
