@@ -1,18 +1,32 @@
-// Float hashes are deterministic within a backend, not bit-identical across
-// GPU architectures. Coordinates should stay below about 10000 in magnitude.
+// Bounded float arithmetic preserves lattice entropy at fragment mediump.
+// Hashes repeat every 256 coordinate units; keep noise domains near the origin
+// so input precision still resolves the fractional position within each cell.
 fn mlHash11(x: float) -> float {
-    let p = fract(x * 0.1031)
-    let q = p * (p + 33.33)
-    return fract(q * (q + q))
+    let p = x - 256.0 * floor(x * 0.00390625)
+    let hi = floor(p * 0.0625)
+    let lo = p - 16.0 * hi
+    // Three additive Feistel rounds on two base-16 digits. For integer inputs
+    // every intermediate is an exactly representable integer below 256.
+    let a = lo + floor(hi * hi * 0.25)
+    let q = a - 16.0 * floor(a * 0.0625)
+    let b = hi + floor(q * q * 0.25)
+    let r = b - 16.0 * floor(b * 0.0625)
+    let c = q + floor(r * r * 0.25)
+    let s = c - 16.0 * floor(c * 0.0625)
+    return min((r + 16.0 * s) * 0.00390625, 0.99609375)
 }
 fn mlHash21(p: vec2) -> float {
-    let q = fract(vec3f(p.x, p.y, p.x) * 0.1031)
-    let d = dot(q, q.yzx + 33.33)
-    let r = q + d
-    return fract((r.x + r.y) * r.z)
+    let n = p - 256.0 * floor(p * 0.00390625)
+    let hi = floor(n * 0.0625)
+    let lo = n - 16.0 * hi
+    let a = lo.x + 5.0 * lo.y + 3.0 * hi.x + 7.0 * hi.y
+    let b = hi.x + 3.0 * hi.y + 7.0 * lo.y
+    let q = a - 16.0 * floor(a * 0.0625)
+    let r = b - 16.0 * floor(b * 0.0625)
+    return mlHash11(q + 16.0 * r)
 }
 fn mlHash22(p: vec2) -> vec2 {
-    return vec2f(mlHash21(p), mlHash21(p + vec2f(19.19, 73.73)))
+    return vec2f(mlHash21(p), mlHash21(p + vec2f(37.0, 101.0)))
 }
 fn mlNoiseGradient2(cell: vec2) -> vec2 {
     let angle = mlHash21(cell) * 6.28318530718
