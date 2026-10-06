@@ -1,55 +1,115 @@
+fn mlMaxAbs3(v: vec3) -> float { return max(abs(v.x), max(abs(v.y), abs(v.z))) }
+// Scale before squaring. Both conditional arms stay finite on eager backends.
+fn mlSafeNormalize(v: vec3, fallback: vec3) -> vec3 {
+    let fs = mlMaxAbs3(fallback)
+    let seed = fs > 0.0 ? fallback : vec3f(0.0, 0.0, 1.0)
+    let f = seed / (fs > 0.0 ? fs : 1.0)
+    let unitFallback = f / sqrt(dot(f, f))
+    let s = mlMaxAbs3(v)
+    let q = v / (s > 0.0 ? s : 1.0)
+    let l2 = dot(q, q)
+    let unit = q / sqrt(l2 > 0.0 ? l2 : 1.0)
+    return l2 > 0.0 ? unit : unitFallback
+}
 // Well depth and radius are in tangent-plane units, not screen pixels.
 fn mlPipWellHeight(p: vec2, radius: float, depth: float) -> float {
-    let r = max(radius, 0.000001)
-    let d = max(depth, 0.0) * (radius > 0.0 ? 1.0 : 0.0)
-    let profile = max(1.0 - dot(p, p) / (r * r), 0.0)
+    let r = radius > 0.0 ? radius : 1.0
+    let d = radius > 0.0 ? max(depth, 0.0) : 0.0
+    let q = clamp(p, vec2f(-r, -r), vec2f(r, r)) / r
+    let profile = max(1.0 - dot(q, q), 0.0)
     return -d * profile * profile
 }
 fn mlPipWellGradient(p: vec2, radius: float, depth: float) -> vec2 {
-    let r = max(radius, 0.000001)
-    let d = max(depth, 0.0) * (radius > 0.0 ? 1.0 : 0.0)
-    let profile = max(1.0 - dot(p, p) / (r * r), 0.0)
-    return p * (4.0 * d * profile / (r * r))
+    let r = radius > 0.0 ? radius : 1.0
+    let d = radius > 0.0 ? max(depth, 0.0) : 0.0
+    let q = clamp(p, vec2f(-r, -r), vec2f(r, r)) / r
+    let profile = max(1.0 - dot(q, q), 0.0)
+    let scale = max(r, d)
+    // Cap extreme depth/radius ratios at 1024 before forming the slope.
+    let slope = (d / scale) / max(r / scale, 0.0009765625)
+    return q * (4.0 * slope * profile)
 }
 fn mlPipWellNormal(p: vec2, radius: float, depth: float) -> vec3 {
     let gradient = mlPipWellGradient(p, radius, depth)
-    return normalize(vec3f(-gradient.x, -gradient.y, 1.0))
+    return mlSafeNormalize(vec3f(-gradient.x, -gradient.y, 1.0), vec3f(0.0, 0.0, 1.0))
 }
 fn mlPipWellNormalAA(p: vec2, radius: float, depth: float) -> vec3 {
-    let r = max(radius, 0.000001)
-    let width = length(fwidth(p))
-    let filter = 1.0 - smoothstep(r * 0.5, r * 2.0, width)
+    let r = radius > 0.0 ? radius : 1.0
+    let width = fwidth(p)
+    let scale = max(r, max(abs(width.x), abs(width.y)))
+    let q = width / scale
+    let relativeWidth = sqrt(dot(q, q)) / max(r / scale, 0.0009765625)
+    let filter = 1.0 - smoothstep(0.5, 2.0, relativeWidth)
     return mlPipWellNormal(p, radius, depth * filter)
 }
 fn mlTangentFromUV(n: vec3, positionWorld: vec3, uv: vec2) -> vec3 {
-    let axis = abs(n.x) > 0.9 ? vec3f(0.0, 0.0, 1.0) : vec3f(1.0, 0.0, 0.0)
-    let backup = normalize(axis - n * dot(axis, n))
-    let ux = dpdx(uv)
-    let uy = dpdy(uv)
-    let determinant = ux.x * uy.y - ux.y * uy.x
-    let raw = (dpdx(positionWorld) * uy.y - dpdy(positionWorld) * ux.y) * sign(determinant)
-    let projected = raw - n * dot(raw, n)
-    let usable = dot(projected, projected) > 0.000000000001
-    return normalize(usable ? projected : backup)
-}
-fn mlNormalToWorld(tangentNormal: vec3, n: vec3, tangent: vec3, handedness: float) -> vec3 {
-    let bitangent = cross(n, tangent) * (handedness < 0.0 ? -1.0 : 1.0)
-    return normalize(tangent * tangentNormal.x + bitangent * tangentNormal.y + n * tangentNormal.z)
-}
-fn mlBumpNormal(height: float, n: vec3, positionWorld: vec3) -> vec3 {
+    let normal = mlSafeNormalize(n, vec3f(0.0, 0.0, 1.0))
+    let axis = abs(normal.x) > 0.9 ? vec3f(0.0, 0.0, 1.0) : vec3f(1.0, 0.0, 0.0)
+    let backup = mlSafeNormalize(axis - normal * dot(axis, normal), axis)
     let px = dpdx(positionWorld)
     let py = dpdy(positionWorld)
-    let rx = cross(py, n)
-    let ry = cross(n, px)
-    let area = dot(px, rx)
-    let gradient = (rx * dpdx(height) + ry * dpdy(height)) * sign(area) / max(abs(area), 0.0000001)
-    return normalize(n - gradient)
+    let ux = dpdx(uv)
+    let uy = dpdy(uv)
+    let ps = max(mlMaxAbs3(px), mlMaxAbs3(py))
+    let us = max(max(abs(ux.x), abs(ux.y)), max(abs(uy.x), abs(uy.y)))
+    let x = px / (ps > 0.0 ? ps : 1.0)
+    let y = py / (ps > 0.0 ? ps : 1.0)
+    let u = ux / (us > 0.0 ? us : 1.0)
+    let v = uy / (us > 0.0 ? us : 1.0)
+    let xs = max(abs(u.x), abs(u.y))
+    let ys = max(abs(v.x), abs(v.y))
+    let a = u / (xs > 0.0 ? xs : 1.0)
+    let b = v / (ys > 0.0 ? ys : 1.0)
+    let determinant = a.x * b.y - a.y * b.x
+    let uvUsable = abs(determinant) > 0.00390625 * sqrt(dot(a, a) * dot(b, b))
+    let raw = (x * v.y - y * u.y) * sign(determinant)
+    let size = mlMaxAbs3(raw)
+    let direction = raw / (size > 0.0 ? size : 1.0)
+    let projected = direction - normal * dot(direction, normal)
+    let usable = uvUsable && dot(projected, projected) > 0.0009765625 * dot(direction, direction)
+    return mlSafeNormalize(usable ? projected : backup, backup)
+}
+fn mlNormalToWorld(tangentNormal: vec3, n: vec3, tangent: vec3, handedness: float) -> vec3 {
+    let normal = mlSafeNormalize(n, vec3f(0.0, 0.0, 1.0))
+    let axis = abs(normal.x) > 0.9 ? vec3f(0.0, 0.0, 1.0) : vec3f(1.0, 0.0, 0.0)
+    let backup = mlSafeNormalize(axis - normal * dot(axis, normal), axis)
+    let direction = mlSafeNormalize(tangent, backup)
+    let t = mlSafeNormalize(direction - normal * dot(direction, normal), backup)
+    let bitangent = cross(normal, t) * (handedness < 0.0 ? -1.0 : 1.0)
+    let local = mlSafeNormalize(tangentNormal, vec3f(0.0, 0.0, 1.0))
+    return mlSafeNormalize(t * local.x + bitangent * local.y + normal * local.z, normal)
+}
+fn mlBumpNormal(height: float, n: vec3, positionWorld: vec3) -> vec3 {
+    let normal = mlSafeNormalize(n, vec3f(0.0, 0.0, 1.0))
+    let px = dpdx(positionWorld)
+    let py = dpdy(positionWorld)
+    let hx = dpdx(height)
+    let hy = dpdy(height)
+    let xs = mlMaxAbs3(px)
+    let ys = mlMaxAbs3(py)
+    let x = px / (xs > 0.0 ? xs : 1.0)
+    let y = py / (ys > 0.0 ? ys : 1.0)
+    let orientedArea = dot(x, cross(y, normal))
+    let usable = abs(orientedArea) > 0.00390625 * sqrt(dot(x, x) * dot(y, y))
+    let scale = max(max(xs, ys), max(abs(hx), abs(hy)))
+    let divisor = scale > 0.0 ? scale : 1.0
+    let dx = px / divisor
+    let dy = py / divisor
+    let rx = cross(dy, normal)
+    let ry = cross(normal, dx)
+    let area = dot(dx, rx)
+    let slope = rx * (hx / divisor) + ry * (hy / divisor)
+    let candidate = normal * abs(area) - slope * sign(orientedArea)
+    return mlSafeNormalize(usable ? candidate : normal, normal)
 }
 // Positive height is depth into the surface. Offset is bounded at grazing.
 fn mlParallaxUV(uv: vec2, viewTangent: vec3, height: float, scale: float, maxOffset: float) -> vec2 {
     let offset = viewTangent.xy * (height * scale / max(viewTangent.z, 0.15))
-    let bounded = offset * min(1.0, max(maxOffset, 0.0) / max(length(offset), 0.000001))
-    return uv - bounded
+    let size = max(abs(offset.x), abs(offset.y))
+    let direction = offset / (size > 0.0 ? size : 1.0)
+    let magnitude = sqrt(dot(direction, direction))
+    let limit = max(maxOffset, 0.0) / (magnitude > 0.0 ? magnitude : 1.0)
+    return uv - direction * min(size, limit)
 }
 // Select this in the phone program, so no height fetch or parallax is emitted.
 fn mlParallaxUVPhone(uv: vec2) -> vec2 { return uv }

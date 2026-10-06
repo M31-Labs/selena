@@ -1,41 +1,58 @@
 // age and duration are elapsed seconds; positions use the caller's plane units.
+fn mlSafeLength2(v: vec2) -> float {
+    let size = max(abs(v.x), abs(v.y))
+    let q = v / (size > 0.0 ? size : 1.0)
+    return size * sqrt(dot(q, q))
+}
 fn mlEventEnvelope(age: float, duration: float, intensity: float) -> float {
-    let t = clamp(age / max(duration, 0.000001), 0.0, 1.0)
+    let numerator = clamp(age, 0.0, max(duration, 0.0))
+    let t = numerator / (duration > 0.0 ? duration : 1.0)
     let alive = duration > 0.0 && age >= 0.0 && age < duration
     return (1.0 - t) * (1.0 - t) * clamp(intensity, 0.0, 1.0) * (alive ? 1.0 : 0.0)
 }
 fn mlRadialRippleWidth(p: vec2, center: vec2, age: float, intensity: float, duration: float, speed: float, halfWidth: float, pixelWidth: float) -> float {
-    let radius = max(speed, 0.0) * max(age, 0.0)
+    let activeAge = duration > 0.0 && age >= 0.0 && age < duration ? age : 0.0
+    let radius = max(speed, 0.0) * activeAge
     let width = max(halfWidth, 0.0)
-    let aa = max(abs(pixelWidth) * 0.5, 0.000001)
-    let distance = abs(length(p - center) - radius) - width
-    let coverage = 1.0 - smoothstep(-aa, aa, distance)
-    let thinFilter = min(1.0, width / aa)
+    let aa = max(abs(pixelWidth) * 0.5, 0.00006103515625)
+    let distance = abs(mlSafeLength2(p - center) - radius) - width
+    let coverage = 1.0 - smoothstep(-aa, aa, clamp(distance, -aa, aa))
+    let thinFilter = min(width, aa) / aa
     return coverage * thinFilter * mlEventEnvelope(age, duration, intensity)
 }
 fn mlRadialRippleAA(p: vec2, center: vec2, age: float, intensity: float, duration: float, speed: float, halfWidth: float) -> float {
-    return mlRadialRippleWidth(p, center, age, intensity, duration, speed, halfWidth, length(fwidth(p)))
+    return mlRadialRippleWidth(p, center, age, intensity, duration, speed, halfWidth, mlSafeLength2(fwidth(p)))
+}
+// Normalize distances before squaring; the floor only clips negligible tails.
+fn mlEventGaussian(q: vec2, radius: float, pixelWidth: float, falloff: float) -> float {
+    let r = max(radius, 0.0)
+    let width = abs(pixelWidth)
+    let size = max(max(abs(q.x), abs(q.y)), max(r, width))
+    let divisor = size > 0.0 ? size : 1.0
+    let p = q / divisor
+    let rs = r / divisor
+    let ws = width / divisor
+    let variance = max(rs * rs + ws * ws, 0.0009765625)
+    return exp(-clamp(falloff, 0.0, 4.0) * dot(p, p) / variance) * (rs * rs / variance)
 }
 fn mlDustWidth(p: vec2, center: vec2, age: float, intensity: float, duration: float, speed: float, spread: float, frequency: float, pixelWidth: float) -> float {
     let q = p - center
-    let radius = max(spread, 0.000001) + max(speed, 0.0) * max(age, 0.0)
-    let variance = radius * radius + pixelWidth * pixelWidth
-    let fade = exp(-4.0 * dot(q, q) / variance) * radius * radius / variance
+    let activeAge = duration > 0.0 && age >= 0.0 && age < duration ? age : 0.0
+    let radius = max(spread, 0.0) + max(speed, 0.0) * activeAge
+    let fade = mlEventGaussian(q, radius, pixelWidth, 4.0)
     let f = max(frequency, 0.0)
-    let noise = mlValueNoise2Filtered(q * f + vec2f(age * 1.7, age * -2.1), abs(pixelWidth) * f)
+    let noise = mlValueNoise2Filtered(q * f + vec2f(activeAge * 1.7, activeAge * -2.1), abs(pixelWidth) * f)
     let dust = fade * (0.3 + 0.7 * noise)
     return dust * mlEventEnvelope(age, duration, intensity)
 }
 fn mlDustAA(p: vec2, center: vec2, age: float, intensity: float, duration: float, speed: float, spread: float, frequency: float) -> float {
-    return mlDustWidth(p, center, age, intensity, duration, speed, spread, frequency, length(fwidth(p)))
+    return mlDustWidth(p, center, age, intensity, duration, speed, spread, frequency, mlSafeLength2(fwidth(p)))
 }
 fn mlImpactFlashWidth(p: vec2, center: vec2, age: float, intensity: float, duration: float, radius: float, pixelWidth: float) -> float {
     let q = p - center
-    let r = max(radius, 0.000001)
-    let variance = r * r + pixelWidth * pixelWidth
-    let spatial = exp(-dot(q, q) / variance) * r * r / variance
+    let spatial = mlEventGaussian(q, radius, pixelWidth, 1.0)
     return spatial * mlEventEnvelope(age, duration, intensity) * (radius > 0.0 ? 1.0 : 0.0)
 }
 fn mlImpactFlashAA(p: vec2, center: vec2, age: float, intensity: float, duration: float, radius: float) -> float {
-    return mlImpactFlashWidth(p, center, age, intensity, duration, radius, length(fwidth(p)))
+    return mlImpactFlashWidth(p, center, age, intensity, duration, radius, mlSafeLength2(fwidth(p)))
 }

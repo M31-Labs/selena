@@ -1,6 +1,6 @@
 # Material library
 
-`materiallib` adds 73 opt-in Selena functions for a tabletop game scene.
+`materiallib` adds 77 opt-in Selena functions for a tabletop game scene.
 One authored material still compiles to WGSL, GLSL, Metal and GLES plus the
 existing `selena.descriptor.v1` host layout.
 
@@ -72,6 +72,10 @@ and truncated mediump. The new lattice hash retains 256 output levels and four
 zeros per 1,024-cell sample in every model. Software WebGL1 and WebGL2 hash-grid
 readbacks have mean 0.498055 and variance 0.083007 after 8-bit framebuffer
 quantization. See [precision limits and captures](procedural.md).
+Normals and effects also evaluate all four emitted targets in float64, float32
+and both mediump models, including flushed subnormals. Tests scan expressions
+and rounded builtin intermediates for NaN/Inf, check rotated and mirrored UV
+frames at 128–8,192 pixels, and verify disabled wells, parallax and event masks.
 Metal native compilation needs
 an Apple toolchain. Software WebGL1/WebGL2 captures cover the running examples, small
 render targets and effect expiry. Local WebGPU device creation fails before
@@ -82,8 +86,8 @@ shader execution, so browser WebGPU appearance is not verified.
 | BRDF gallery | 7,153 | 6,996 | 7,338 | 7,020 | 199 |
 | Procedural gallery | 104,448 | 105,900 | 107,350 | 105,876 | 4,239 |
 | Shape gallery | 10,774 | 10,575 | 11,034 | 10,551 | 257 |
-| Engraved wells | 4,078 | 3,903 | 4,164 | 3,879 | 87 |
-| Table events | 12,718 | 12,842 | 13,087 | 12,818 | 429 |
+| Engraved wells | 6,018 | 5,783 | 6,096 | 5,759 | 144 |
+| Table events | 15,476 | 15,632 | 15,901 | 15,608 | 522 |
 
 GL source totals include both stages. Instruction counts are a portable proxy:
 emit the example WGSL with the preview's `-artifacts` flag, compile fragmentMain
@@ -112,8 +116,13 @@ For reproducible host compilation, use `GOWORK=off go build -trimpath
 -buildvcs=false`. Compared with base commit `905d253`, the core CLI
 grows from 13,688,358 to 13,699,363 bytes (+11,005 bytes). A minimal compile
 consumer grows from 13,178,090 to 13,231,715 bytes when linking all modules
-(+53,625 bytes, including 20,334 bytes of bundled Selena source). The hash fix
+(+53,625 bytes). The hash fix
 adds 719 embedded source bytes and 4,104 bytes to that sample binary, including
-linker alignment; the core CLI size is unchanged by this fix. These are local
+linker alignment. The normal/event precision guards add 1,940 WGSL bytes and 57
+instructions to the normal example, and 2,758 bytes and 93 instructions to the
+event example. They add 3,699 embedded source bytes; a matched build before and
+after the guards is still 13,231,715 bytes because the data fits existing linker
+padding. Total bundled source is now 24,033 bytes. The core CLI size is unchanged
+by the hash and normal/event guards. These are local
 Linux/amd64 samples. An unused library costs zero shader instructions and zero
 new host bindings; importing the Go package still includes its embedded sources.
