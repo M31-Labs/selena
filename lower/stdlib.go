@@ -241,7 +241,7 @@ var stdlib = stdlibRegistry{
 		"refract": {kind: builtinSameOrScalar, arity: 3},
 
 		// mod(x, y): component-wise modulo; y may be scalar.
-		// WGSL emits as (x - y * floor(x / y)); GLSL/GLES mod(); Metal fmod().
+		// WGSL/Metal emit (x - y * floor(x / y)); GLSL/GLES use mod().
 		"mod": {kind: builtinSameOrScalar, arity: 2},
 
 		// Unary component-wise: float -> float, vecN -> vecN.

@@ -134,7 +134,15 @@ func NewBare(d dialect.Dialect) Resolver {
 func (r Resolver) TypeName(t ir.Type) string { return r.Dialect.TypeName(TypeToGPU(t)) }
 
 // Call renders a builtin/function call.
-func (r Resolver) Call(name string, args []string) string { return r.Dialect.Builtin(name, args) }
+func (r Resolver) Call(name string, args []string) string {
+	// Metal fmod is a truncating remainder; Selena mod uses floor modulo,
+	// matching GLSL and WGSL even when the dividend is negative.
+	if _, metal := r.Dialect.(dialect.Metal); metal && name == "mod" && len(args) == 2 {
+		x, y := args[0], args[1]
+		return "(" + x + " - (" + y + " * floor(" + x + " / " + y + ")))"
+	}
+	return r.Dialect.Builtin(name, args)
+}
 
 // glslNoScalarOverload is the set of component-wise builtins that lack a
 // scalar-arg overload in GLSL/GLES. For these, scalar args must be expanded to
@@ -166,7 +174,7 @@ func (r Resolver) CallTyped(name string, args []string, argTypes []ir.Type) stri
 	needsSplat := isWGSL || ((isGLSL || isGLES) && glslNoScalarOverload[name])
 	if !needsSplat {
 		// Metal or GLSL/GLES with a native scalar overload — pass args unchanged.
-		return r.Dialect.Builtin(name, args)
+		return r.Call(name, args)
 	}
 
 	// Find the base vector type: the first vec2/vec3/vec4 among the arg types.
@@ -179,7 +187,7 @@ func (r Resolver) CallTyped(name string, args []string, argTypes []ir.Type) stri
 	}
 	if baseVec == "" {
 		// All scalar — no splat needed regardless of backend.
-		return r.Dialect.Builtin(name, args)
+		return r.Call(name, args)
 	}
 
 	// mix(vecN, vecN, f32) and refract(vecN, vecN, f32) are valid WGSL overloads;
@@ -196,7 +204,7 @@ func (r Resolver) CallTyped(name string, args []string, argTypes []ir.Type) stri
 			splatted[i] = arg
 		}
 	}
-	return r.Dialect.Builtin(name, splatted)
+	return r.Call(name, splatted)
 }
 
 // Sample renders a 2D texture sample.

@@ -108,6 +108,7 @@ const previewHTML = `<!doctype html><html lang="en"><meta charset="utf-8">
 <script id="data" type="application/json">__DATA__</script><script>
 const data=JSON.parse(document.getElementById('data').textContent), layout=data.layout;
 document.getElementById('title').textContent=layout.material;
+if(data.values.flyToHoist>0)document.querySelectorAll('canvas').forEach(c=>c.height=Math.round(c.width/(3*data.values.flyToHoist)));
 const arrays={position:new Float32Array([-1,-1,0,1,-1,0,-1,1,0,-1,1,0,1,-1,0,1,1,0]),normal:new Float32Array(Array(6).fill([0,0,1]).flat()),uv:new Float32Array([0,0,1,0,0,1,0,1,1,0,1,1])};
 const identity=[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1];
 let drawGPU=()=>{},drawGL=()=>{},gpuBytes=new Uint8Array(data.packed);

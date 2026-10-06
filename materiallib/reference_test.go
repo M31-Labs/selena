@@ -216,6 +216,8 @@ func (r reference) eval(e hir.Expr, env map[string][]float64) (result []float64)
 				out[i] = math.Sin(a)
 			case "cos":
 				out[i] = math.Cos(a)
+			case "tan":
+				out[i] = math.Tan(a)
 			case "floor":
 				out[i] = math.Floor(a)
 			case "fract":

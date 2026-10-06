@@ -1,0 +1,8 @@
+material FloorModulo {
+    param period : float = 2.0
+    surface(geo) -> color {
+        let angular = mod(-1.25 + geo.uv.x, period)
+        let vector = mod(vec2f(-3.25, 5.25) + geo.uv, period)
+        return rgb(angular, vector.x, vector.y)
+    }
+}

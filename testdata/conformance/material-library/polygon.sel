@@ -1,0 +1,15 @@
+material PolygonContour {
+    param vertices : array<vec4, 4>
+    surface(geo) -> color {
+        var nearest = 1000000.0
+        var parity = 1.0
+        for (var i = 0i; i < 4i; i = i + 1i) {
+            let next = i < 3i ? i + 1i : 0i
+            let edge = mlPolygonEdge(geo.uv, vertices[i].xy, vertices[next].xy)
+            nearest = min(nearest, edge.x)
+            parity = parity * edge.y
+        }
+        let coverage = mlSDFMask(mlSDPolygonFinish(nearest, parity))
+        return rgb(coverage, coverage, coverage)
+    }
+}
