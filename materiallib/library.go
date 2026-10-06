@@ -19,6 +19,9 @@ type Module string
 
 const BRDF Module = "brdf"
 
+// Procedural provides hashes, differentiable noise, filtering and grain.
+const Procedural Module = "procedural"
+
 //go:embed modules/*.sel
 var sources embed.FS
 var cache sync.Map

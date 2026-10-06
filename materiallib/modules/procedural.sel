@@ -1,0 +1,159 @@
+// Bounded float arithmetic preserves lattice entropy at fragment mediump.
+// Hashes repeat every 256 coordinate units; keep noise domains near the origin
+// so input precision still resolves the fractional position within each cell.
+fn mlHash11(x: float) -> float {
+    let p = x - 256.0 * floor(x * 0.00390625)
+    let hi = floor(p * 0.0625)
+    let lo = p - 16.0 * hi
+    // Three additive Feistel rounds on two base-16 digits. For integer inputs
+    // every intermediate is an exactly representable integer below 256.
+    let a = lo + floor(hi * hi * 0.25)
+    let q = a - 16.0 * floor(a * 0.0625)
+    let b = hi + floor(q * q * 0.25)
+    let r = b - 16.0 * floor(b * 0.0625)
+    let c = q + floor(r * r * 0.25)
+    let s = c - 16.0 * floor(c * 0.0625)
+    return min((r + 16.0 * s) * 0.00390625, 0.99609375)
+}
+fn mlHash21(p: vec2) -> float {
+    let n = p - 256.0 * floor(p * 0.00390625)
+    let hi = floor(n * 0.0625)
+    let lo = n - 16.0 * hi
+    let a = lo.x + 5.0 * lo.y + 3.0 * hi.x + 7.0 * hi.y
+    let b = hi.x + 3.0 * hi.y + 7.0 * lo.y
+    let q = a - 16.0 * floor(a * 0.0625)
+    let r = b - 16.0 * floor(b * 0.0625)
+    return mlHash11(q + 16.0 * r)
+}
+fn mlHash22(p: vec2) -> vec2 {
+    return vec2f(mlHash21(p), mlHash21(p + vec2f(37.0, 101.0)))
+}
+fn mlNoiseGradient2(cell: vec2) -> vec2 {
+    let angle = mlHash21(cell) * 6.28318530718
+    return vec2f(cos(angle), sin(angle))
+}
+fn mlNoiseFade2(f: vec2) -> vec2 {
+    return f * f * f * (f * (f * 6.0 - 15.0) + 10.0)
+}
+fn mlValueNoise2Deriv(p: vec2) -> vec3 {
+    let cell = floor(p)
+    let f = fract(p)
+    let u = mlNoiseFade2(f)
+    let du = 30.0 * f * f * (f - 1.0) * (f - 1.0)
+    let a = mlHash21(cell)
+    let b = mlHash21(cell + vec2f(1.0, 0.0))
+    let c = mlHash21(cell + vec2f(0.0, 1.0))
+    let d = mlHash21(cell + vec2f(1.0, 1.0))
+    let value = mix(mix(a, b, u.x), mix(c, d, u.x), u.y)
+    let dx = mix(b - a, d - c, u.y) * du.x
+    let dy = mix(c - a, d - b, u.x) * du.y
+    return vec3f(value, dx, dy)
+}
+fn mlValueNoise2(p: vec2) -> float {
+    return mlValueNoise2Deriv(p).x
+}
+fn mlGradientNoise2Deriv(p: vec2) -> vec3 {
+    let cell = floor(p)
+    let f = fract(p)
+    let u = mlNoiseFade2(f)
+    let du = 30.0 * f * f * (f - 1.0) * (f - 1.0)
+    let ga = mlNoiseGradient2(cell)
+    let gb = mlNoiseGradient2(cell + vec2f(1.0, 0.0))
+    let gc = mlNoiseGradient2(cell + vec2f(0.0, 1.0))
+    let gd = mlNoiseGradient2(cell + vec2f(1.0, 1.0))
+    let a = dot(ga, f)
+    let b = dot(gb, f - vec2f(1.0, 0.0))
+    let c = dot(gc, f - vec2f(0.0, 1.0))
+    let d = dot(gd, f - vec2f(1.0, 1.0))
+    let value = mix(mix(a, b, u.x), mix(c, d, u.x), u.y)
+    let interpolated = mix(mix(ga, gb, u.x), mix(gc, gd, u.x), u.y)
+    let dx = interpolated.x + mix(b - a, d - c, u.y) * du.x
+    let dy = interpolated.y + mix(c - a, d - b, u.x) * du.y
+    return vec3f(value, dx, dy)
+}
+fn mlGradientNoise2(p: vec2) -> float {
+    return mlGradientNoise2Deriv(p).x
+}
+fn mlSimplexCorner2(p: vec2, gradient: vec2) -> vec3 {
+    let kernel = max(0.5 - dot(p, p), 0.0)
+    let k2 = kernel * kernel
+    let k3 = k2 * kernel
+    let k4 = k2 * k2
+    let ramp = dot(gradient, p)
+    let derivative = gradient * k4 - p * (8.0 * k3 * ramp)
+    return vec3f(k4 * ramp, derivative.x, derivative.y)
+}
+fn mlSimplexNoise2Deriv(p: vec2) -> vec3 {
+    let skew = 0.366025403784439
+    let unskew = 0.211324865405187
+    let cell = floor(p + (p.x + p.y) * skew)
+    let a = p - cell + (cell.x + cell.y) * unskew
+    let offset = a.x > a.y ? vec2f(1.0, 0.0) : vec2f(0.0, 1.0)
+    let b = a - offset + unskew
+    let c = a - 1.0 + 2.0 * unskew
+    let ca = mlSimplexCorner2(a, mlNoiseGradient2(cell))
+    let cb = mlSimplexCorner2(b, mlNoiseGradient2(cell + offset))
+    let cc = mlSimplexCorner2(c, mlNoiseGradient2(cell + 1.0))
+    return (ca + cb + cc) * 70.0
+}
+fn mlSimplexNoise2(p: vec2) -> float {
+    return mlSimplexNoise2Deriv(p).x
+}
+// Fade unresolved octaves to their mean without renormalizing the remaining
+// octaves. Footprint is the conservative coordinate width of one pixel.
+fn mlNoiseFilter(footprint: float) -> float {
+    return 1.0 - smoothstep(0.25, 0.75, abs(footprint))
+}
+fn mlValueNoise2Filtered(p: vec2, footprint: float) -> float {
+    return 0.5 + (mlValueNoise2(p) - 0.5) * mlNoiseFilter(footprint)
+}
+fn mlGradientNoise2Filtered(p: vec2, footprint: float) -> float {
+    return mlGradientNoise2(p) * mlNoiseFilter(footprint)
+}
+fn mlSimplexNoise2Filtered(p: vec2, footprint: float) -> float {
+    return mlSimplexNoise2(p) * mlNoiseFilter(footprint)
+}
+fn mlFBm4DerivFiltered(p: vec2, footprint: float) -> vec3 {
+    let a = mlGradientNoise2Deriv(p) * (0.5 * mlNoiseFilter(footprint))
+    let b = mlGradientNoise2Deriv(p * 2.0) * (0.25 * mlNoiseFilter(footprint * 2.0))
+    let c = mlGradientNoise2Deriv(p * 4.0) * (0.125 * mlNoiseFilter(footprint * 4.0))
+    let d = mlGradientNoise2Deriv(p * 8.0) * (0.0625 * mlNoiseFilter(footprint * 8.0))
+    let value = a.x + b.x + c.x + d.x
+    let derivative = a.yz + b.yz * 2.0 + c.yz * 4.0 + d.yz * 8.0
+    return vec3f(value, derivative.x, derivative.y) / 0.9375
+}
+fn mlFBm4Filtered(p: vec2, footprint: float) -> float {
+    return mlFBm4DerivFiltered(p, footprint).x
+}
+fn mlFBm4(p: vec2) -> float {
+    return mlFBm4Filtered(p, 0.0)
+}
+fn mlFBm4AA(p: vec2) -> float {
+    return mlFBm4Filtered(p, length(fwidth(p)))
+}
+fn mlFilteredSinWidth(phase: float, footprint: float) -> float {
+    return sin(phase) * exp(-0.5 * footprint * footprint)
+}
+fn mlFilteredSin(phase: float) -> float {
+    return mlFilteredSinWidth(phase, fwidth(phase))
+}
+fn mlWoodGrainFiltered(p: vec2, frequency: float, warp: float, footprint: float) -> float {
+    let noise = mlFBm4DerivFiltered(p, footprint)
+    let phase = p.y * frequency + noise.x * warp
+    let gradient = vec2f(noise.y * warp, frequency + noise.z * warp)
+    return 0.5 + 0.5 * mlFilteredSinWidth(phase, abs(footprint) * length(gradient))
+}
+fn mlWoodGrainAA(p: vec2, frequency: float, warp: float) -> float {
+    return mlWoodGrainFiltered(p, frequency, warp, length(fwidth(p)))
+}
+fn mlMarbleVeinFiltered(p: vec2, frequency: float, warp: float, footprint: float) -> float {
+    let noise = mlFBm4DerivFiltered(p, footprint)
+    let phase = p.x * frequency + noise.x * warp
+    let gradient = vec2f(frequency + noise.y * warp, noise.z * warp)
+    let width = abs(footprint) * length(gradient) * 8.0
+    let detail = pow(0.5 + 0.5 * sin(phase), 8.0)
+    return mix(0.196380615234375, detail, exp(-0.5 * width * width))
+}
+fn mlMarbleVeinAA(p: vec2, frequency: float, warp: float) -> float {
+    return mlMarbleVeinFiltered(p, frequency, warp, length(fwidth(p)))
+}

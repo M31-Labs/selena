@@ -93,3 +93,9 @@ Local shader helpers for anisotropic lobes and coat Fresnel can switch to these
 functions. Keep the host's light, camera, tone mapping and environment wiring:
 Selena still emits custom materials rather than extending GoSX's standard-lit
 renderer. No GoSX descriptor migration is required.
+
+![BRDF example in software WebGL2](brdf.png)
+
+Capture: the example in this change, 960 × 1120 viewport, software WebGL2.
+WebGPU browser rendering remains unverified because the local graphics driver
+rejects device creation; WGSL passes Naga validation.
