@@ -16,10 +16,10 @@ import (
 //
 // Binding model (kind-injected; see bindings.GridBinding/StateField):
 //   - WGSL:  @group(0) @binding(0) grid {gridWidth,gridLen}; @binding(1) inState
-//            (storage,read); @binding(2) outState (storage,read_write);
-//            @binding(3) user uniforms.
+//     (storage,read); @binding(2) outState (storage,read_write);
+//     @binding(3) user uniforms.
 //   - Metal: inState [[buffer(0)]], outState [[buffer(1)]], grid [[buffer(2)]],
-//            user uniforms [[buffer(3)]].
+//     user uniforms [[buffer(3)]].
 //   - GL:    uniform sampler2D stateTex (unit 0); uniform vec2 texelSize.
 func lowerFeedback(m hir.Material) (ir.Module, bindings.Layout, error) {
 	if m.Vertex != nil {
