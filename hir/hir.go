@@ -11,14 +11,14 @@ package hir
 type Type string
 
 const (
-	Float     Type = "float"
-	Int       Type = "int"
-	Uint      Type = "uint"
-	Vec2      Type = "vec2"
-	Vec3      Type = "vec3"
-	Vec4      Type = "vec4"
-	Mat3      Type = "mat3"
-	Mat4      Type = "mat4"
+	Float       Type = "float"
+	Int         Type = "int"
+	Uint        Type = "uint"
+	Vec2        Type = "vec2"
+	Vec3        Type = "vec3"
+	Vec4        Type = "vec4"
+	Mat3        Type = "mat3"
+	Mat4        Type = "mat4"
 	Color       Type = "color"       // -> vec3 at the LIR
 	Sun         Type = "Sun"         // stdlib record: { dir: vec3, ambient: float }
 	Texture2D   Type = "texture2d"   // M2
@@ -59,6 +59,9 @@ type FuncDecl struct {
 	Body    []Let
 	Result  Expr
 	Returns Type
+	// BindLocals retains arguments and locals as typed call-site bindings.
+	// Library composition opts in; parsed user functions keep legacy inlining.
+	BindLocals bool
 }
 
 // Kind identifies which surface pipeline a material targets.
@@ -174,6 +177,8 @@ type Let struct {
 	Name  string
 	Value Expr
 	Span  Span
+	// Expected optionally checks a library argument or return type.
+	Expected Type
 }
 
 // VarDecl declares a mutable local: `var Name = Value`.

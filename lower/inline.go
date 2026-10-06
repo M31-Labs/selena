@@ -16,7 +16,7 @@ func inlineFuncs(m hir.Material, funcs []hir.FuncDecl) (hir.Material, error) {
 	for _, f := range funcs {
 		fm[f.Name] = f
 	}
-	in := &inliner{funcs: fm}
+	in := &inliner{funcs: fm, names: materialNames(m)}
 
 	out := m
 	body, err := in.stmts(m.Surface.Body, nil)
@@ -29,23 +29,46 @@ func inlineFuncs(m hir.Material, funcs []hir.FuncDecl) (hir.Material, error) {
 		return m, err
 	}
 	out.Surface.Result = r
+	out.Surface.Body = append(out.Surface.Body, in.pending...)
+	in.pending = nil
+	if m.Vertex != nil {
+		v := *m.Vertex
+		v.Body, err = in.stmts(v.Body, nil)
+		if err != nil {
+			return m, err
+		}
+		v.Result, err = in.expr(v.Result, nil)
+		if err != nil {
+			return m, err
+		}
+		v.Body = append(v.Body, in.pending...)
+		out.Vertex = &v
+	}
 	return out, nil
 }
 
 type inliner struct {
-	funcs  map[string]hir.FuncDecl
-	parent *hir.Func // parent material's surface, for super.surface(...)
-	depth  int
+	funcs   map[string]hir.FuncDecl
+	parent  *hir.Func // parent material's surface, for super.surface(...)
+	depth   int
+	pending []hir.Stmt
+	names   map[string]bool
+	serial  int
 }
 
 // stmts applies substitutions + inlining to all statements in a slice.
 func (in *inliner) stmts(ss []hir.Stmt, env map[string]hir.Expr) ([]hir.Stmt, error) {
+	parent := in.pending
+	in.pending = nil
+	defer func() { in.pending = parent }()
 	out := make([]hir.Stmt, 0, len(ss))
 	for _, s := range ss {
 		processed, err := in.stmt(s, env)
 		if err != nil {
 			return nil, err
 		}
+		out = append(out, in.pending...)
+		in.pending = nil
 		out = append(out, processed)
 	}
 	return out, nil
@@ -59,7 +82,8 @@ func (in *inliner) stmt(s hir.Stmt, env map[string]hir.Expr) (hir.Stmt, error) {
 		if err != nil {
 			return nil, err
 		}
-		return hir.Let{Name: x.Name, Value: v, Span: x.Span}, nil
+		x.Value = v
+		return x, nil
 	case hir.VarDecl:
 		v, err := in.expr(x.Value, env)
 		if err != nil {
@@ -94,24 +118,40 @@ func (in *inliner) stmt(s hir.Stmt, env map[string]hir.Expr) (hir.Stmt, error) {
 		if err != nil {
 			return nil, err
 		}
+		before := in.pending
+		in.pending = nil
 		cond, err := in.expr(x.Cond, env)
 		if err != nil {
 			return nil, err
 		}
+		conditionBindings := in.pending
+		in.pending = nil
 		postVal, err := in.expr(x.PostValue, env)
 		if err != nil {
 			return nil, err
 		}
+		postBindings := in.pending
+		in.pending = before
 		body, err := in.stmts(x.Body, env)
 		if err != nil {
 			return nil, err
 		}
+		if len(conditionBindings) > 0 {
+			guard := hir.If{Cond: hir.Unary{Op: "!", E: cond}, Then: []hir.Stmt{hir.Break{}}, Span: x.Span}
+			body = append(append(conditionBindings, guard), body...)
+			cond = hir.Binary{Op: "==", L: hir.Lit{Value: 1}, R: hir.Lit{Value: 1}}
+		}
+		if len(postBindings) > 0 {
+			body = append(body, postBindings...)
+			body = append(body, hir.Assign{Name: x.PostName, Value: postVal, Span: x.Span})
+			postVal = hir.Ref{Name: x.PostName}
+		}
 		return hir.For{
 			InitName: x.InitName, InitValue: initVal,
-			Cond:      cond,
-			PostName:  x.PostName, PostValue: postVal,
-			Body:      body,
-			Span:      x.Span,
+			Cond:     cond,
+			PostName: x.PostName, PostValue: postVal,
+			Body: body,
+			Span: x.Span,
 		}, nil
 	case hir.VarArrayDecl:
 		// No expressions to inline inside a typed array declaration.
@@ -202,7 +242,11 @@ func (in *inliner) expr(e hir.Expr, env map[string]hir.Expr) (hir.Expr, error) {
 		}
 		env2 := make(map[string]hir.Expr, len(fn.Params)+len(fn.Body))
 		for i, p := range fn.Params {
-			env2[p.Name] = args[i]
+			if fn.BindLocals {
+				env2[p.Name] = in.bind(args[i], p.Type, x.Span)
+			} else {
+				env2[p.Name] = args[i]
+			}
 		}
 		for _, l := range fn.Body {
 			v, err := in.expr(l.Value, env2)
@@ -210,10 +254,16 @@ func (in *inliner) expr(e hir.Expr, env map[string]hir.Expr) (hir.Expr, error) {
 				in.depth--
 				return nil, err
 			}
+			if fn.BindLocals {
+				v = in.bind(v, "", x.Span)
+			}
 			env2[l.Name] = v
 		}
 		res, err := in.expr(fn.Result, env2)
 		in.depth--
+		if err == nil && fn.BindLocals {
+			res = in.bind(res, fn.Returns, x.Span)
+		}
 		return res, err
 	case hir.Conditional:
 		cond, err := in.expr(x.Cond, env)
