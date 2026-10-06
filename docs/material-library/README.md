@@ -66,18 +66,24 @@ native-transport shims remain until the corresponding GoSX hooks land.
 for all four emit targets. Naga validates WGSL; glslang validates both GLSL and
 GLES stages. Tests also cover numerical BRDF normalization, analytic gradients,
 SDF signs/parity, event boundaries, type diagnostics, GoSX adapter output and
-unchanged descriptors/source for unused modules. Metal native compilation needs
-an Apple toolchain. Software WebGL2 captures cover the running examples, small
+unchanged descriptors/source for unused modules. Hash/noise statistics evaluate
+the emitted expressions of all four targets in float32, nearest-rounded mediump
+and truncated mediump. The new lattice hash retains 256 output levels and four
+zeros per 1,024-cell sample in every model. Software WebGL1 and WebGL2 hash-grid
+readbacks have mean 0.498055 and variance 0.083007 after 8-bit framebuffer
+quantization. See [precision limits and captures](procedural.md).
+Metal native compilation needs
+an Apple toolchain. Software WebGL1/WebGL2 captures cover the running examples, small
 render targets and effect expiry. Local WebGPU device creation fails before
 shader execution, so browser WebGPU appearance is not verified.
 
 | Example | WGSL bytes | GLSL bytes | Metal bytes | GLES bytes | Optimized fragment instructions |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | BRDF gallery | 7,153 | 6,996 | 7,338 | 7,020 | 199 |
-| Procedural gallery | 48,208 | 48,028 | 49,478 | 48,004 | 1,743 |
+| Procedural gallery | 104,448 | 105,900 | 107,350 | 105,876 | 4,239 |
 | Shape gallery | 10,774 | 10,575 | 11,034 | 10,551 | 257 |
 | Engraved wells | 4,078 | 3,903 | 4,164 | 3,879 | 87 |
-| Table events | 8,151 | 8,139 | 8,384 | 8,115 | 221 |
+| Table events | 12,718 | 12,842 | 13,087 | 12,818 | 429 |
 
 GL source totals include both stages. Instruction counts are a portable proxy:
 emit the example WGSL with the preview's `-artifacts` flag, compile fragmentMain
@@ -95,13 +101,19 @@ The retained-local BRDF example grows from 5,716 to 7,153 WGSL bytes and from
 189 to 199 optimized instructions versus legacy expression substitution.
 Retained locals control repeated-expression growth but do not guarantee a size
 reduction. The procedural gallery evaluates three patterns; individual production
-materials emit only their chosen dependency chain. Keep cheaper phone variants
+materials emit only their chosen dependency chain. The mediump hash fix adds
+56,240 WGSL bytes / 2,496 optimized instructions to that gallery, and 4,567 bytes /
+208 instructions to the event example's dust dependency. Standalone wood and
+marble AA probes stay below 36 KB across targets, enforced by a 64-KiB regression
+budget. Keep cheaper phone variants
 when noise octaves exceed the scene's measured GPU budget.
 
 For reproducible host compilation, use `GOWORK=off go build -trimpath
--buildvcs=false`. Compared with an untouched origin/main archive, the core CLI
+-buildvcs=false`. Compared with base commit `905d253`, the core CLI
 grows from 13,688,358 to 13,699,363 bytes (+11,005 bytes). A minimal compile
-consumer grows from 13,178,090 to 13,227,611 bytes when linking all modules
-(+49,521 bytes, including 19,615 bytes of bundled Selena source). These are local
+consumer grows from 13,178,090 to 13,231,715 bytes when linking all modules
+(+53,625 bytes, including 20,334 bytes of bundled Selena source). The hash fix
+adds 719 embedded source bytes and 4,104 bytes to that sample binary, including
+linker alignment; the core CLI size is unchanged by this fix. These are local
 Linux/amd64 samples. An unused library costs zero shader instructions and zero
 new host bindings; importing the Go package still includes its embedded sources.

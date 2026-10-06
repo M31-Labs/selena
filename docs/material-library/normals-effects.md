@@ -83,9 +83,10 @@ targets and passes Naga/glslang validation where applicable. Native MSL
 compilation and browser WebGPU execution remain unverified locally.
 
 ![Engraved wells in software WebGL2](normals.png)
-![Ripple, dust and flash in software WebGL2](effects.png)
+![Ripple, dust and flash in software WebGL1](effects.png)
 
-Captures use this change's examples at a 960 × 1120 viewport. The
+Captures use this change's examples at a 960 × 1120 viewport. The event canvas
+uses WebGL1 after the hash precision fix; the recording uses updated WebGL2. The
 [phone-width capture](effects-mobile.png) uses a 390 × 844 viewport with a
 342-pixel-wide render target. The [age-control recording](effects.webm) drives
 the running shader from negative age through expiry. At age 0.73 seconds, all
@@ -94,6 +95,8 @@ by WebGL readback. [Expired-state capture](effects-expired.png).
 
 The normal example emits 4,078/3,903/4,164/3,879 bytes for WGSL/GLSL/Metal/GLES,
 with 87 optimized fragment SPIR-V function instructions. The event example emits
-8,151/8,139/8,384/8,115 bytes, with 221 instructions. See the
+12,718/12,842/13,087/12,818 bytes, with 429 instructions after the mediump hash
+fix. Dust uses Procedural's bounded lattice hash; the effect envelope, API and
+host descriptor are unchanged. See the
 [measurement method](README.md). Actual phone GPU timings require the host scene
 and physical device.
