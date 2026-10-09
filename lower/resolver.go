@@ -108,7 +108,7 @@ func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
 				return nil, diagnostic(CodeInvalidCall, x.Span,
 					"%s is a fragment-stage builtin and is not available in vertex()", x.Func)
 			}
-			if x.Func == "sample" || x.Func == "sampleLevel" || x.Func == "sampleCube" {
+			if x.Func == "sample" || x.Func == "sampleLevel" || x.Func == "sampleCube" || x.Func == "sampleCubeLevel" {
 				return nil, diagnostic(CodeInvalidCall, x.Span,
 					"%s() is not available in the vertex stage; no backend wires a texture binding into the authored vertex() stage yet", x.Func)
 			}
@@ -231,6 +231,24 @@ func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
 				return nil, err
 			}
 			return ir.SampleCube{Texture: texRef.Name, Dir: dir}, nil
+		}
+		if x.Func == "sampleCubeLevel" {
+			if len(x.Args) != 3 {
+				return nil, diagnostic(CodeInvalidCall, x.Span, "sampleCubeLevel(texture, dir, lod) takes 3 arguments")
+			}
+			texRef, ok := x.Args[0].(hir.Ref)
+			if !ok || r.paramKind[texRef.Name] != hir.TextureCube {
+				return nil, diagnostic(CodeInvalidCall, x.Span, "sampleCubeLevel: first argument must be a textureCube param")
+			}
+			dir, err := r.expr(x.Args[1])
+			if err != nil {
+				return nil, err
+			}
+			lod, err := r.expr(x.Args[2])
+			if err != nil {
+				return nil, err
+			}
+			return ir.SampleCubeLevel{Texture: texRef.Name, Dir: dir, LOD: lod}, nil
 		}
 		if _, known := stdlib.builtin(x.Func); !known {
 			// Mirror the typer: an unregistered callee is an unknown name. The

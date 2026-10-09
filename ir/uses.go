@@ -237,9 +237,10 @@ func (x Binary) children() []Expr  { return []Expr{x.L, x.R} }
 func (x Unary) children() []Expr   { return []Expr{x.E} }
 func (x Swizzle) children() []Expr { return []Expr{x.E} }
 
-func (x Sample) children() []Expr      { return []Expr{x.UV} }
-func (x SampleLevel) children() []Expr { return []Expr{x.UV, x.LOD} }
-func (x SampleCube) children() []Expr  { return []Expr{x.Dir} }
+func (x Sample) children() []Expr          { return []Expr{x.UV} }
+func (x SampleLevel) children() []Expr     { return []Expr{x.UV, x.LOD} }
+func (x SampleCube) children() []Expr      { return []Expr{x.Dir} }
+func (x SampleCubeLevel) children() []Expr { return []Expr{x.Dir, x.LOD} }
 
 func (x SceneSample) children() []Expr      { return []Expr{x.UV} }
 func (x SceneSampleLevel) children() []Expr { return []Expr{x.UV, x.LOD} }
@@ -252,3 +253,8 @@ func (x StateSampleUV) children() []Expr { return []Expr{x.UV} }
 func (CellUV) children() []Expr          { return nil }
 
 func (x Index) children() []Expr { return []Expr{x.Arr, x.Idx} }
+
+// UsesCubeSampleLevel reports fragment-stage cube LOD taps needing the WebGL1 extension.
+func UsesCubeSampleLevel(m Module) bool {
+	return stageMatches(m.Fragment, func(e Expr) bool { _, ok := e.(SampleCubeLevel); return ok })
+}

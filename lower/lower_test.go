@@ -287,6 +287,7 @@ func TestLowerRejectsTextureSamplingInVertexStage(t *testing.T) {
 		{name: "sample", call: "sample(albedo, vec2f(0.0, 0.0))"},
 		{name: "sampleLevel", call: "sampleLevel(albedo, vec2f(0.0, 0.0), 0.0)"},
 		{name: "sampleCube", call: "sampleCube(sky, vec3f(0.0, 1.0, 0.0))"},
+		{name: "sampleCubeLevel", call: "sampleCubeLevel(sky, vec3f(0.0, 1.0, 0.0), 2.0)"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

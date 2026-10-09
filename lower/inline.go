@@ -242,7 +242,10 @@ func (in *inliner) expr(e hir.Expr, env map[string]hir.Expr) (hir.Expr, error) {
 		}
 		env2 := make(map[string]hir.Expr, len(fn.Params)+len(fn.Body))
 		for i, p := range fn.Params {
-			if fn.BindLocals {
+			// Texture handles are bindings, not numeric values. Keep their
+			// references through library calls so sample builtins resolve the
+			// original material texture and descriptor instead of a local copy.
+			if fn.BindLocals && p.Type != hir.Texture2D && p.Type != hir.TextureCube {
 				env2[p.Name] = in.bind(args[i], p.Type, x.Span)
 			} else {
 				env2[p.Name] = args[i]

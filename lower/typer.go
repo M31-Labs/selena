@@ -206,7 +206,7 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 			return "", diagnostic(CodeInvalidCall, c.Span,
 				"%s is a fragment-stage builtin and is not available in vertex()", c.Func)
 		}
-		if c.Func == "sample" || c.Func == "sampleLevel" || c.Func == "sampleCube" {
+		if c.Func == "sample" || c.Func == "sampleLevel" || c.Func == "sampleCube" || c.Func == "sampleCubeLevel" {
 			return "", diagnostic(CodeInvalidCall, c.Span,
 				"%s() is not available in the vertex stage; no backend wires a texture binding into the authored vertex() stage yet", c.Func)
 		}
@@ -417,6 +417,29 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 		}
 		if dir != ir.Vec3 {
 			return "", diagnostic(CodeTypeMismatch, c.Span, "sampleCube: second argument must be vec3 direction, got %s", dir)
+		}
+		return ir.Vec4, nil
+	case builtinSampleCubeLevel:
+		if len(c.Args) != spec.arity {
+			return "", diagnostic(CodeInvalidCall, c.Span, "sampleCubeLevel(texture, dir) takes 3 arguments")
+		}
+		tex, ok := c.Args[0].(hir.Ref)
+		if !ok || t.paramKind[tex.Name] != hir.TextureCube {
+			return "", diagnostic(CodeInvalidCall, c.Span, "sampleCubeLevel: first argument must be a textureCube param")
+		}
+		dir, err := t.typeOf(c.Args[1])
+		if err != nil {
+			return "", err
+		}
+		if dir != ir.Vec3 {
+			return "", diagnostic(CodeTypeMismatch, c.Span, "sampleCubeLevel: second argument must be vec3 direction, got %s", dir)
+		}
+		lod, err := t.typeOf(c.Args[2])
+		if err != nil {
+			return "", err
+		}
+		if lod != ir.Float {
+			return "", diagnostic(CodeTypeMismatch, c.Span, "sampleCubeLevel: third argument must be float lod, got %s", lod)
 		}
 		return ir.Vec4, nil
 	case builtinRGB:

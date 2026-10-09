@@ -8,6 +8,15 @@ binding coordinates.
 This document describes the current public surface of the compiler. It is not a
 browser, OS, or GPU support matrix.
 
+`sampleCubeLevel(texture, direction, lod)` samples a `textureCube` parameter at
+an explicit floating-point mip level. Use it for roughness-prefiltered environment
+maps; it preserves the authored level on WGSL, GLES, GLSL and Metal. Like other
+texture sampling calls, it is currently supported in fragment surfaces only.
+WebGL 1 requires `EXT_shader_texture_lod`, declared both in the emitted shader
+and the host descriptor. Hosts provide the cubemap mip chain; this operation
+does not request scene-color/backdrop mipmaps. Library functions may accept
+texture handles without copying them into numeric local bindings.
+
 ## Targets
 
 | Selena target | Renderer family | Shader shape |
