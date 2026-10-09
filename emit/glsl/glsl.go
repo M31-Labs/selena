@@ -103,6 +103,7 @@ func emitFragmentAuthored(m ir.Module) string {
 		}
 	}
 	res := internal.NewBare(prismDialect)
+	res.Fragment = true
 	res.StateSampleUVFn = func(uv string) string { return fmt.Sprintf("texture2D(stateTex, %s)", uv) }
 	res.ReturnFn = glReturnFn
 	b.WriteString("\nvoid main() {\n")
@@ -220,6 +221,7 @@ func emitFragment(m ir.Module) string {
 		}
 	}
 	res := internal.NewBare(prismDialect)
+	res.Fragment = true
 	res.ReturnFn = glReturnFn
 	b.WriteString("\nvoid main() {\n")
 	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
@@ -246,7 +248,7 @@ func writeFragmentPrologue(b *strings.Builder, m ir.Module, precision string) {
 	if ir.UsesDerivatives(m) {
 		b.WriteString("#extension GL_OES_standard_derivatives : enable\n")
 	}
-	if ir.UsesSceneSampleLevel(m) {
+	if ir.UsesSceneSampleLevel(m) || ir.UsesCubeSampleLevel(m) {
 		// GLSL ES 1.00 defines texture2DLod in the vertex stage only;
 		// GL_EXT_shader_texture_lod adds the fragment-stage texture2DLodEXT form.
 		b.WriteString("#extension GL_EXT_shader_texture_lod : enable\n")
@@ -356,6 +358,7 @@ func emitPointsFragment(m ir.Module) string {
 	// host draws GL_POINTS so the per-fragment UV is gl_PointCoord; we alias it
 	// via a local so the author's emitted code references the right value.
 	res := internal.NewBare(prismDialect)
+	res.Fragment = true
 	res.ReturnFn = glReturnFn
 
 	b.WriteString("void main() {\n")

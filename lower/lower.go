@@ -77,7 +77,7 @@ func hostRequirements(mod ir.Module) bindings.Requirements {
 	if ir.UsesDerivatives(mod) {
 		req.GLExtensions = append(req.GLExtensions, "OES_standard_derivatives")
 	}
-	if ir.UsesSceneSampleLevel(mod) {
+	if ir.UsesSceneSampleLevel(mod) || ir.UsesCubeSampleLevel(mod) {
 		req.GLExtensions = append(req.GLExtensions, "EXT_shader_texture_lod")
 		req.SceneColorMips = ir.RequiresSceneColorMips(mod)
 	}

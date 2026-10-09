@@ -248,6 +248,24 @@ func (r Resolver) SampleLevel(tex, uv, lod string) string {
 // SampleCube renders a cube-map texture sample by a vec3 direction vector.
 func (r Resolver) SampleCube(tex, dir string) string { return r.Dialect.SampleCube(tex, dir) }
 
+// SampleCubeLevel preserves explicit mip selection on every backend.
+func (r Resolver) SampleCubeLevel(tex, dir, lod string) string {
+	switch r.Dialect.(type) {
+	case dialect.WGSL:
+		return "textureSampleLevel(" + tex + ", " + tex + "Sampler, " + dir + ", " + lod + ")"
+	case dialect.Metal:
+		return tex + ".sample(" + tex + "Sampler, " + dir + ", level(" + lod + "))"
+	case dialect.GLES:
+		return "textureLod(" + tex + ", " + dir + ", " + lod + ")"
+	default:
+		name := "textureCubeLod"
+		if r.Fragment {
+			name += "EXT"
+		}
+		return name + "(" + tex + ", " + dir + ", " + lod + ")"
+	}
+}
+
 // SceneSample renders a post-pass engine scene texture sample.
 func (r Resolver) SceneSample(name, uv string) string {
 	if r.SceneSampleFn != nil {

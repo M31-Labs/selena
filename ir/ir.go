@@ -326,6 +326,19 @@ type SampleCube struct {
 	Dir     Expr
 }
 
+// SampleCubeLevel samples a cubemap at an explicit mip level.
+type SampleCubeLevel struct {
+	Texture  string
+	Dir, LOD Expr
+}
+
+// CubeLevelDialect is optional so existing custom dialects remain compatible.
+// A backend without explicit cube LOD support fails emission rather than
+// silently ignoring roughness.
+type CubeLevelDialect interface {
+	SampleCubeLevel(tex, dir, lod string) string
+}
+
 // SceneSample samples one of the engine-provided post-pass textures at UV.
 // Name is "sceneColor" or "sceneDepth". These are NOT in Module.Textures —
 // they are at fixed engine binding slots the post emitter knows. The return
@@ -402,19 +415,20 @@ type StateSampleUV struct {
 // Result type is vec2.
 type CellUV struct{}
 
-func (Ref) isExpr()         {}
-func (Lit) isExpr()         {}
-func (IntLit) isExpr()      {}
-func (UintLit) isExpr()     {}
-func (Construct) isExpr()   {}
-func (Call) isExpr()        {}
-func (Binary) isExpr()      {}
-func (Unary) isExpr()       {}
-func (Swizzle) isExpr()     {}
-func (Sample) isExpr()      {}
-func (SampleLevel) isExpr() {}
-func (SampleCube) isExpr()  {}
-func (SceneSample) isExpr() {}
+func (Ref) isExpr()             {}
+func (Lit) isExpr()             {}
+func (IntLit) isExpr()          {}
+func (UintLit) isExpr()         {}
+func (Construct) isExpr()       {}
+func (Call) isExpr()            {}
+func (Binary) isExpr()          {}
+func (Unary) isExpr()           {}
+func (Swizzle) isExpr()         {}
+func (Sample) isExpr()          {}
+func (SampleLevel) isExpr()     {}
+func (SampleCube) isExpr()      {}
+func (SampleCubeLevel) isExpr() {}
+func (SceneSample) isExpr()     {}
 
 func (SceneSampleLevel) isExpr() {}
 func (SceneSize) isExpr()        {}
@@ -544,6 +558,12 @@ func Print(e Expr, d Dialect) string {
 		return d.Sample(x.Texture, Print(x.UV, d))
 	case SampleLevel:
 		return d.SampleLevel(x.Texture, Print(x.UV, d), Print(x.LOD, d))
+	case SampleCubeLevel:
+		if cd, ok := d.(CubeLevelDialect); ok {
+			return cd.SampleCubeLevel(x.Texture, Print(x.Dir, d), Print(x.LOD, d))
+		}
+		emitPanic(CodeEmitUnwiredNode, "dialect does not support explicit cubemap LOD")
+		return ""
 	case SampleCube:
 		return d.SampleCube(x.Texture, Print(x.Dir, d))
 	case SceneSample:
