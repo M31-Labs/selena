@@ -36,9 +36,10 @@ const (
 // entry point ("vertexStorageMain") reads particle data from a storage buffer
 // instead of vertex attributes. GLSL/GLES emit only the attribute variant.
 type EntryPoints struct {
-	Vertex        string `json:"vertex"`
-	Fragment      string `json:"fragment"`
-	VertexStorage string `json:"vertexStorage,omitempty"`
+	FragmentSpecular string `json:"fragmentSpecular,omitempty"`
+	Vertex           string `json:"vertex"`
+	Fragment         string `json:"fragment"`
+	VertexStorage    string `json:"vertexStorage,omitempty"`
 	// Compute is non-empty only for feedback-kind modules, where the WGSL and
 	// Metal artifacts are a @compute / kernel entry (no vertex/fragment). The
 	// GLSL/GLES feedback artifacts still use Vertex+Fragment (fullscreen pass).
@@ -46,17 +47,31 @@ type EntryPoints struct {
 }
 
 // Layout is the complete host descriptor for one material.
+// SpecularOutput describes the opt-in MRT companion. Location 0 remains the
+// ordinary surface; location 1 contains linear RGB with the surface's alpha.
+// No authored companion means zero RGB, never a luminance-derived substitute.
+type SpecularOutput struct {
+	Semantic   string `json:"semantic"`
+	Location   int    `json:"location"`
+	Type       string `json:"type"`
+	ColorSpace string `json:"colorSpace"`
+	Authored   bool   `json:"authored"`
+	// Additional requirements for the GLSL ES 1.00 variant only.
+	GLExtensions []string `json:"glExtensions,omitempty"`
+}
+
 type Layout struct {
-	SchemaVersion   string       `json:"schemaVersion"`
-	LanguageVersion string       `json:"languageVersion"`
-	Material        string       `json:"material"`
-	Kind            SurfaceKind  `json:"kind"`
-	EntryPoints     EntryPoints  `json:"entryPoints"`
-	UniformBlock    UniformBlock `json:"uniformBlock"`
-	Attributes      []Attribute  `json:"attributes"`
-	Textures        []Texture    `json:"textures"`
-	WGSL            WGSLBinding  `json:"wgsl"`
-	Metal           MetalBinding `json:"metal"`
+	SpecularOutput  *SpecularOutput `json:"specularOutput,omitempty"`
+	SchemaVersion   string          `json:"schemaVersion"`
+	LanguageVersion string          `json:"languageVersion"`
+	Material        string          `json:"material"`
+	Kind            SurfaceKind     `json:"kind"`
+	EntryPoints     EntryPoints     `json:"entryPoints"`
+	UniformBlock    UniformBlock    `json:"uniformBlock"`
+	Attributes      []Attribute     `json:"attributes"`
+	Textures        []Texture       `json:"textures"`
+	WGSL            WGSLBinding     `json:"wgsl"`
+	Metal           MetalBinding    `json:"metal"`
 	// States carries the feedback-kind statefield bindings (empty otherwise).
 	// Each entry tells the host to allocate a ping-pong pair: two storage
 	// buffers (WebGPU) or two float FBOs sampled through one sampler2D (WebGL).

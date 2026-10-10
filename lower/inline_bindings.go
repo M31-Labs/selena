@@ -49,6 +49,10 @@ func materialNames(m hir.Material) map[string]bool {
 	}
 	names[m.Surface.Geo] = true
 	visit(m.Surface.Body)
+	if m.Specular != nil {
+		names[m.Specular.Geo] = true
+		visit(m.Specular.Body)
+	}
 	if m.Vertex != nil {
 		names[m.Vertex.Geo] = true
 		visit(m.Vertex.Body)

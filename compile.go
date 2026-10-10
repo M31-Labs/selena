@@ -41,17 +41,30 @@ func AllTargets() []Target {
 // Targets is an empty non-nil slice, Compile parses and lowers without emitting
 // shader source.
 type CompileOptions struct {
-	Material string
-	Targets  []Target
+	// SpecularMRT emits an additional color0/specular1 mesh fragment variant.
+	// It does not replace normal artifacts. Without authored specular(), that
+	// variant writes zero RGB with the normal surface's coverage alpha.
+	// Non-mesh materials without a companion ignore this option.
+	SpecularMRT bool
+	Material    string
+	Targets     []Target
+}
+
+// FragmentArtifact is an additive fragment variant. WGSL/Metal carry the full
+// module in Source; GLSL/GLES carry Fragment and reuse Artifact.Vertex.
+type FragmentArtifact struct {
+	Source   string
+	Fragment string
 }
 
 // Artifact is the emitted shader source for one target. WGSL and Metal use
 // Source. GLSL and GLES use Vertex and Fragment.
 type Artifact struct {
-	Target   Target
-	Source   string
-	Vertex   string
-	Fragment string
+	SpecularMRT *FragmentArtifact `json:",omitempty"`
+	Target      Target
+	Source      string
+	Vertex      string
+	Fragment    string
 }
 
 // Result contains the useful artifacts from a Selena compile: parsed HIR,
@@ -103,9 +116,25 @@ func CompileProgram(p hir.Program, opts CompileOptions) (Result, error) {
 	if err != nil {
 		return Result{}, compileError(fmt.Errorf("lower %s: %w", p.Materials[idx].Name, err))
 	}
+	meshMRT := opts.SpecularMRT && (mod.Kind == "" || mod.Kind == ir.KindMesh)
+	if meshMRT {
+		layout.EntryPoints.FragmentSpecular = "fragmentMainSpecular"
+		layout.SpecularOutput = &bindings.SpecularOutput{Semantic: "specular", Location: 1, Type: "vec4", ColorSpace: "linear", Authored: mod.Specular != nil, GLExtensions: []string{"WEBGL_draw_buffers"}}
+	}
 	artifacts, err := emitArtifacts(mod, opts.Targets)
 	if err != nil {
 		return Result{}, compileError(err)
+	}
+	if meshMRT {
+		variant := mod
+		variant.SpecularMRT = true
+		for i := range artifacts {
+			a, err := emitArtifact(variant, artifacts[i].Target)
+			if err != nil {
+				return Result{}, compileError(err)
+			}
+			artifacts[i].SpecularMRT = &FragmentArtifact{Source: a.Source, Fragment: a.Fragment}
+		}
 	}
 	return Result{
 		Program:   p,

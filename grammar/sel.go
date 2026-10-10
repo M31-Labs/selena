@@ -65,7 +65,7 @@ func SelenaGrammar() *grammargen.Grammar {
 	// design). It MUST stay last in this Choice and be Define-d at the very END
 	// of the function, after every other rule, to preserve the LALR symbol-ID
 	// order of everything above.
-	g.Define("member", grammargen.Choice(sym("param"), sym("surface"), sym("feedback"), sym("statefield"), sym("param_array"), sym("vertex"), sym("varying_decl"), sym("context_block")))
+	g.Define("member", grammargen.Choice(sym("param"), sym("surface"), sym("feedback"), sym("statefield"), sym("param_array"), sym("vertex"), sym("varying_decl"), sym("context_block"), sym("specular")))
 
 	g.Define("param", seq(
 		s("param"),
@@ -542,6 +542,13 @@ func SelenaGrammar() *grammargen.Grammar {
 		s("{"),
 		grammargen.Repeat(sym("context_member")),
 		s("}"),
+	))
+
+	// Append new rules to preserve existing grammar symbol IDs.
+	g.Define("specular", seq(
+		s("specular"), s("("), field("geo", sym("identifier")),
+		s(")"), s("->"), field("returns", sym("identifier")),
+		field("body", sym("block")),
 	))
 
 	g.SetWord("identifier")

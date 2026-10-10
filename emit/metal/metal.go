@@ -140,6 +140,10 @@ func emitMesh(m ir.Module) (string, error) {
 	fmt.Fprintf(&b, "  out.position = %s;\n  return out;\n}\n\n", ir.Print(m.Vertex.Output, vs))
 
 	fs := internal.NewQualified(prismDialect, m, true)
+	if m.SpecularMRT {
+		writeSpecularFragment(&b, m, fs)
+		return b.String(), nil
+	}
 	fragSig := "fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]"
 	for i, t := range m.Textures {
 		if t.Cube {
@@ -216,6 +220,10 @@ func emitMeshAuthored(m ir.Module) (string, error) {
 	// Fragment stage.
 	fs := internal.NewQualified(prismDialect, m, true)
 	fs.StateSampleUVFn = metalStateSampleUV
+	if m.SpecularMRT {
+		writeSpecularFragment(&b, m, fs)
+		return b.String(), nil
+	}
 	fragSig := "fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]"
 	for i, t := range m.Textures {
 		if t.Cube {

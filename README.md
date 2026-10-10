@@ -84,6 +84,11 @@ BRDF, procedural, shape, normal and effect helpers authored in Selena. Use its
 functions with the GoSX adapter or compile a material with `materiallib.Compile`. Unused helpers add no
 shader source and the host binding descriptor stays unchanged.
 
+Mesh materials can optionally expose a linear `specular(geo) -> color` companion.
+`CompileOptions{SpecularMRT: true}` adds typed color/specular MRT artifacts while
+keeping the ordinary artifacts intact; omitted companions write zero. See the
+[output and host contract](docs/compatibility.md#optional-linear-specular-output-mrt).
+
 ## Use as a library
 
 ```go

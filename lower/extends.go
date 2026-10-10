@@ -30,6 +30,10 @@ func resolveExtends(m hir.Material, all []hir.Material) (hir.Material, error) {
 	out := m
 	out.Extends = ""
 	out.Params = mergeParams(parent.Params, m.Params)
+	// An omitted companion inherits; an authored companion explicitly overrides.
+	if out.Specular == nil {
+		out.Specular = parent.Specular
+	}
 
 	// A parent's vertex() stage — and the varyings/statefield it writes and
 	// reads — used to be dropped here with no diagnostic: out := m above

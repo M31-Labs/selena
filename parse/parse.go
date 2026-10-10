@@ -203,7 +203,7 @@ func expectedFromContext(w *walker, n *gts.Node) string {
 		case "material":
 			return "`param`, `surface`, or `}`"
 		case "member":
-			return "`param`, `surface`, `vertex`, `varying`, `feedback`, `state`, or `}`"
+			return "`param`, `surface`, `specular`, `vertex`, `varying`, `feedback`, `state`, or `}`"
 		case "vertex":
 			return "`->`, a return type, and a vertex body"
 		case "varying_decl":
@@ -379,6 +379,18 @@ func (w *walker) material(n *gts.Node) (hir.Material, error) {
 				return m, err
 			}
 			m.Params = append(m.Params, p)
+		case "specular":
+			if m.Specular != nil {
+				return m, fmt.Errorf("material %q has duplicate specular entry", m.Name)
+			}
+			if w.Text(w.Field(inner, "returns")) != "color" {
+				return m, fmt.Errorf("specular must declare -> color (linear RGB)")
+			}
+			sf, err := w.fn(inner)
+			if err != nil {
+				return m, err
+			}
+			m.Specular = &sf
 		case "surface":
 			sf, err := w.fn(inner)
 			if err != nil {
@@ -681,7 +693,7 @@ func (w *walker) fn(n *gts.Node) (hir.Func, error) {
 	f.Body = stmts
 	f.Result = result
 	if f.Result == nil {
-		return f, fmt.Errorf("surface has no return")
+		return f, fmt.Errorf("%s has no return", w.Type(n))
 	}
 	return f, nil
 }

@@ -100,13 +100,14 @@ type Varying struct {
 
 // Material is one authored material.
 type Material struct {
-	Name    string
-	Kind    Kind   // defaults to KindMesh when unset
-	Extends string // parent material name, or "" — resolved during lowering
-	Span    Span
-	Params  []Param
-	Surface Func  // surface(geo) -> color; for KindFeedback this holds feedback(cell) -> vec4
-	Vertex  *Func // optional geometry hook; nil = use the default transform
+	Name     string
+	Kind     Kind   // defaults to KindMesh when unset
+	Extends  string // parent material name, or "" — resolved during lowering
+	Span     Span
+	Params   []Param
+	Specular *Func // optional linear RGB companion; surface alone controls coverage
+	Surface  Func  // surface(geo) -> color; for KindFeedback this holds feedback(cell) -> vec4
+	Vertex   *Func // optional geometry hook; nil = use the default transform
 	// States lists the declared statefields. KindFeedback uses these for the
 	// state(dx, dy) gather; mesh/general materials may declare one statefield to
 	// read via stateAt(uv) in the vertex/fragment stages (B4).

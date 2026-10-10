@@ -1,0 +1,25 @@
+<!doctype html><meta charset="utf-8"><pre id="result">RUNNING</pre><script>
+try {
+ const gl=document.createElement('canvas').getContext('webgl',{antialias:false});
+ if(!gl) throw Error('WebGL unavailable');
+ const ext=gl.getExtension('WEBGL_draw_buffers');
+ if(!ext) throw Error('WEBGL_draw_buffers unavailable');
+ gl.getExtension('OES_standard_derivatives');gl.getExtension('EXT_shader_texture_lod');
+ const fixtures=SHADERS_JSON;
+ function shader(type,source){const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s;}
+ const programs=fixtures.map(a=>{const p=gl.createProgram();gl.attachShader(p,shader(gl.VERTEX_SHADER,a.Vertex));gl.attachShader(p,shader(gl.FRAGMENT_SHADER,a.SpecularMRT.Fragment));gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p));return p;});
+ const f=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,f);
+ const textures=[0,1].map(i=>{const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,8,1,0,gl.RGBA,gl.UNSIGNED_BYTE,null);gl.framebufferTexture2D(gl.FRAMEBUFFER,ext.COLOR_ATTACHMENT0_WEBGL+i,gl.TEXTURE_2D,t,0);return t;});
+ ext.drawBuffersWEBGL([ext.COLOR_ATTACHMENT0_WEBGL,ext.COLOR_ATTACHMENT1_WEBGL]);
+ if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw Error('MRT incomplete');
+ function attr(p,name,size,data){const n=gl.getAttribLocation(p,name);if(n<0)return;gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.STATIC_DRAW);gl.enableVertexAttribArray(n);gl.vertexAttribPointer(n,size,gl.FLOAT,false,0,0);}
+ function draw(p){gl.bindFramebuffer(gl.FRAMEBUFFER,f);gl.useProgram(p);gl.viewport(0,0,8,1);gl.disable(gl.BLEND);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);gl.uniformMatrix4fv(gl.getUniformLocation(p,'mvp'),false,new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]));attr(p,'position',3,[-1,-1,0,1,-1,0,-1,1,0,-1,1,0,1,-1,0,1,1,0]);attr(p,'uv',2,[0,0,1,0,0,1,0,1,1,0,1,1]);gl.drawArrays(gl.TRIANGLES,0,6);if(gl.getError()!==gl.NO_ERROR)throw Error('draw failed');}
+ // WebGL1 reads only attachment0: inspect each texture through a distinct read FBO.
+ function pixel(attachment,x){const read=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,read);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,textures[attachment],0);const b=new Uint8Array(4);gl.readPixels(x,0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,b);gl.deleteFramebuffer(read);return Array.from(b);}
+ function expect(actual,want,label){if(actual.some((v,i)=>Math.abs(v-want[i])>2))throw Error(label+': '+actual+' != '+want);}
+ draw(programs[0]);expect(pixel(0,0),[0,0,0,0],'surface discard');expect(pixel(1,0),[0,0,0,0],'specular discard');expect(pixel(0,2),[51,77,102,64],'early surface');expect(pixel(1,2),[204,26,51,64],'early companion');expect(pixel(1,6),[26,204,51,128],'companion');
+ draw(programs[1]);expect(pixel(0,4),[255,255,255,128],'bright surface');expect(pixel(1,4),[0,0,0,128],'zero companion');
+ draw(programs[3]);expect(pixel(0,4),[51,77,102,128],'fused surface');expect(pixel(1,4),[102,153,204,128],'fused companion local scope');
+ document.querySelector('#result').textContent='PASS: 4 programs, surface coverage, early return, specular RGB, zero fallback';
+} catch(e) {document.querySelector('#result').textContent='FAIL: '+e.stack;}
+</script>

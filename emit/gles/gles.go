@@ -96,10 +96,7 @@ func emitFragmentAuthored(m ir.Module) string {
 	}
 	res := internal.NewBare(prismDialect)
 	res.StateSampleUVFn = func(uv string) string { return fmt.Sprintf("texture(stateTex, %s)", uv) }
-	res.ReturnFn = glesReturnFn
-	b.WriteString("out vec4 fragColor;\n\nvoid main() {\n")
-	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
-	fmt.Fprintf(&b, "  fragColor = %s;\n}\n", ir.Print(m.Fragment.Output, res))
+	writeMeshFragment(&b, m, res)
 	return b.String()
 }
 
@@ -215,10 +212,7 @@ func emitFragment(m ir.Module) string {
 		}
 	}
 	res := internal.NewBare(prismDialect)
-	res.ReturnFn = glesReturnFn
-	b.WriteString("out vec4 fragColor;\n\nvoid main() {\n")
-	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
-	fmt.Fprintf(&b, "  fragColor = %s;\n}\n", ir.Print(m.Fragment.Output, res))
+	writeMeshFragment(&b, m, res)
 	return b.String()
 }
 
