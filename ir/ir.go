@@ -53,6 +53,8 @@ type Module struct {
 	Textures      []Texture      // sampled textures (fragment stage)
 	Vertex        Stage
 	Fragment      Stage
+	Specular      *Stage // optional linear RGB companion, packed as vec4 internally
+	SpecularMRT   bool   // select the additive color0/specular1 emission variant
 	// StateField is the name of the vec4-per-cell statefield. For KindFeedback the
 	// feedback body is carried in Fragment and state(dx, dy) reads lower to
 	// StateSample. For mesh/general modules a statefield enables stateAt(uv) reads

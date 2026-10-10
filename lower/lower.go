@@ -55,6 +55,9 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 }
 
 func lowerByKind(m hir.Material) (ir.Module, bindings.Layout, error) {
+	if m.Specular != nil && m.Kind != "" && m.Kind != hir.KindMesh {
+		return ir.Module{}, bindings.Layout{}, diagnostic(CodeUnsupportedFeat, m.Specular.Span, "specular is supported only by mesh materials")
+	}
 	switch m.Kind {
 	case hir.KindPoints:
 		return lowerPoints(m)
@@ -114,7 +117,11 @@ func lowerMesh(m hir.Material) (ir.Module, bindings.Layout, error) {
 	if err != nil {
 		return ir.Module{}, bindings.Layout{}, err
 	}
-	interfaces, err := buildInterfacePlan(m.Surface)
+	stages := []hir.Func{m.Surface}
+	if m.Specular != nil {
+		stages = append(stages, *m.Specular)
+	}
+	interfaces, err := buildInterfacePlan(stages...)
 	if err != nil {
 		return ir.Module{}, bindings.Layout{}, err
 	}
@@ -128,6 +135,11 @@ func lowerMesh(m hir.Material) (ir.Module, bindings.Layout, error) {
 	rs.tp = tp
 
 	fragBody, fragOut, err := lowerFragment(m.Surface, reserved, rs, tp)
+	if err != nil {
+		return ir.Module{}, bindings.Layout{}, err
+	}
+
+	specular, err := lowerSpecular(m.Specular, reserved, rs, tp)
 	if err != nil {
 		return ir.Module{}, bindings.Layout{}, err
 	}
@@ -150,6 +162,7 @@ func lowerMesh(m hir.Material) (ir.Module, bindings.Layout, error) {
 		Textures:      irTextures,
 		Vertex:        ir.Stage{Body: interfaces.vertexBody, Output: vertexOut},
 		Fragment:      ir.Stage{Body: fragBody, Output: fragOut},
+		Specular:      specular,
 	}
 	ub := bindings.ComputeUniformBlock(uniforms.uniforms)
 	stampContextClass(ub.Fields, uniforms.contextNames)

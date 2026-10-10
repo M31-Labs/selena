@@ -317,11 +317,13 @@ func sunDefaultFields(p hir.Param) (map[string][]float32, error) {
 	return fields, nil
 }
 
-func buildInterfacePlan(surface hir.Func) (interfacePlan, error) {
+func buildInterfacePlan(stages ...hir.Func) (interfacePlan, error) {
 	usedGeo := map[string]bool{}
-	collectGeo(surface.Result, surface.Geo, usedGeo)
-	for _, s := range surface.Body {
-		collectGeoStmt(s, surface.Geo, usedGeo)
+	for _, surface := range stages {
+		collectGeo(surface.Result, surface.Geo, usedGeo)
+		for _, s := range surface.Body {
+			collectGeoStmt(s, surface.Geo, usedGeo)
+		}
 	}
 
 	attrNeeded := map[string]bool{"position": true}
@@ -401,6 +403,7 @@ type lowerCtx struct {
 	// (the zero value) for authored vertex() lowering (lower_vertex.go),
 	// where a varying written after an early return would be undefined.
 	allowReturn bool
+	requireRGB  bool // specular returns RGB; surface alone supplies coverage
 }
 
 // checkNotVarying rejects a local declaration whose name collides with an
@@ -655,6 +658,9 @@ func (lc *lowerCtx) lowerStmt(s hir.Stmt) (ir.Stmt, error) {
 		re, err := lc.rs.expr(x.Value)
 		if err != nil {
 			return ir.Stmt{}, fmt.Errorf("return: %w", err)
+		}
+		if lc.requireRGB && rt != ir.Vec3 {
+			return ir.Stmt{}, diagnostic(CodeTypeMismatch, x.Span, "specular must return color/vec3, got %s", rt)
 		}
 		// Same vec3/vec4 packing lowerFragment applies to the final
 		// surface.Result (below): a vec4 return passes through unchanged; a

@@ -182,3 +182,56 @@ The current compiler is useful, but the compatibility story is still growing.
 - Standard material / PBR interop is not designed yet.
 - Golden output conformance is still lightweight; the checked-in corpus is the
   starting point rather than the finish line.
+
+## Optional linear specular output (MRT)
+
+Mesh materials may author a companion entry:
+
+```selena
+material Polished {
+    param highlight : color
+    surface(geo) -> vec4 {
+        return vec4f(0.4, 0.3, 0.2, 0.8)
+    }
+    specular(geo) -> color {
+        return highlight
+    }
+}
+```
+
+`specular` returns linear RGB lighting, not total surface color or a luminance
+threshold. Its geometry binding and locals are independent of `surface`; params,
+context, textures and varyings are shared. User functions work in both entries.
+An omitted companion inherits from the parent material; declaring one overrides
+it. A companion must return `color`/`vec3` in every return and cannot discard.
+Straight-line immutable calculations shared by both entries are fused once in
+the MRT shader; stages with control flow or mutation keep separate evaluation
+so optimization cannot move work across coverage or assignment boundaries.
+Only `surface` controls coverage: its discard terminates both outputs and its
+alpha is copied to the specular attachment, including after early returns.
+
+Request variants with `selena.CompileOptions{SpecularMRT: true}`. Existing
+`Artifact.Source`, `Vertex`, `Fragment` and normal entry names remain unchanged.
+Each mesh artifact gains optional `Artifact.SpecularMRT`: WGSL/Metal `Source`
+contains a full module with entry `fragmentMainSpecular`; GLSL/GLES `Fragment`
+reuses the normal vertex source and enters through `main`. Non-mesh materials
+without a companion ignore the option; authoring a companion on them is an error.
+
+The additive v1 descriptor fields are `entryPoints.fragmentSpecular` and
+`specularOutput`, with semantic `specular`, location `1`, type `vec4`, color space
+`linear`, and an `authored` boolean. Color remains at location 0. When no companion
+is authored, the variant writes exactly zero RGB with the surface alpha; hosts
+must not infer specular from luminance. The variant requires two compatible
+render attachments and matching blend/depth/coverage configuration. GLSL ES 1.00
+also requires `specularOutput.glExtensions: ["WEBGL_draw_buffers"]`; request that
+extension before compiling. GLES3, WGSL and Metal express MRT in their core APIs.
+A host that reserves attachment 1 (for example, a native picking target) must
+explicitly reconcile that layout before using these artifacts. This compiler
+contract alone does not add custom-shader transport to a native renderer.
+
+Validation includes Naga for WGSL, glslangValidator for GLES3, and an opt-in real
+Chromium WebGL1 compile/link/readback test (`SELENA_CHROME=/path/to/chrome go test
+./validate -run Specular`). glslang does not implement `GL_EXT_draw_buffers`;
+its GLSL1 check covers the shared vertex source, while Chromium checks the MRT
+fragment and both attachments. MSL source contracts are tested here; actual
+Metal compilation still requires Apple's toolchain.

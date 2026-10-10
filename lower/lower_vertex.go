@@ -196,6 +196,10 @@ func lowerMeshWithVertex(m hir.Material) (ir.Module, bindings.Layout, error) {
 		return ir.Module{}, bindings.Layout{}, err
 	}
 
+	specular, err := lowerSpecular(m.Specular, reserved, frs, ftp)
+	if err != nil {
+		return ir.Module{}, bindings.Layout{}, err
+	}
 	irTextures := make([]ir.Texture, len(uniforms.textures))
 	for i, t := range uniforms.textures {
 		irTextures[i] = ir.Texture{Name: t, Cube: uniforms.cubeTextures[t]}
@@ -212,6 +216,7 @@ func lowerMeshWithVertex(m hir.Material) (ir.Module, bindings.Layout, error) {
 		Textures:        irTextures,
 		Vertex:          vertexStage,
 		Fragment:        ir.Stage{Body: fragBody, Output: fragOut},
+		Specular:        specular,
 		StateField:      stateName,
 		VertexAuthored:  true,
 		UsesVertexIndex: ir.StageUsesVertexIndexBuiltin(vertexStage),

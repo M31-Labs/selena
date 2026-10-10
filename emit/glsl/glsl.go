@@ -82,6 +82,9 @@ func emitVertexAuthored(m ir.Module) string {
 // (sampling stateTex) when the material declares a statefield.
 func emitFragmentAuthored(m ir.Module) string {
 	var b strings.Builder
+	if m.SpecularMRT {
+		b.WriteString("#extension GL_EXT_draw_buffers : require\n")
+	}
 	writeFragmentPrologue(&b, m, "mediump")
 	for _, u := range m.Uniforms {
 		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
@@ -105,10 +108,7 @@ func emitFragmentAuthored(m ir.Module) string {
 	res := internal.NewBare(prismDialect)
 	res.Fragment = true
 	res.StateSampleUVFn = func(uv string) string { return fmt.Sprintf("texture2D(stateTex, %s)", uv) }
-	res.ReturnFn = glReturnFn
-	b.WriteString("\nvoid main() {\n")
-	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
-	fmt.Fprintf(&b, "  gl_FragColor = %s;\n}\n", ir.Print(m.Fragment.Output, res))
+	writeMeshFragment(&b, m, res)
 	return b.String()
 }
 
@@ -203,6 +203,9 @@ func emitVertex(m ir.Module) string {
 
 func emitFragment(m ir.Module) string {
 	var b strings.Builder
+	if m.SpecularMRT {
+		b.WriteString("#extension GL_EXT_draw_buffers : require\n")
+	}
 	writeFragmentPrologue(&b, m, "mediump")
 	for _, u := range m.Uniforms {
 		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
@@ -222,10 +225,7 @@ func emitFragment(m ir.Module) string {
 	}
 	res := internal.NewBare(prismDialect)
 	res.Fragment = true
-	res.ReturnFn = glReturnFn
-	b.WriteString("\nvoid main() {\n")
-	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)
-	fmt.Fprintf(&b, "  gl_FragColor = %s;\n}\n", ir.Print(m.Fragment.Output, res))
+	writeMeshFragment(&b, m, res)
 	return b.String()
 }
 

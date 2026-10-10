@@ -31,6 +31,20 @@ func inlineFuncs(m hir.Material, funcs []hir.FuncDecl) (hir.Material, error) {
 	out.Surface.Result = r
 	out.Surface.Body = append(out.Surface.Body, in.pending...)
 	in.pending = nil
+	if m.Specular != nil {
+		s := *m.Specular
+		s.Body, err = in.stmts(s.Body, nil)
+		if err != nil {
+			return m, err
+		}
+		s.Result, err = in.expr(s.Result, nil)
+		if err != nil {
+			return m, err
+		}
+		s.Body = append(s.Body, in.pending...)
+		in.pending = nil
+		out.Specular = &s
+	}
 	if m.Vertex != nil {
 		v := *m.Vertex
 		v.Body, err = in.stmts(v.Body, nil)

@@ -159,9 +159,7 @@ func emitMesh(m ir.Module) (string, error) {
 
 	// Fragment stage.
 	fs := internal.NewQualified(prismDialect, m, true)
-	b.WriteString("@fragment\nfn fragmentMain(in : VertexOutput) -> @location(0) vec4<f32> {\n")
-	internal.EmitStmtList(&b, m.Fragment.Body, fs, "  ", true)
-	fmt.Fprintf(&b, "  return %s;\n}\n", ir.Print(m.Fragment.Output, fs))
+	writeMeshFragment(&b, m, fs)
 
 	return b.String(), nil
 }
@@ -240,9 +238,7 @@ func emitMeshAuthored(m ir.Module) (string, error) {
 	// Fragment stage.
 	fs := internal.NewQualified(prismDialect, m, true)
 	fs.StateSampleUVFn = wgslStateSampleUV
-	b.WriteString("@fragment\nfn fragmentMain(in : VertexOutput) -> @location(0) vec4<f32> {\n")
-	internal.EmitStmtList(&b, m.Fragment.Body, fs, "  ", true)
-	fmt.Fprintf(&b, "  return %s;\n}\n", ir.Print(m.Fragment.Output, fs))
+	writeMeshFragment(&b, m, fs)
 
 	return b.String(), nil
 }

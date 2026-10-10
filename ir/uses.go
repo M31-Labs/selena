@@ -43,7 +43,7 @@ func StageCalls(stage Stage, names map[string]bool) bool {
 // compile time before an ir.Module can ever carry one in Vertex.Body; the
 // vertex stage is not scanned here because a derivative can never reach it.
 func UsesDerivatives(m Module) bool {
-	return StageCalls(m.Fragment, DerivativeBuiltins)
+	return StageCalls(m.Fragment, DerivativeBuiltins) || (m.Specular != nil && StageCalls(*m.Specular, DerivativeBuiltins))
 }
 
 // StageUsesSceneSize reports whether stage reads the backdrop resolution.
@@ -70,15 +70,21 @@ func StageRequiresSceneColorMips(stage Stage) bool {
 }
 
 // UsesSceneSize reports whether m's fragment stage reads the backdrop resolution.
-func UsesSceneSize(m Module) bool { return StageUsesSceneSize(m.Fragment) }
+func UsesSceneSize(m Module) bool {
+	return StageUsesSceneSize(m.Fragment) || (m.Specular != nil && StageUsesSceneSize(*m.Specular))
+}
 
 // UsesSceneSampleLevel reports whether m's fragment stage samples the backdrop
 // at an explicit LOD.
-func UsesSceneSampleLevel(m Module) bool { return StageUsesSceneSampleLevel(m.Fragment) }
+func UsesSceneSampleLevel(m Module) bool {
+	return StageUsesSceneSampleLevel(m.Fragment) || (m.Specular != nil && StageUsesSceneSampleLevel(*m.Specular))
+}
 
 // RequiresSceneColorMips reports whether m's fragment stage needs the host to
 // provide a scene-color mip chain.
-func RequiresSceneColorMips(m Module) bool { return StageRequiresSceneColorMips(m.Fragment) }
+func RequiresSceneColorMips(m Module) bool {
+	return StageRequiresSceneColorMips(m.Fragment) || (m.Specular != nil && StageRequiresSceneColorMips(*m.Specular))
+}
 
 // StageUsesVertexIndexBuiltin reports whether stage's body or output
 // expression references the vertexIndex builtin, including a reference nested
@@ -256,5 +262,6 @@ func (x Index) children() []Expr { return []Expr{x.Arr, x.Idx} }
 
 // UsesCubeSampleLevel reports fragment-stage cube LOD taps needing the WebGL1 extension.
 func UsesCubeSampleLevel(m Module) bool {
-	return stageMatches(m.Fragment, func(e Expr) bool { _, ok := e.(SampleCubeLevel); return ok })
+	pred := func(e Expr) bool { _, ok := e.(SampleCubeLevel); return ok }
+	return stageMatches(m.Fragment, pred) || (m.Specular != nil && stageMatches(*m.Specular, pred))
 }
