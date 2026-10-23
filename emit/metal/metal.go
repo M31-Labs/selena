@@ -210,6 +210,17 @@ func emitMeshAuthored(m ir.Module) (string, error) {
 		vparams = append(vparams, "VertexIn in [[stage_in]]")
 	}
 	vparams = append(vparams, "constant Uniforms& u [[buffer(0)]]")
+	// Textures the authored vertex() samples with sampleLevel, at the same
+	// [[texture(i)]] / [[sampler(i)]] indices fragmentMain uses.
+	sampledInVertex := map[string]bool{}
+	for _, name := range ir.VertexSampledTextures(m) {
+		sampledInVertex[name] = true
+	}
+	for i, t := range m.Textures {
+		if sampledInVertex[t.Name] {
+			vparams = append(vparams, fmt.Sprintf("texture2d<float> %s [[texture(%d)]]", t.Name, i), fmt.Sprintf("sampler %sSampler [[sampler(%d)]]", t.Name, i))
+		}
+	}
 	if m.StateField != "" {
 		vparams = append(vparams, "constant StateGrid& _stateGrid [[buffer(1)]]", "const device float4* _inState [[buffer(2)]]")
 	}

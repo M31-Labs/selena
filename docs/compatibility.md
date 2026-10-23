@@ -124,7 +124,8 @@ before a page is loaded.
 "requires": {
   "glExtensions": ["OES_standard_derivatives", "EXT_shader_texture_lod"],
   "sceneColorMips": true,
-  "glSceneSizeUniform": "_sceneSize"
+  "glSceneSizeUniform": "_sceneSize",
+  "glVertexTextureUnits": 1
 }
 ```
 
@@ -168,6 +169,38 @@ Non-empty when the material calls `sceneSize()`. GLSL ES 1.00 has no
 `textureSize`, so the `glsl` artifact declares a `uniform vec2 _sceneSize` the
 host must set to the scene-color target size in pixels, and reset on resize.
 `wgsl`, `gles` and `metal` read the size off the bound texture.
+
+### requires.glVertexTextureUnits
+
+The number of vertex-stage texture units the `glsl` (WebGL 1 / GLSL ES 1.00)
+artifact needs. It is non-zero when an authored `vertex()` calls
+`sampleLevel(tex, uv, lod)`; it equals the number of textures whose descriptor
+entry has `vertexStage: true`.
+
+GLSL ES 1.00 lets `MAX_VERTEX_TEXTURE_IMAGE_UNITS` be 0, and some WebGL 1
+devices report 0. Selena cannot see the device, so it emits the shader and
+declares the need. The host should compare the value with
+`gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS)` and, when the device has
+fewer units, use the `gles` artifact on a WebGL 2 context (at least 16 vertex
+units) or pick another material. Otherwise the program fails to link in the
+browser only. `wgsl`, `gles` and `metal` need nothing for this.
+
+### textures[].vertexStage
+
+True for a texture the authored `vertex()` samples. Binding coordinates are the
+same in both stages. The host must also make the binding visible to the vertex
+stage:
+
+- WebGPU: bind-group-layout visibility `GPUShaderStage.VERTEX |
+  GPUShaderStage.FRAGMENT` for the texture and its sampler.
+- Metal: `setVertexTexture` and `setVertexSamplerState` at `textures[].metal`.
+- WebGL: bind the texture to `textures[].gl.unit` as usual.
+
+Only `sampleLevel` (2D, explicit LOD) is available in `vertex()`. `sample` and
+`sampleCube` need implicit derivatives, which a vertex shader lacks.
+`sampleCubeLevel` is not wired into the vertex stage yet. A vertex-stage
+sampler2D is declared `highp` on the GLSL targets, because the vertex-stage
+default is `lowp`.
 
 ## Current Gaps
 

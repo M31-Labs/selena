@@ -241,6 +241,13 @@ func lowerMeshWithVertex(m hir.Material) (ir.Module, bindings.Layout, error) {
 		layout.Textures = []bindings.Texture{}
 	}
 	layout.UniformBlock.Defaults = uniforms.defaults
+	for _, name := range ir.VertexSampledTextures(mod) {
+		for i := range layout.Textures {
+			if layout.Textures[i].Name == name {
+				layout.Textures[i].VertexStage = true
+			}
+		}
+	}
 	if hasState {
 		gridBinding, stateBinding := meshStateBindings(len(uniforms.textures))
 		layout.States = []bindings.StateField{{
@@ -285,3 +292,19 @@ func lowerVertexStage(vfn *hir.Func, reserved map[string]string, rs *resolver, t
 // vertexIndex usage is detected via ir.StageUsesVertexIndexBuiltin, which
 // walks the exhaustive ir/uses.go statement/expression walker instead of a
 // hand-rolled one — see that function's doc comment for the bug this replaced.
+
+// vertexSampleRejection returns the diagnostic text for a texture-sampling
+// builtin that is not available in an authored vertex() body, or "" when fn is
+// allowed there. Only sampleLevel (2D, explicit LOD) is wired into every
+// backend's vertex scaffold. sample() and sampleCube() use implicit
+// derivatives, which a vertex shader does not have; sampleCubeLevel() has an
+// explicit LOD but is not yet wired into the vertex scaffolds.
+func vertexSampleRejection(fn string) string {
+	switch fn {
+	case "sample", "sampleCube":
+		return fn + "() is not available in the vertex stage: it needs implicit derivatives; use sampleLevel(texture, uv, lod)"
+	case "sampleCubeLevel":
+		return fn + "() is not available in the vertex stage yet; only sampleLevel(texture, uv, lod) is supported there"
+	}
+	return ""
+}
