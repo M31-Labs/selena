@@ -1,0 +1,33 @@
+// engine-textures.sel — engine texture slots declared in `context`.
+//
+// planarReflection, opaqueColor and opaqueDepth are engine inputs: the renderer
+// binds them by name, and the descriptor marks each texture `engine`.
+// opaqueDepth is a textureDepth2d, read with sampleDepth (base level, no
+// derivatives), here also from vertex(), where it pulls vertices toward the
+// camera by the stored depth. `bump` is an author texture param.
+material EngineTextures {
+    context {
+        planarReflection : texture2d
+        opaqueColor      : texture2d
+        opaqueDepth      : textureDepth2d
+    }
+    param bump  : texture2d
+    param depthFade : float = 4.0
+
+    varying vUv : vec2
+
+    vertex(geo) -> vec4 {
+        let d = sampleDepth(opaqueDepth, geo.uv)
+        vUv = geo.uv
+        return mvp * vec4f(geo.position + geo.normal * (d * 0.01), 1.0)
+    }
+
+    surface(geo) -> color {
+        let b = sample(bump, geo.vUv).r
+        let refl = sample(planarReflection, geo.vUv + vec2f(b * 0.02, 0.0)).rgb
+        let under = sample(opaqueColor, geo.vUv).rgb
+        let depth = sampleDepth(opaqueDepth, geo.vUv)
+        let k = clamp(depth * depthFade, 0.0, 1.0)
+        return mix(under, refl, k)
+    }
+}

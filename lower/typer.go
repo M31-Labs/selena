@@ -364,6 +364,9 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 		}
 		tex, ok := c.Args[0].(hir.Ref)
 		if !ok || t.paramKind[tex.Name] != hir.Texture2D {
+			if ok && t.paramKind[tex.Name] == hir.TextureDepth2D {
+				return "", diagnostic(CodeInvalidCall, c.Span, "sample: %s is a textureDepth2d; read it with sampleDepth(texture, uv)", tex.Name)
+			}
 			return "", diagnostic(CodeInvalidCall, c.Span, "sample: first argument must be a texture2d param")
 		}
 		uv, err := t.typeOf(c.Args[1])
@@ -374,6 +377,22 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 			return "", diagnostic(CodeTypeMismatch, c.Span, "sample: second argument must be vec2 uv, got %s", uv)
 		}
 		return ir.Vec4, nil
+	case builtinSampleDepth:
+		if len(c.Args) != spec.arity {
+			return "", diagnostic(CodeInvalidCall, c.Span, "sampleDepth(texture, uv) takes 2 arguments")
+		}
+		tex, ok := c.Args[0].(hir.Ref)
+		if !ok || t.paramKind[tex.Name] != hir.TextureDepth2D {
+			return "", diagnostic(CodeInvalidCall, c.Span, "sampleDepth: first argument must be a textureDepth2d engine texture such as opaqueDepth")
+		}
+		uv, err := t.typeOf(c.Args[1])
+		if err != nil {
+			return "", err
+		}
+		if uv != ir.Vec2 {
+			return "", diagnostic(CodeTypeMismatch, c.Span, "sampleDepth: second argument must be vec2 uv, got %s", uv)
+		}
+		return ir.Float, nil
 	case builtinSampleLevel:
 		if len(c.Args) != spec.arity {
 			return "", diagnostic(CodeInvalidCall, c.Span, "sampleLevel(texture, uv, lod) takes 3 arguments")
@@ -385,6 +404,9 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 				// name it. Point at the builtin that does.
 				return "", diagnostic(CodeInvalidCall, c.Span,
 					"sampleLevel: %s is an engine backdrop, not a texture2d param; use sceneColorLevel(uv, lod)", tex.Name)
+			}
+			if ok && t.paramKind[tex.Name] == hir.TextureDepth2D {
+				return "", diagnostic(CodeInvalidCall, c.Span, "sampleLevel: %s is a textureDepth2d; read it with sampleDepth(texture, uv)", tex.Name)
 			}
 			return "", diagnostic(CodeInvalidCall, c.Span, "sampleLevel: first argument must be a texture2d param")
 		}

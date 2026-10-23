@@ -1,6 +1,7 @@
 package selena
 
 import (
+	"strings"
 	"testing"
 
 	"m31labs.dev/selena/ir"
@@ -48,5 +49,25 @@ func TestCompileErrorWrapsEmitError(t *testing.T) {
 func TestCompileErrorNilIsNil(t *testing.T) {
 	if got := compileError(nil); got != nil {
 		t.Fatalf("compileError(nil) = %v, want nil", got)
+	}
+}
+
+// A rejected sample() in vertex() must point the author at sampleLevel, the
+// call that is available there, not tell them only to move to surface().
+func TestVertexSampleHintNamesSampleLevel(t *testing.T) {
+	_, err := Compile([]byte(`material Bad {
+    param albedo : texture2d
+    vertex() -> vec4 {
+        let s = sample(albedo, vec2f(0.0, 0.0))
+        return vec4f(s.xyz, 1.0)
+    }
+    surface(geo) -> color { return rgb(1.0, 1.0, 1.0) }
+}`), CompileOptions{Targets: []Target{}})
+	ce, ok := err.(*CompileError)
+	if !ok || len(ce.Diagnostics) == 0 {
+		t.Fatalf("err = %v, want a CompileError", err)
+	}
+	if h := ce.Diagnostics[0].Hint; !strings.Contains(h, "sampleLevel") {
+		t.Fatalf("hint = %q, want it to name sampleLevel", h)
 	}
 }

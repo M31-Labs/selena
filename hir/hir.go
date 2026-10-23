@@ -23,6 +23,9 @@ const (
 	Sun         Type = "Sun"         // stdlib record: { dir: vec3, ambient: float }
 	Texture2D   Type = "texture2d"   // M2
 	TextureCube Type = "textureCube" // cube-map texture; sampled with sampleCube(tex, dir) -> vec4
+	// TextureDepth2D is a 2D depth texture, declared only for engine inputs in a
+	// context block (opaqueDepth); read with sampleDepth(tex, uv) -> float.
+	TextureDepth2D Type = "textureDepth2d"
 )
 
 // Position is a 1-based source position with a 0-based byte offset.

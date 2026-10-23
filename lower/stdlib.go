@@ -76,6 +76,9 @@ const (
 	// control flow, so authors use it for sample() calls that must live inside
 	// an if/for.
 	builtinSampleLevel builtinKind = "sample_level"
+	// builtinSampleDepth: sampleDepth(tex, uv) reads a textureDepth2d engine
+	// texture at its base level, returning float. Legal in both stages.
+	builtinSampleDepth builtinKind = "sample_depth"
 )
 
 type builtinSpec struct {
@@ -194,6 +197,7 @@ var stdlib = stdlibRegistry{
 		"distance":        {kind: builtinDistance, arity: 2},
 		"sample":          {kind: builtinSample, arity: 2},
 		"sampleLevel":     {kind: builtinSampleLevel, arity: 3},
+		"sampleDepth":     {kind: builtinSampleDepth, arity: 2},
 		"sampleCube":      {kind: builtinSampleCube, arity: 2},
 		"sampleCubeLevel": {kind: builtinSampleCubeLevel, arity: 3},
 		"rgb":             {kind: builtinRGB},
