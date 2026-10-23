@@ -32,8 +32,9 @@ type typer struct {
 	// a statefield; valid in both the authored vertex stage and the surface). B4.
 	allowStateAt bool
 	// inVertexStage marks this typer as type-checking an authored vertex() body.
-	// See the identical field on resolver for why dpdx/dpdy/fwidth and
-	// sample/sampleLevel/sampleCube are rejected here rather than typed through.
+	// See the identical field on resolver for why dpdx/dpdy/fwidth and the
+	// implicit-LOD and cube sampling calls are rejected here rather than typed
+	// through; sampleLevel(tex, uv, lod) is allowed.
 	inVertexStage bool
 	// arrayLocals tracks local fixed-size array variables (B2b).
 	arrayLocals map[string]arrayInfo
@@ -206,9 +207,8 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 			return "", diagnostic(CodeInvalidCall, c.Span,
 				"%s is a fragment-stage builtin and is not available in vertex()", c.Func)
 		}
-		if c.Func == "sample" || c.Func == "sampleLevel" || c.Func == "sampleCube" || c.Func == "sampleCubeLevel" {
-			return "", diagnostic(CodeInvalidCall, c.Span,
-				"%s() is not available in the vertex stage; no backend wires a texture binding into the authored vertex() stage yet", c.Func)
+		if msg := vertexSampleRejection(c.Func); msg != "" {
+			return "", diagnostic(CodeInvalidCall, c.Span, "%s", msg)
 		}
 	}
 

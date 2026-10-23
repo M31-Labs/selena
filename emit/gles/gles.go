@@ -54,6 +54,11 @@ func emitVertexAuthored(m ir.Module) string {
 	if m.StateField != "" {
 		b.WriteString("uniform highp sampler2D stateTex;\n")
 	}
+	// Textures the authored vertex() samples with sampleLevel. highp: a
+	// vertex-stage sampler2D defaults to lowp, too coarse for a height field.
+	for _, name := range ir.VertexSampledTextures(m) {
+		fmt.Fprintf(&b, "uniform highp sampler2D %s;\n", name)
+	}
 	for _, v := range m.Varyings {
 		fmt.Fprintf(&b, "out %s %s;\n", typeName(v.Type), v.Name)
 	}

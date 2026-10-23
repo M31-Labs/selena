@@ -374,15 +374,17 @@ func TestFeedbackEarlyReturnValidatesWithNaga(t *testing.T) {
 }
 
 // TestVertexStageRejectsFragmentOnlyBuiltins is the compile-time half of the
-// silent-invalid-shader defect: dpdx/dpdy/fwidth and the sample/sampleLevel/
-// sampleCube family used to type-check and resolve inside an authored
+// silent-invalid-shader defect: dpdx/dpdy/fwidth and the sample/sampleCube
+// family used to type-check and resolve inside an authored
 // vertex() body, so Selena reported a successful compile while emitting a
 // shader that failed validation on every backend — see
 // TestPreFixVertexDerivativeWouldHaveFailedNagaValidation and
 // TestPreFixVertexSampleWouldHaveFailedNagaValidation /
 // TestPreFixVertexSampleWouldHaveFailedGlslangValidation below for the
 // empirical proof. lower/resolver.go's and lower/typer.go's inVertexStage
-// guard now rejects all six at compile time instead.
+// guard now rejects them at compile time instead. sampleLevel (2D, explicit
+// LOD) is no longer rejected: every backend declares its texture in the vertex
+// scaffold now (see vertex_texture_test.go for its validation).
 func TestVertexStageRejectsFragmentOnlyBuiltins(t *testing.T) {
 	cases := []struct {
 		name string
@@ -392,8 +394,8 @@ func TestVertexStageRejectsFragmentOnlyBuiltins(t *testing.T) {
 		{"dpdy", "dpdy(vec3f(1.0, 2.0, 3.0))"},
 		{"fwidth", "fwidth(vec3f(1.0, 2.0, 3.0))"},
 		{"sample", "sample(albedo, vec2f(0.0, 0.0))"},
-		{"sampleLevel", "sampleLevel(albedo, vec2f(0.0, 0.0), 0.0)"},
 		{"sampleCube", "sampleCube(sky, vec3f(0.0, 1.0, 0.0))"},
+		{"sampleCubeLevel", "sampleCubeLevel(sky, vec3f(0.0, 1.0, 0.0), 1.0)"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -544,10 +546,10 @@ fn fragmentMain(in : VertexOutput) -> @location(0) vec4<f32> {
 }
 
 // TestPreFixVertexSampleWouldHaveFailedGlslangValidation is the GLSL ES 1.00
-// counterpart, and the reason the fix rejects sample()/sampleLevel()/
-// sampleCube() rather than trying to "emit correctly": none of the three
-// non-WGSL authored-vertex emitters declare a texture/sampler binding in the
-// vertex source at all (glsl.go's and gles.go's emitVertexAuthored, and
+// counterpart, and the reason sample()/sampleCube() stay rejected
+// and why sampleLevel() needed vertex-scaffold bindings: before the vertex
+// scaffolds declared textures, none of the three non-WGSL authored-vertex
+// emitters declared a texture/sampler binding in the vertex source at all (glsl.go's and gles.go's emitVertexAuthored, and
 // metal.go's emitMeshAuthored, only loop over m.Textures for the FRAGMENT
 // half). A sample() call in vertex() referenced an undeclared identifier —
 // this .vert source is exactly that shape. Confirmed with glslangValidator

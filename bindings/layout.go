@@ -126,13 +126,25 @@ type Requirements struct {
 	// pixels each time the target is resized. WGSL, GLES and Metal read the size
 	// off the bound texture and need nothing.
 	GLSceneSizeUniform string `json:"glSceneSizeUniform,omitempty"`
+	// GLVertexTextureUnits is the number of vertex-stage texture units the GLSL
+	// ES 1.00 (WebGL 1) artifact needs: the count of textures with
+	// Texture.VertexStage. GLSL ES 1.00 allows MAX_VERTEX_TEXTURE_IMAGE_UNITS to
+	// be 0, and some WebGL 1 devices report 0. A host must compare it with
+	// gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS) and, when the device
+	// has fewer, choose another material or the WebGL 2 (GLES) artifact instead
+	// of compiling the GLSL one, which would fail to link. Selena cannot check
+	// the device, so it emits the shader and declares the need here. The GLES
+	// (GLSL ES 3.00) artifact guarantees at least 16 vertex units, and the WGSL
+	// and Metal artifacts have no such limit below their per-stage texture
+	// caps (WebGPU default 16, Metal 31), so they need nothing.
+	GLVertexTextureUnits int `json:"glVertexTextureUnits,omitempty"`
 }
 
 // IsZero reports whether r carries no host requirement. It also drives
 // `json:"omitzero"` on Layout.Requires so that descriptors for materials with
 // no extra host contract are byte-identical to the pre-Requirements form.
 func (r Requirements) IsZero() bool {
-	return len(r.GLExtensions) == 0 && !r.SceneColorMips && r.GLSceneSizeUniform == ""
+	return len(r.GLExtensions) == 0 && !r.SceneColorMips && r.GLSceneSizeUniform == "" && r.GLVertexTextureUnits == 0
 }
 
 // StateField is one feedback-kind vec4-per-cell statefield with its per-backend
@@ -243,6 +255,14 @@ type Texture struct {
 	WGSL      WGSLTexBinding  `json:"wgsl"`
 	GL        GLTexBinding    `json:"gl"`
 	Metal     MetalTexBinding `json:"metal"`
+	// VertexStage is true when the authored vertex() stage samples this texture
+	// (sampleLevel). The binding coordinates are the same in both stages; the
+	// host must make the binding visible to the vertex stage: WebGPU bind-group
+	// layout visibility GPUShaderStage.VERTEX | FRAGMENT for the texture and its
+	// sampler, Metal setVertexTexture/setVertexSamplerState at the same indices,
+	// WebGL the same texture unit (see Requirements.GLVertexTextureUnits). Absent
+	// (false) means fragment-only, as in every descriptor before this field.
+	VertexStage bool `json:"vertexStage,omitempty"`
 }
 
 // WGSLTexBinding gives the bind-group slots for the texture and its sampler.

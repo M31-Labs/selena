@@ -87,6 +87,7 @@ func hostRequirements(mod ir.Module) bindings.Requirements {
 	if ir.UsesSceneSize(mod) {
 		req.GLSceneSizeUniform = "_sceneSize"
 	}
+	req.GLVertexTextureUnits = len(ir.VertexSampledTextures(mod))
 	return req
 }
 

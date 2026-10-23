@@ -265,3 +265,25 @@ func UsesCubeSampleLevel(m Module) bool {
 	pred := func(e Expr) bool { _, ok := e.(SampleCubeLevel); return ok }
 	return stageMatches(m.Fragment, pred) || (m.Specular != nil && stageMatches(*m.Specular, pred))
 }
+
+// VertexSampledTextures returns the names of the textures m's authored vertex
+// stage samples with sampleLevel, in m.Textures order and without duplicates.
+// Only 2D textures can appear: lowering rejects the other sampling calls in
+// vertex(). The emitters declare exactly these in the vertex scaffold, and the
+// binding descriptor marks them vertex-visible.
+func VertexSampledTextures(m Module) []string {
+	used := map[string]bool{}
+	stageMatches(m.Vertex, func(e Expr) bool {
+		if s, ok := e.(SampleLevel); ok {
+			used[s.Texture] = true
+		}
+		return false // keep walking: collect every use
+	})
+	var out []string
+	for _, t := range m.Textures {
+		if used[t.Name] {
+			out = append(out, t.Name)
+		}
+	}
+	return out
+}

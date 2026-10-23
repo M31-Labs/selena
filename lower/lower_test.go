@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"m31labs.dev/selena/bindings"
 	"m31labs.dev/selena/emit/gles"
 	"m31labs.dev/selena/emit/glsl"
 	"m31labs.dev/selena/emit/metal"
@@ -270,24 +271,23 @@ func TestLowerAllowsDerivativesInSurface(t *testing.T) {
 	}
 }
 
-// TestLowerRejectsTextureSamplingInVertexStage checks the second half of the
-// defect: sample/sampleLevel/sampleCube type-checked and resolved inside an
-// authored vertex() body, but no backend wires a texture/sampler binding into
-// the vertex scaffold — GLSL ES 1.00 and GLES 3.00 declare textures only in
-// their fragment counterpart of emitVertexAuthored, and Metal's
-// emitMeshAuthored omits texture/sampler params from vertexMain's signature —
-// so the emitted shader referenced an undeclared identifier on three of four
-// backends, and WGSL's textureSample fails naga's fragment-stage-only rule on
-// the fourth. All three calls are rejected at compile time instead.
-func TestLowerRejectsTextureSamplingInVertexStage(t *testing.T) {
+// TestLowerRejectsImplicitAndCubeSamplingInVertexStage keeps the rejections
+// that remain after sampleLevel became legal in vertex(): sample() and
+// sampleCube() use implicit derivatives, which a vertex shader does not have
+// (naga rejects textureSample outside the fragment stage), and
+// sampleCubeLevel() is not yet wired into the vertex scaffolds.
+func TestLowerRejectsImplicitAndCubeSamplingInVertexStage(t *testing.T) {
 	cases := []struct {
 		name string
 		call string
+		want string
 	}{
-		{name: "sample", call: "sample(albedo, vec2f(0.0, 0.0))"},
-		{name: "sampleLevel", call: "sampleLevel(albedo, vec2f(0.0, 0.0), 0.0)"},
-		{name: "sampleCube", call: "sampleCube(sky, vec3f(0.0, 1.0, 0.0))"},
-		{name: "sampleCubeLevel", call: "sampleCubeLevel(sky, vec3f(0.0, 1.0, 0.0), 2.0)"},
+		{"sample", "sample(albedo, vec2f(0.0, 0.0))",
+			"sample() is not available in the vertex stage: it needs implicit derivatives; use sampleLevel(texture, uv, lod)"},
+		{"sampleCube", "sampleCube(sky, vec3f(0.0, 1.0, 0.0))",
+			"sampleCube() is not available in the vertex stage: it needs implicit derivatives; use sampleLevel(texture, uv, lod)"},
+		{"sampleCubeLevel", "sampleCubeLevel(sky, vec3f(0.0, 1.0, 0.0), 2.0)",
+			"sampleCubeLevel() is not available in the vertex stage yet; only sampleLevel(texture, uv, lod) is supported there"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -317,11 +317,76 @@ func TestLowerRejectsTextureSamplingInVertexStage(t *testing.T) {
 			if de.Code != CodeInvalidCall {
 				t.Fatalf("code = %s, want %s", de.Code, CodeInvalidCall)
 			}
-			want := c.name + "() is not available in the vertex stage; no backend wires a texture binding into the authored vertex() stage yet"
-			if de.Message != want {
-				t.Fatalf("message = %q, want %q", de.Message, want)
+			if de.Message != c.want {
+				t.Fatalf("message = %q, want %q", de.Message, c.want)
 			}
 		})
+	}
+}
+
+const vertexTextureSrc = `material Displace {
+    param heightMap : texture2d
+    param tint      : texture2d
+    param scale     : float = 0.25
+    varying height : float
+    vertex(geo) -> vec4 {
+        let h = sampleLevel(heightMap, geo.uv, 0.0).x
+        height = h
+        return mvp * vec4f(geo.position + geo.normal * (h * scale), 1.0)
+    }
+    surface(geo) -> color {
+        let c = sample(tint, vec2f(0.5, 0.5))
+        return rgb(c.x * geo.height, c.y, c.z)
+    }
+}`
+
+// TestLowerAcceptsSampleLevelInVertexStage checks that an authored vertex()
+// may call sampleLevel on a texture2d param, and that the descriptor tells the
+// host which textures the vertex stage reads and what a WebGL 1 host must have.
+func TestLowerAcceptsSampleLevelInVertexStage(t *testing.T) {
+	program, err := parse.Program([]byte(vertexTextureSrc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mod, layout, err := LowerProgram(program, 0)
+	if err != nil {
+		t.Fatalf("sampleLevel in vertex() rejected: %v", err)
+	}
+	if !mod.VertexAuthored {
+		t.Fatal("module is not vertex-authored")
+	}
+	if len(layout.Textures) != 2 {
+		t.Fatalf("textures = %d, want 2", len(layout.Textures))
+	}
+	byName := map[string]bindings.Texture{}
+	for _, tx := range layout.Textures {
+		byName[tx.Name] = tx
+	}
+	if !byName["heightMap"].VertexStage {
+		t.Error("heightMap.VertexStage = false, want true: the vertex stage samples it")
+	}
+	if byName["tint"].VertexStage {
+		t.Error("tint.VertexStage = true, want false: only the fragment samples it")
+	}
+	if layout.Requires.GLVertexTextureUnits != 1 {
+		t.Errorf("Requires.GLVertexTextureUnits = %d, want 1", layout.Requires.GLVertexTextureUnits)
+	}
+}
+
+// TestLowerFragmentOnlyTexturesAreNotVertexVisible keeps descriptors for
+// materials that never sample in vertex() unchanged.
+func TestLowerFragmentOnlyTexturesAreNotVertexVisible(t *testing.T) {
+	_, layout, err := Lower(hir.Textured())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tx := range layout.Textures {
+		if tx.VertexStage {
+			t.Errorf("texture %s marked VertexStage on a material with no vertex()", tx.Name)
+		}
+	}
+	if layout.Requires.GLVertexTextureUnits != 0 {
+		t.Errorf("GLVertexTextureUnits = %d, want 0", layout.Requires.GLVertexTextureUnits)
 	}
 }
 

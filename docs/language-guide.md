@@ -11,6 +11,13 @@ A mesh or general material may also author a `vertex() -> vec4` stage — see
 separate composing vertex hook that mutates geometry while the default
 pipeline still runs is not part of the stable `.sel` surface yet.
 
+`vertex()` can read a `texture2d` param with `sampleLevel(tex, uv, lod)`, for
+example to displace vertices from a height texture (see
+`testdata/conformance/vertex-texture.sel`). The LOD is explicit because a vertex
+shader has no derivatives; `sample`, `sampleCube` and `dpdx`/`dpdy`/`fwidth` are
+rejected there. The descriptor marks such textures `vertexStage: true`, and a
+WebGL 1 host checks `requires.glVertexTextureUnits`.
+
 ## Solid Color
 
 ```selena

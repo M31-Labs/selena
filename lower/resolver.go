@@ -34,18 +34,13 @@ type resolver struct {
 	// kinds (points, feedback) that do not support discard.
 	allowDiscard bool
 	// inVertexStage marks this resolver as building an authored vertex() body
-	// (lower_vertex.go's vrs). It rejects dpdx/dpdy/fwidth and the texture-sample
-	// family (sample/sampleLevel/sampleCube) rather than lowering them: derivatives
-	// are illegal in a vertex shader on every target language (not merely
-	// unflagged — see ir.UsesDerivatives), and none of the four backends today
-	// wire a texture/sampler binding into the authored-vertex scaffold (GLSL ES
-	// 1.00 and GLES 3.00 declare textures only in emitVertexAuthored's fragment
-	// counterpart; Metal's emitMeshAuthored omits texture/sampler params from
-	// vertexMain's signature). Before this guard, calling any of them from
-	// vertex() type-checked and resolved, then failed validation on every
-	// backend: naga rejects textureSample/dFdx-family calls outside the fragment
-	// stage, and GLSL/GLES/Metal reference an undeclared identifier. See
-	// validate/validate_test.go for the naga/glslangValidator proof.
+	// (lower_vertex.go's vrs). It rejects dpdx/dpdy/fwidth and the sampling calls
+	// a vertex shader cannot run (see vertexSampleRejection): derivatives are
+	// illegal in a vertex shader on every target language (see
+	// ir.UsesDerivatives), and implicit-LOD sampling needs them. Explicit-LOD
+	// sampleLevel(tex, uv, lod) is allowed; each backend's authored-vertex
+	// scaffold declares the textures it reads and the descriptor marks them
+	// (bindings.Texture.VertexStage).
 	inVertexStage bool
 
 	// loopDepth counts enclosing for loops. `break` is only meaningful inside one;
@@ -108,9 +103,8 @@ func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
 				return nil, diagnostic(CodeInvalidCall, x.Span,
 					"%s is a fragment-stage builtin and is not available in vertex()", x.Func)
 			}
-			if x.Func == "sample" || x.Func == "sampleLevel" || x.Func == "sampleCube" || x.Func == "sampleCubeLevel" {
-				return nil, diagnostic(CodeInvalidCall, x.Span,
-					"%s() is not available in the vertex stage; no backend wires a texture binding into the authored vertex() stage yet", x.Func)
+			if msg := vertexSampleRejection(x.Func); msg != "" {
+				return nil, diagnostic(CodeInvalidCall, x.Span, "%s", msg)
 			}
 		}
 		if x.Func == "sceneColor" || x.Func == "sceneDepth" {

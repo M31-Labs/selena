@@ -62,6 +62,13 @@ func emitVertexAuthored(m ir.Module) string {
 	if m.StateField != "" {
 		b.WriteString("uniform highp sampler2D stateTex;\n")
 	}
+	// Textures the authored vertex() samples with sampleLevel. highp: a
+	// vertex-stage sampler2D defaults to lowp, too coarse for a height field.
+	// GLSL ES 1.00 may expose zero vertex texture units; the descriptor's
+	// Requires.GLVertexTextureUnits tells the host how many it needs.
+	for _, name := range ir.VertexSampledTextures(m) {
+		fmt.Fprintf(&b, "uniform highp sampler2D %s;\n", name)
+	}
 	for _, v := range m.Varyings {
 		fmt.Fprintf(&b, "varying %s %s;\n", typeName(v.Type), v.Name)
 	}
