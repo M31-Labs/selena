@@ -109,7 +109,7 @@ func diagnosticHint(code, message string) string {
 	case strings.Contains(message, "is a fragment-stage builtin and is not available in vertex()"):
 		return "Move the derivative call into surface(); a vertex shader has no neighboring screen-space pixels to derive against."
 	case strings.Contains(message, "is not available in the vertex stage"):
-		return "Sample the texture in surface() instead, or read live simulation state in vertex() with stateAt(uv)."
+		return "Use sampleLevel(texture, uv, lod) in vertex(), sample in surface(), or read live simulation state in vertex() with stateAt(uv)."
 	case strings.Contains(message, "which also declares vertex()"):
 		return "Remove one of the two vertex() declarations, or drop `extends` if the child needs its own vertex stage."
 	}
