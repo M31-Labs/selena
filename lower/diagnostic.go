@@ -13,6 +13,7 @@ const (
 	CodeReservedName       = "SEL1004"
 	CodeUnsupportedFeat    = "SEL1005"
 	CodeInterfaceCollision = "SEL1006"
+	CodeEngineInput        = "SEL1007"
 	CodeUnknownName        = "SEL2001"
 	CodeInvalidMember      = "SEL2002"
 	CodeInvalidCall        = "SEL2003"

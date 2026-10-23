@@ -184,6 +184,9 @@ func buildUniformPlan(params []hir.Param, context []hir.ContextField) (uniformPl
 	// surface as a customUniforms default (C9); it exists in the HIR purely as
 	// a native/test-oracle fallback for a later host-side path.
 	for _, c := range context {
+		if err := checkEngineInput(c); err != nil {
+			return uniformPlan{}, err
+		}
 		if c.IsArray {
 			elemType, ok := hirToIRType(c.Type)
 			if !ok {
@@ -250,6 +253,9 @@ func lowerContextFields(
 		if err := validateAuthorName("context field", c.Name, c.Span); err != nil {
 			return nil, err
 		}
+		if err := checkEngineInput(c); err != nil {
+			return nil, err
+		}
 		if seen[c.Name] {
 			return nil, diagnostic(CodeDuplicateParam, c.Span, "context %q: name already used by a param or another context field", c.Name)
 		}
@@ -302,6 +308,43 @@ func stampContextClass(fields []bindings.Field, names []string) {
 	for i := range fields {
 		if set[fields[i].Name] {
 			fields[i].Class = "context"
+			if _, ok := bindings.LookupEngineInput(fields[i].Name); ok {
+				fields[i].Source = "engine"
+			}
+		}
+	}
+}
+
+// checkEngineInput reports a context declaration that names a registered
+// engine input but gives it the wrong shape. Names outside the registry are
+// host-custom and pass.
+func checkEngineInput(c hir.ContextField) error {
+	in, ok := bindings.LookupEngineInput(c.Name)
+	if !ok {
+		return nil
+	}
+	if c.IsArray {
+		return diagnostic(CodeEngineInput, c.Span, "context %q: engine input %s is %s, not an array", c.Name, c.Name, in.Type)
+	}
+	if string(c.Type) != in.Type {
+		return diagnostic(CodeEngineInput, c.Span, "context %q: engine input %s is %s, declared as %s", c.Name, c.Name, in.Type, c.Type)
+	}
+	return nil
+}
+
+// stampEngineVersion sets layout.EngineVersion when the descriptor carries an
+// engine input.
+func stampEngineVersion(layout *bindings.Layout) {
+	for _, f := range layout.UniformBlock.Fields {
+		if f.Source == "engine" {
+			layout.EngineVersion = bindings.EngineVersion
+			return
+		}
+	}
+	for _, t := range layout.Textures {
+		if t.Engine != "" {
+			layout.EngineVersion = bindings.EngineVersion
+			return
 		}
 	}
 }

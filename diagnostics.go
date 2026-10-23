@@ -128,6 +128,8 @@ func diagnosticHint(code, message string) string {
 		return "This feature is not available here; author vertex()/varying/statefield only in mesh materials, and keep vertex() bodies to let bindings and varying writes."
 	case "SEL1006":
 		return "Rename one of the two declarations; they land on the same emitted uniform, texture, attribute, or varying slot."
+	case "SEL1007":
+		return "Declare the engine input with the type the registry gives it (see bindings.EngineInputs), or rename the context field if it is host-specific."
 	case "SEL2001":
 		return "Declare a material param or let binding with this name, or correct the identifier."
 	case "SEL2002":

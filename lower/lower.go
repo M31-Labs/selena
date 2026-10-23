@@ -51,6 +51,7 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 		return ir.Module{}, bindings.Layout{}, err
 	}
 	layout.Requires = hostRequirements(mod)
+	stampEngineVersion(&layout)
 	return mod, layout, nil
 }
 
