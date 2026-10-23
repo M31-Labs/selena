@@ -190,6 +190,20 @@ func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
 			}
 			return ir.Sample{Texture: texRef.Name, UV: uv}, nil
 		}
+		if x.Func == "sampleDepth" {
+			if len(x.Args) != 2 {
+				return nil, diagnostic(CodeInvalidCall, x.Span, "sampleDepth(texture, uv) takes 2 arguments")
+			}
+			texRef, ok := x.Args[0].(hir.Ref)
+			if !ok || r.paramKind[texRef.Name] != hir.TextureDepth2D {
+				return nil, diagnostic(CodeInvalidCall, x.Span, "sampleDepth: first argument must be a textureDepth2d engine texture such as opaqueDepth")
+			}
+			uv, err := r.expr(x.Args[1])
+			if err != nil {
+				return nil, err
+			}
+			return ir.SampleDepth{Texture: texRef.Name, UV: uv}, nil
+		}
 		if x.Func == "sampleLevel" {
 			if len(x.Args) != 3 {
 				return nil, diagnostic(CodeInvalidCall, x.Span, "sampleLevel(texture, uv, lod) takes 3 arguments")

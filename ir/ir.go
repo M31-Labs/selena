@@ -82,6 +82,9 @@ type Module struct {
 type Texture struct {
 	Name string
 	Cube bool // true = cube-map texture; false (default) = 2D texture
+	// Depth marks a 2D depth texture: WGSL texture_depth_2d, Metal depth2d<float>,
+	// GLSL a sampler2D over a depth format. It is read with SampleDepth.
+	Depth bool
 }
 
 // Binding is a named, typed interface slot.
@@ -316,6 +319,23 @@ type SampleLevel struct {
 	LOD     Expr
 }
 
+// SampleDepth reads the depth value of a Depth texture at UV and returns a
+// float. No derivatives or filtering are involved (it reads the base level), so
+// it is legal in the vertex stage and inside non-uniform control flow.
+// WGSL:         textureLoad(tex, texel, 0) (texel = clamped uv times the size)
+// GLSL ES 1.00: texture2D(tex, uv).x
+// GLSL ES 3.00: textureLod(tex, uv, 0.0).x
+// Metal:        tex.sample(texSampler, uv, level(0.0))
+type SampleDepth struct {
+	Texture string
+	UV      Expr
+}
+
+// DepthDialect is the optional Dialect extension that renders SampleDepth.
+type DepthDialect interface {
+	SampleDepth(tex, uv string) string
+}
+
 // SampleCube samples a cube-map Texture by a vec3 direction vector. Each
 // backend renders it differently (see Dialect.SampleCube); the named texture
 // must be declared in Module.Textures with Cube == true.
@@ -428,6 +448,7 @@ func (Unary) isExpr()           {}
 func (Swizzle) isExpr()         {}
 func (Sample) isExpr()          {}
 func (SampleLevel) isExpr()     {}
+func (SampleDepth) isExpr()     {}
 func (SampleCube) isExpr()      {}
 func (SampleCubeLevel) isExpr() {}
 func (SceneSample) isExpr()     {}
@@ -560,6 +581,12 @@ func Print(e Expr, d Dialect) string {
 		return d.Sample(x.Texture, Print(x.UV, d))
 	case SampleLevel:
 		return d.SampleLevel(x.Texture, Print(x.UV, d), Print(x.LOD, d))
+	case SampleDepth:
+		if dd, ok := d.(DepthDialect); ok {
+			return dd.SampleDepth(x.Texture, Print(x.UV, d))
+		}
+		emitPanic(CodeEmitUnwiredNode, "dialect does not support depth texture reads")
+		return ""
 	case SampleCubeLevel:
 		if cd, ok := d.(CubeLevelDialect); ok {
 			return cd.SampleCubeLevel(x.Texture, Print(x.Dir, d), Print(x.LOD, d))

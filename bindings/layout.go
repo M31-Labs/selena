@@ -111,6 +111,7 @@ type Requirements struct {
 	//
 	//   OES_standard_derivatives — dpdx / dpdy / fwidth
 	//   EXT_shader_texture_lod   — sceneColorLevel (fragment-stage explicit LOD)
+	//   WEBGL_depth_texture      — a textureDepth2d engine texture (opaqueDepth)
 	//
 	// The GLES (GLSL ES 3.00), WGSL and Metal artifacts have all of this in
 	// core and need nothing.

@@ -2,6 +2,7 @@ package lower
 
 import (
 	"fmt"
+	"strings"
 
 	"m31labs.dev/selena/bindings"
 	"m31labs.dev/selena/hir"
@@ -18,6 +19,11 @@ type uniformPlan struct {
 	// (WGSL), samplerCube (GLSL/GLES), or texturecube<float> (Metal) and is
 	// sampled with sampleCube(tex, dir) → ir.SampleCube. Absent or false = 2D.
 	cubeTextures map[string]bool
+	// depthTextures marks textureDepth2d engine textures; engineTextures maps a
+	// context-declared texture to its engine input name. Both come from the
+	// context block, appended after the author texture params.
+	depthTextures  map[string]bool
+	engineTextures map[string]string
 	// paramArrays maps array-param names to their element type + count (B3.2).
 	// These are uniform arrays declared as `param name : array<T, N>` and are
 	// excluded from the scalar uniforms list. The typer uses this to allow
@@ -209,8 +215,24 @@ func buildUniformPlan(params []hir.Param, context []hir.ContextField) (uniformPl
 			continue
 		}
 		switch c.Type {
-		case hir.Sun, hir.Texture2D, hir.TextureCube:
-			return uniformPlan{}, diagnostic(CodeUnsupportedType, c.Span, "context %q: type %q is not supported in a context block (no records or textures)", c.Name, c.Type)
+		case hir.Texture2D, hir.TextureDepth2D:
+			// Only registered engine textures: the renderer binds them by name.
+			if in, ok := bindings.LookupEngineInput(c.Name); !ok || in.Kind != bindings.EngineTexture {
+				return uniformPlan{}, diagnostic(CodeUnsupportedType, c.Span, "context %q: a context block can declare only engine textures (%s); declare other textures as `param name : texture2d`", c.Name, engineTextureNames())
+			}
+			plan.textures = append(plan.textures, c.Name)
+			if plan.engineTextures == nil {
+				plan.engineTextures = map[string]string{}
+			}
+			plan.engineTextures[c.Name] = c.Name
+			if c.Type == hir.TextureDepth2D {
+				if plan.depthTextures == nil {
+					plan.depthTextures = map[string]bool{}
+				}
+				plan.depthTextures[c.Name] = true
+			}
+		case hir.Sun, hir.TextureCube:
+			return uniformPlan{}, diagnostic(CodeUnsupportedType, c.Span, "context %q: type %q is not supported in a context block (no records or cube textures; engine textures are %s)", c.Name, c.Type, engineTextureNames())
 		default:
 			t, ok := hirToIRType(c.Type)
 			if !ok {
@@ -277,7 +299,9 @@ func lowerContextFields(
 			continue
 		}
 		switch c.Type {
-		case hir.Sun, hir.Texture2D, hir.TextureCube:
+		case hir.Texture2D, hir.TextureDepth2D:
+			return nil, diagnostic(CodeUnsupportedType, c.Span, "context %q: engine textures are supported only in mesh materials", c.Name)
+		case hir.Sun, hir.TextureCube:
 			return nil, diagnostic(CodeUnsupportedType, c.Span, "context %q: type %q is not supported in a context block (no records or textures)", c.Name, c.Type)
 		default:
 			t, ok := hirToIRType(c.Type)
@@ -779,4 +803,37 @@ func (lc *lowerCtx) lowerStmt(s hir.Stmt) (ir.Stmt, error) {
 		}}, nil
 	}
 	return ir.Stmt{}, fmt.Errorf("unsupported HIR statement type %T in lower", s)
+}
+
+// engineTextureNames lists the registered engine texture names for diagnostics.
+func engineTextureNames() string {
+	var names []string
+	for _, in := range bindings.EngineInputs() {
+		if in.Kind == bindings.EngineTexture {
+			names = append(names, in.Name)
+		}
+	}
+	return strings.Join(names, ", ")
+}
+
+// planIRTextures builds the module's texture list from the plan.
+func planIRTextures(plan uniformPlan) []ir.Texture {
+	out := make([]ir.Texture, len(plan.textures))
+	for i, t := range plan.textures {
+		out[i] = ir.Texture{Name: t, Cube: plan.cubeTextures[t], Depth: plan.depthTextures[t]}
+	}
+	return out
+}
+
+// planLayoutTextures builds the descriptor's texture entries from the plan:
+// the standard binding arithmetic, plus depth dimension and engine names.
+func planLayoutTextures(plan uniformPlan) []bindings.Texture {
+	out := bindings.ComputeTexturesMixed(plan.textures, plan.cubeTextures)
+	for i := range out {
+		if plan.depthTextures[out[i].Name] {
+			out[i].Dimension = "depth2d"
+		}
+		out[i].Engine = plan.engineTextures[out[i].Name]
+	}
+	return out
 }

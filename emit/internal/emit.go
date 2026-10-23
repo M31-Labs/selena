@@ -245,6 +245,33 @@ func (r Resolver) SampleLevel(tex, uv, lod string) string {
 	}
 }
 
+// SampleDepth renders a read of a depth texture at uv, returning a float. It
+// reads the base level with no derivatives, so it is legal in the vertex stage.
+//
+// WGSL:         textureLoad(tex, texel, 0) where texel is uv scaled to the texture
+//
+//	size and clamped to the edge texel, matching CLAMP_TO_EDGE
+//
+// GLSL ES 1.00: texture2D(tex, uv).x (the sampler must use NEAREST filtering;
+//
+//	WebGL 1 needs the WEBGL_depth_texture extension to create one)
+//
+// GLSL ES 3.00: textureLod(tex, uv, 0.0).x
+// Metal:        tex.sample(texSampler, uv, level(0.0))
+func (r Resolver) SampleDepth(tex, uv string) string {
+	switch r.Dialect.(type) {
+	case dialect.WGSL:
+		size := "vec2<f32>(textureDimensions(" + tex + "))"
+		return "textureLoad(" + tex + ", vec2<i32>(clamp(floor((" + uv + ") * " + size + "), vec2<f32>(0.0), " + size + " - vec2<f32>(1.0))), 0)"
+	case dialect.Metal:
+		return tex + ".sample(" + tex + "Sampler, " + uv + ", level(0.0))"
+	case dialect.GLES:
+		return "textureLod(" + tex + ", " + uv + ", 0.0).x"
+	default:
+		return "texture2D(" + tex + ", " + uv + ").x"
+	}
+}
+
 // SampleCube renders a cube-map texture sample by a vec3 direction vector.
 func (r Resolver) SampleCube(tex, dir string) string { return r.Dialect.SampleCube(tex, dir) }
 

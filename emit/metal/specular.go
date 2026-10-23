@@ -13,10 +13,7 @@ func writeSpecularFragment(b *strings.Builder, m ir.Module, fs internal.Resolver
 	entry := []string{"VertexOut in [[stage_in]]", "constant Uniforms& u [[buffer(0)]]"}
 	args := []string{"in", "u"}
 	for i, t := range m.Textures {
-		typ := "texture2d<float>"
-		if t.Cube {
-			typ = "texturecube<float>"
-		}
+		typ := metalTextureType(t)
 		params = append(params, typ+" "+t.Name, "sampler "+t.Name+"Sampler")
 		entry = append(entry, fmt.Sprintf("%s %s [[texture(%d)]]", typ, t.Name, i), fmt.Sprintf("sampler %sSampler [[sampler(%d)]]", t.Name, i))
 		args = append(args, t.Name, t.Name+"Sampler")

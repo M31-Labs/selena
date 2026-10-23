@@ -200,10 +200,7 @@ func lowerMeshWithVertex(m hir.Material) (ir.Module, bindings.Layout, error) {
 	if err != nil {
 		return ir.Module{}, bindings.Layout{}, err
 	}
-	irTextures := make([]ir.Texture, len(uniforms.textures))
-	for i, t := range uniforms.textures {
-		irTextures[i] = ir.Texture{Name: t, Cube: uniforms.cubeTextures[t]}
-	}
+	irTextures := planIRTextures(uniforms)
 
 	vertexStage := ir.Stage{Body: vertexBody, Output: vertexOut}
 	mod := ir.Module{
@@ -232,7 +229,7 @@ func lowerMeshWithVertex(m hir.Material) (ir.Module, bindings.Layout, error) {
 		EntryPoints:     bindings.EntryPoints{Vertex: "vertexMain", Fragment: "fragmentMain"},
 		UniformBlock:    ub,
 		Attributes:      toAttrs(attributes),
-		Textures:        bindings.ComputeTexturesMixed(uniforms.textures, uniforms.cubeTextures),
+		Textures:        planLayoutTextures(uniforms),
 		WGSL:            bindings.WGSLBinding{Group: 0, Binding: 0},
 		Metal:           bindings.MetalBinding{Buffer: 0},
 		Context:         uniforms.contextNames,

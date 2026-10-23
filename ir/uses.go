@@ -245,6 +245,7 @@ func (x Swizzle) children() []Expr { return []Expr{x.E} }
 
 func (x Sample) children() []Expr          { return []Expr{x.UV} }
 func (x SampleLevel) children() []Expr     { return []Expr{x.UV, x.LOD} }
+func (x SampleDepth) children() []Expr     { return []Expr{x.UV} }
 func (x SampleCube) children() []Expr      { return []Expr{x.Dir} }
 func (x SampleCubeLevel) children() []Expr { return []Expr{x.Dir, x.LOD} }
 
@@ -274,7 +275,10 @@ func UsesCubeSampleLevel(m Module) bool {
 func VertexSampledTextures(m Module) []string {
 	used := map[string]bool{}
 	stageMatches(m.Vertex, func(e Expr) bool {
-		if s, ok := e.(SampleLevel); ok {
+		switch s := e.(type) {
+		case SampleLevel:
+			used[s.Texture] = true
+		case SampleDepth:
 			used[s.Texture] = true
 		}
 		return false // keep walking: collect every use

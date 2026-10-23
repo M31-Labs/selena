@@ -63,3 +63,52 @@ Declared in the same `context` block, with a texture type (see
 | `planarReflection` | `texture2d` | linear RGB in rgb, coverage in a | Planar reflection capture. |
 | `opaqueColor` | `texture2d` | linear RGB | Opaque scene color captured before transparent surfaces. |
 | `opaqueDepth` | `textureDepth2d` | depth 0..1 | Depth of the opaque scene; read with sampleDepth. |
+
+## Engine textures
+
+An engine texture is declared in `context` with its registered name and type.
+The renderer binds it by name, so the author supplies no source for it. It
+takes the next texture slot after the author's `param ... : texture2d` entries,
+in declaration order, with the usual binding numbers.
+
+```selena
+material Water {
+    context {
+        planarReflection : texture2d
+        opaqueColor      : texture2d
+        opaqueDepth      : textureDepth2d
+    }
+    surface(geo) -> color {
+        let uv = vec2f(0.5, 0.5)
+        let seen = sample(opaqueColor, uv).rgb
+        let reflected = sample(planarReflection, uv).rgb
+        return mix(seen, reflected, clamp(sampleDepth(opaqueDepth, uv) * 4.0, 0.0, 1.0))
+    }
+}
+```
+
+- Colors are read with `sample` and `sampleLevel` (and, in `vertex()`,
+  `sampleLevel` only). A depth texture is read with `sampleDepth(tex, uv)`,
+  which returns a `float` from the base level. It uses no derivatives, so it
+  works in `vertex()` and inside branches.
+- The descriptor lists each one in `textures` with `engine: "<name>"`. A depth
+  texture has `dimension: "depth2d"`: bind it with a depth view (WebGPU sample
+  type `depth` or `unfilterable-float`), and a NEAREST sampler on WebGL.
+  Binding coordinates follow the usual rules, including `vertexStage`.
+- Engine textures are available in mesh materials (with or without `vertex()`).
+  Points, post and feedback materials reject a texture in `context`. A
+  `context` block can declare only registered engine textures; declare other
+  textures as `param name : texture2d`.
+- Depth textures are not allowed as `param`s.
+
+### Support by target
+
+| Target | Color engine textures | `textureDepth2d` |
+|---|---|---|
+| `wgsl` | yes | yes: `texture_depth_2d`, read with `textureLoad` (the sampler binding is declared and unused) |
+| `gles` (WebGL 2, GLSL ES 3.00) | yes | yes: `highp sampler2D` over a depth texture, read with `textureLod(...).x` |
+| `glsl` (WebGL 1, GLSL ES 1.00) | yes | yes, if the host enables `WEBGL_depth_texture` (listed in `requires.glExtensions`) and the device supports `highp` in fragment shaders; read with `texture2D(...).x` |
+| `metal` | yes | yes: `depth2d<float>`, read with `sample(..., level(0))` |
+
+The GLSL ES 1.00 vertex stage still needs vertex texture units; see
+`requires.glVertexTextureUnits` in [compatibility.md](compatibility.md).
