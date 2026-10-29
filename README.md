@@ -111,6 +111,17 @@ Use `bindings.PackUniforms(res.Layout, values)` to fill the generated std140
 uniform block without hand-packing `vec3` tails or `mat3` column strides.
 `bindings.PackUniformsWithDefaults` also fills omitted uniform fields from
 descriptor defaults declared in `.sel`.
+The compile-result types (`Target`, `CompileOptions`, `FragmentArtifact`,
+`Artifact` and `Result`), the `Target` constants and the `AllTargets` function
+live in the `result` package, which imports only `bindings`, `hir` and `ir`. A
+program that only reads or passes along compile output, such as a browser WASM
+module that loads artifacts compiled ahead of time, can import
+`m31labs.dev/selena/result` instead of the root package and so avoid linking
+the parser, the tree-sitter grammar, the lowerer and the emitters. The root
+package re-exports every name in `result` (`selena.Result` is `result.Result`),
+so existing code compiles unchanged and values pass between the two packages
+without conversion. A test in `result/` fails if its import closure reaches the
+compiler.
 Compile failures that can be tied to source return `*selena.CompileError` with
 diagnostic codes and 1-based line/column ranges. The CLI renders those ranges
 as annotated snippets with fix-oriented hints, and common syntax errors include
@@ -153,6 +164,7 @@ adapter layers so the language stays reusable.
 | `emit/glsl/` | IR → GLSL (browser + desktop WebGL) |
 | `emit/metal/` | IR → Metal MSL (iOS SceneKit) |
 | `emit/gles/` | IR → GLSL ES (Android GLES) |
+| `result/` | compile-result types (`Result`, `Artifact`, `Target`, …) in a leaf package that does not import the compiler |
 | `cmd/selena/` | CLI: `selena emit`, `selena check`, `selena inspect`, `selena demo` |
 | `examples/`, `testdata/` | sample materials, conformance inputs, and golden outputs |
 
