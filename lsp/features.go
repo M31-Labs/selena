@@ -193,7 +193,7 @@ func (a *analysis) member(m hir.Material, inMaterial bool, recv, field string, o
 		return none, false
 	}
 	if body, vertex := stageAt(m, offset); body != nil && recv == body.Geo {
-		if t, ok := lower.GeometryFields(kindOf(m), vertex)[field]; ok {
+		if t, ok := geometryFields(m, vertex)[field]; ok {
 			none.Hover = "```selena\n(geometry) " + recv + "." + field + " : " + string(t) + "\n```\n" + geoDocs[field]
 			return none, true
 		}
@@ -283,6 +283,15 @@ func typeNote(t hir.Type) string {
 		return "\n" + doc
 	}
 	return ""
+}
+
+// geometryFields lists what geo.<field> reads in a stage of m. When m
+// authors vertex(), its surface reads only the declared varyings.
+func geometryFields(m hir.Material, vertexStage bool) map[string]ir.Type {
+	if m.Vertex != nil && !vertexStage {
+		return map[string]ir.Type{}
+	}
+	return lower.GeometryFields(kindOf(m), vertexStage)
 }
 
 func kindOf(m hir.Material) hir.Kind {
@@ -408,7 +417,7 @@ func (a *analysis) memberCompletions(m hir.Material, inMaterial bool, dot, offse
 		return
 	}
 	if body, vertex := stageAt(m, offset); body != nil && recv == body.Geo {
-		fields := lower.GeometryFields(kindOf(m), vertex)
+		fields := geometryFields(m, vertex)
 		for _, name := range sortedKeys(fields) {
 			add(CompletionItem{Label: name, Kind: CompletionProperty, Detail: string(fields[name]), Documentation: ptr(markdown(geoDocs[name]))})
 		}

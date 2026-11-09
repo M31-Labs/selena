@@ -299,3 +299,34 @@ func TestServeSpeaksJSONRPC(t *testing.T) {
 		t.Fatalf("hover = %q", hover)
 	}
 }
+
+func TestGeometryFieldsFollowAnAuthoredVertexStage(t *testing.T) {
+	const src = `material Wave {
+    varying height : float
+    vertex(geo) -> vec4 {
+        height = geo.position.y
+        return mvp * vec4f(geo.position, 1.0)
+    }
+    surface(geo) -> color {
+        let h = geo.height
+        return rgb(h, h, h)
+    }
+}
+`
+	s, diags := open(t, src)
+	if len(diags) != 0 {
+		t.Fatalf("diagnostics = %+v", diags)
+	}
+	uri := "file:///tmp/m.sel"
+	vertexFields := labels(s.Completion(uri, at(t, src, "geo.position.y", 0, 4)))
+	if !slices.Contains(vertexFields, "position") || !slices.Contains(vertexFields, "normal") || slices.Contains(vertexFields, "worldNormal") {
+		t.Fatalf("vertex geo fields = %v", vertexFields)
+	}
+	surfaceFields := labels(s.Completion(uri, at(t, src, "geo.height", 0, 4)))
+	if !slices.Equal(surfaceFields, []string{"height"}) {
+		t.Fatalf("surface geo fields with an authored vertex() = %v, want the varyings", surfaceFields)
+	}
+	if h := s.Hover(uri, at(t, src, "geo.height", 0, 5)); h == nil || !strings.Contains(h.Contents.Value, "(varying) geo.height : float") {
+		t.Fatalf("hover = %+v", h)
+	}
+}
