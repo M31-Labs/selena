@@ -207,3 +207,24 @@ func TestSurfaceKindDiagnostics(t *testing.T) {
 		})
 	}
 }
+
+func TestSurfaceKindExplicitKindAndConditional(t *testing.T) {
+	src := `material Pick kind surface {
+    param wet : float = 0.0
+    surface(geo) -> Surface {
+        let s = wet > 0.5 ? pbr(rgb(0.1, 0.1, 0.1), 0.2, 0.0) : pbr(rgb(0.4, 0.4, 0.4), 0.9, 0.0)
+        return s
+    }
+}`
+	res, err := Compile([]byte(src), CompileOptions{Targets: []Target{TargetWGSL}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Layout.Kind != bindings.SurfaceKindSurface {
+		t.Fatalf("kind = %q", res.Layout.Kind)
+	}
+	w, _ := res.Artifact(TargetWGSL)
+	if !strings.Contains(w.Source, "let selenaSurf0 = (selenaParams.wet > 0.5);") || !strings.Contains(w.Source, "select(0.9, 0.2, selenaSurf0)") {
+		t.Fatalf("conditional Surface not split per field:\n%s", w.Source)
+	}
+}
