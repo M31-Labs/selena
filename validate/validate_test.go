@@ -3,8 +3,8 @@
 // emitters are proven to produce *valid* shaders, not merely structurally
 // plausible strings. Each check skips cleanly where its tool isn't installed,
 // so it runs as a real gate wherever the tools are present (CI/dev) and never
-// blocks otherwise. (Metal is validated via gosx-native's iOS CI; no
-// cross-platform MSL compiler exists here.)
+// blocks otherwise. Metal output compiles with Apple's `xcrun metal` on a Mac
+// with Xcode's Metal toolchain (metal_test.go, package mslcheck).
 package validate
 
 import (

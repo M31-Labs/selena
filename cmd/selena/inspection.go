@@ -13,8 +13,10 @@ import (
 	"time"
 
 	prismvalidate "m31labs.dev/prism/validate"
+
 	"m31labs.dev/selena"
 	"m31labs.dev/selena/ir"
+	"m31labs.dev/selena/mslcheck"
 )
 
 type graphReport struct {
@@ -356,6 +358,15 @@ func artifactStageSources(a selena.Artifact) []stageSource {
 func validateShaderSource(target selena.Target, stage, source string) *shaderValidation {
 	validation := &shaderValidation{Entries: expectedEntries(target, stage)}
 	validation.EntryChecked = entriesPresent(source, validation.Entries)
+	if target == selena.TargetMetal {
+		res, err := mslcheck.Compile(source)
+		validation.ToolSkipped = res.Skipped
+		validation.ToolOutputLen = len(res.Output)
+		if err != nil {
+			validation.ToolError = err.Error()
+		}
+		return validation
+	}
 	tool, ext, ok := validatorForShader(target, stage)
 	if !ok {
 		validation.ToolSkipped = true
@@ -464,12 +475,21 @@ func doctor(args []string) error {
 	fmt.Printf("go: %s %s/%s\n", goruntime.Version(), goruntime.GOOS, goruntime.GOARCH)
 	fmt.Println("targets: wgsl glsl metal gles")
 	fmt.Println("tools:")
-	for _, tool := range []string{"naga", "glslangValidator", "xcrun"} {
+	for _, tool := range []string{"naga", "glslangValidator"} {
 		if path, err := exec.LookPath(tool); err == nil {
 			fmt.Printf("  %s: %s\n", tool, path)
 		} else {
 			fmt.Printf("  %s: unavailable\n", tool)
 		}
+	}
+	if tc, ok := mslcheck.Find(); ok {
+		fmt.Printf("  metal: %s", tc.Path)
+		if tc.DeveloperDir != "" {
+			fmt.Printf(" (DEVELOPER_DIR=%s)", tc.DeveloperDir)
+		}
+		fmt.Println()
+	} else {
+		fmt.Println("  metal: unavailable (needs Xcode's Metal toolchain; Command Line Tools lack it)")
 	}
 	return nil
 }
