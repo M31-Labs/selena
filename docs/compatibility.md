@@ -401,6 +401,36 @@ attributes and read `instanceIndex` (see the Instancing section of the
 | `glsl` | not available: rejected | `attribute` float types only; `int` and `uint` are rejected | Request `ANGLE_instanced_arrays` (listed in `requires.glExtensions`), then `vertexAttribDivisorANGLE(loc, 1)` and `drawArraysInstancedANGLE`. If the body reads `vertexIndex`, `a_vertexIndex` is a per-vertex attribute: leave its divisor at 0. |
 | `metal` | `[[instance_id]]` as `uint instanceIndex` | `[[attribute(n)]]` members of `VertexIn`, after the vertex attributes | In the `MTLVertexDescriptor`, give the instance buffer a layout with `stepFunction = .perInstance`, `stride = instanceStride`, and attribute formats `float`..`float4`, `int` or `uint`. Use a buffer index other than 0, which is the uniform buffer. `instance_id` does not include the base instance. |
 
+**Choosing the first location.** By default the first instance attribute sits
+directly after the vertex attributes. A host that already binds its own
+per-instance data at fixed locations sets the base at compile time, because on
+WebGPU the buffer layout's `shaderLocation` must equal the WGSL `@location` and
+nothing can be remapped afterwards. The option is
+`CompileOptions.FirstInstanceLocation` (Go), `builder.Options.FirstInstanceLocation`
+(recorded in the artifact as `options.firstInstanceLocation`), and
+`--first-instance-location N` on `selena emit`, `selena inspect`, and
+`selena artifact`. Zero means the default and leaves today's output unchanged.
+The value must be at least the number of vertex attributes, and the last
+instance location must stay below 16 (WebGPU's default `maxVertexAttributes`);
+otherwise compile fails with both numbers in the message. The WGSL `@location`,
+the Metal `[[attribute(n)]]` index and `instanceAttributes[].location` all use
+the base; the GLES attributes are bound by name or by `bindAttribLocation` with
+the descriptor location. The byte offsets and `instanceStride` do not change.
+
+Example: GoSX binds its engine instance record at locations 3 to 8. Compile the
+material with `FirstInstanceLocation: 9`, and `rect`, `tone` and `region` of
+NoteQuad take locations 9, 10 and 11, in a separate buffer layout from the
+engine record. Up to 7 authored attributes fit this way (locations 9 to 15).
+
+**`instanceIndex` is not an identity.** It is the draw-order index of the
+instance within one draw call, counted from 0. If the host culls, sorts,
+compacts or draws indirectly, the same note can get a different
+`instanceIndex` from one frame to the next. A material that needs a stable
+identity (for picking, or to look up per-note data) must carry the identity as
+an instance attribute, such as `instance noteId : uint`. The host permutes the
+records together with the instances, so the attribute stays attached to its
+instance.
+
 **GLSL ES 1.00 rules.** The target has no instance id, no integer vertex
 attributes and no bit operators. Selena rejects a material that needs one,
 naming each, and the message suggests the fix: pass an index as a float

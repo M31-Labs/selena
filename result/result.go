@@ -42,6 +42,14 @@ type CompileOptions struct {
 	SpecularMRT bool
 	Material    string
 	Targets     []Target
+	// FirstInstanceLocation is the shader location of the first `instance`
+	// attribute. Zero means directly after the vertex attributes. A host that
+	// binds its own per-instance data at fixed locations sets it above them;
+	// WebGPU needs the shader location to equal the buffer layout's
+	// shaderLocation, so the host cannot remap after compile. It must be at
+	// least the number of vertex attributes, and the last instance location
+	// must stay below 16. Materials without instance attributes ignore it.
+	FirstInstanceLocation int
 }
 
 // FragmentArtifact is an additive fragment variant. WGSL/Metal carry the full

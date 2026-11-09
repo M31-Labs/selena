@@ -53,3 +53,11 @@ func GLSLInstancingUnsupported(m Module) []string {
 func NeedsTypedUintLiterals(m Module) bool {
 	return len(m.InstanceAttributes) > 0 || m.UsesInstanceIndex || UsesBitOperators(m)
 }
+
+// InstanceLocation returns the shader location of instance attribute i.
+func (m Module) InstanceLocation(i int) int {
+	if m.InstanceBase > 0 {
+		return m.InstanceBase + i
+	}
+	return len(m.Attributes) + i
+}

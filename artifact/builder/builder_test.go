@@ -275,3 +275,35 @@ func readSource(t *testing.T, name string) []byte {
 	}
 	return src
 }
+
+func TestFirstInstanceLocationIsRecordedAndChecked(t *testing.T) {
+	src := readSource(t, "note-quad.sel")
+	opts := builder.Options{Path: "note-quad.sel", Compiler: "x", FirstInstanceLocation: 9,
+		Targets: []result.Target{result.TargetWGSL, result.TargetGLES}}
+	file, err := builder.Build(src, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if file.Options.FirstInstanceLocation != 9 {
+		t.Fatalf("recorded %d", file.Options.FirstInstanceLocation)
+	}
+	got := file.Materials[0].Layout.InstanceAttributes
+	if len(got) != 3 || got[0].Location != 9 || got[2].Location != 11 {
+		t.Fatalf("locations = %+v", got)
+	}
+	data, err := artifact.Encode(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := artifact.Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.Check(back, src); err != nil {
+		t.Fatal(err)
+	}
+	opts.FirstInstanceLocation = 15
+	if _, err := builder.Build(src, opts); err == nil {
+		t.Fatal("a base that overflows 16 built")
+	}
+}

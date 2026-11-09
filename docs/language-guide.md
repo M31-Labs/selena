@@ -452,6 +452,12 @@ diagnostic.
 instance being drawn, counted from 0. It works without any `instance`
 declaration, and it is not available on GLSL ES 1.00.
 
+**`instanceIndex` is not an identity.** It is the draw-order index of the
+instance within the draw call. If the host culls, sorts, compacts or draws
+indirectly, an instance can get a different `instanceIndex` from frame to frame.
+When you need a stable identity, carry it as an attribute (`instance noteId :
+uint`): the host reorders the records and the identity moves with its instance.
+
 **Record layout.** The descriptor lists the attributes in declaration order and
 packs them into one record with no padding. `rect`, `tone` and `region` above
 sit at byte offsets 0, 16 and 32, and the record is 36 bytes. Locations come

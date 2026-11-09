@@ -41,6 +41,9 @@ type Options struct {
 	// Modules lists materiallib modules to link before compiling. Linking a
 	// module the source does not call changes no output.
 	Modules []materiallib.Module
+	// FirstInstanceLocation sets the location of the first instance attribute
+	// (see selena.CompileOptions). Zero places it after the vertex attributes.
+	FirstInstanceLocation int
 	// Compiler overrides the recorded Selena version. Empty records Version().
 	Compiler string
 }
@@ -119,7 +122,7 @@ func Build(source []byte, opts Options) (artifact.File, error) {
 		Compiler:        opts.Compiler,
 		LanguageVersion: bindings.LanguageVersion,
 		Source:          artifact.Source{Path: opts.Path, SHA256: artifact.Hash(source)},
-		Options:         artifact.Options{Targets: targets, SpecularMRT: opts.SpecularMRT, Modules: moduleNames(opts.Modules)},
+		Options:         artifact.Options{Targets: targets, SpecularMRT: opts.SpecularMRT, Modules: moduleNames(opts.Modules), FirstInstanceLocation: opts.FirstInstanceLocation},
 		Default:         defaultName(program, names),
 	}
 	if file.Compiler == "" {
@@ -135,6 +138,8 @@ func Build(source []byte, opts Options) (artifact.File, error) {
 			Material:    name,
 			SpecularMRT: opts.SpecularMRT,
 			Targets:     targets,
+
+			FirstInstanceLocation: opts.FirstInstanceLocation,
 		})
 		if err != nil {
 			return artifact.File{}, fmt.Errorf("selena artifact %s: material %s: %w", label(opts.Path), name, err)
@@ -190,6 +195,8 @@ func Check(shipped artifact.File, source []byte) error {
 		SpecularMRT: shipped.Options.SpecularMRT,
 		Modules:     modules,
 		Compiler:    shipped.Compiler,
+
+		FirstInstanceLocation: shipped.Options.FirstInstanceLocation,
 	})
 	if err != nil {
 		return &StaleError{Path: shipped.Source.Path, Reason: "the source no longer compiles: " + err.Error()}

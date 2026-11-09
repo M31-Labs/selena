@@ -121,6 +121,9 @@ type Module struct {
 	// by name, in declaration order. Their locations follow Attributes. Empty
 	// for every material that declares no `instance`.
 	InstanceAttributes []Binding
+	// InstanceBase is the location of the first instance attribute when the
+	// compile options set one; zero means directly after Attributes.
+	InstanceBase int
 	// UsesInstanceIndex is true when the authored vertex stage references the
 	// instanceIndex builtin: WGSL @builtin(instance_index), GLES gl_InstanceID,
 	// Metal [[instance_id]]. GLSL ES 1.00 has none and rejects it.

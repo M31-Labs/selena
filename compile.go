@@ -88,6 +88,9 @@ func CompileProgram(p hir.Program, opts CompileOptions) (Result, error) {
 	if err != nil {
 		return Result{}, compileError(fmt.Errorf("lower %s: %w", p.Materials[idx].Name, err))
 	}
+	if err := placeInstanceAttributes(&mod, &layout, opts.FirstInstanceLocation); err != nil {
+		return Result{}, compileError(err)
+	}
 	meshMRT := opts.SpecularMRT && (mod.Kind == "" || mod.Kind == ir.KindMesh)
 	if meshMRT {
 		layout.EntryPoints.FragmentSpecular = "fragmentMainSpecular"

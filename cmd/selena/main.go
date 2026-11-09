@@ -18,6 +18,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	"m31labs.dev/selena"
 	"m31labs.dev/selena/bindings"
@@ -31,6 +33,7 @@ const usage = `selena - shader authoring for the GoSX ecosystem
 
 usage:
   selena emit <target> <file.sel> [material]  emit a shader (target: wgsl|glsl|metal|gles)
+  (emit and inspect accept --first-instance-location N: where the first instance attribute sits)
   selena check <file.sel> [material]          parse + lower a material
   selena inspect <file.sel> [material]        print material interface + descriptor
   selena graph [--format json|dot] <file.sel> [material]
@@ -74,6 +77,10 @@ func run(args []string) error {
 		fmt.Print(usage)
 		return nil
 	}
+	args, firstInstance, err := takeFirstInstanceLocation(args)
+	if err != nil {
+		return err
+	}
 	switch args[0] {
 	case "emit":
 		if len(args) < 3 || len(args) > 4 {
@@ -87,7 +94,7 @@ func run(args []string) error {
 		if len(args) == 4 {
 			material = args[3]
 		}
-		return emit(target, args[2], material)
+		return emit(target, args[2], material, firstInstance)
 	case "check":
 		if len(args) < 2 || len(args) > 3 {
 			return fmt.Errorf("usage: selena check <file.sel> [material]")
@@ -105,7 +112,7 @@ func run(args []string) error {
 		if len(args) == 3 {
 			material = args[2]
 		}
-		return inspect(args[1], material)
+		return inspect(args[1], material, firstInstance)
 	case "graph":
 		return graph(args[1:])
 	case "shaders":
@@ -168,7 +175,7 @@ func resolveProgram(nameOrFile string) (resolvedProgram, error) {
 	}
 }
 
-func emit(target selena.Target, file, material string) error {
+func emit(target selena.Target, file, material string, firstInstance int) error {
 	prog, err := resolveProgram(file)
 	if err != nil {
 		return err
@@ -176,6 +183,8 @@ func emit(target selena.Target, file, material string) error {
 	res, err := selena.CompileProgram(prog.Program, selena.CompileOptions{
 		Material: material,
 		Targets:  []selena.Target{target},
+
+		FirstInstanceLocation: firstInstance,
 	})
 	if err != nil {
 		return attachResolvedSource(prog, err)
@@ -213,12 +222,12 @@ func check(file, material string) error {
 	return nil
 }
 
-func inspect(file, material string) error {
+func inspect(file, material string, firstInstance int) error {
 	prog, err := resolveProgram(file)
 	if err != nil {
 		return err
 	}
-	res, err := selena.CompileProgram(prog.Program, selena.CompileOptions{Material: material})
+	res, err := selena.CompileProgram(prog.Program, selena.CompileOptions{Material: material, FirstInstanceLocation: firstInstance})
 	if err != nil {
 		return attachResolvedSource(prog, err)
 	}
@@ -339,4 +348,35 @@ func printTargetSummary(artifacts []selena.Artifact) {
 		}
 		fmt.Printf("  %s: vertex %d bytes, fragment %d bytes\n", a.Target, len(a.Vertex), len(a.Fragment))
 	}
+}
+
+// takeFirstInstanceLocation removes a --first-instance-location N (or =N) flag
+// from args and returns the value. It applies to emit and inspect.
+func takeFirstInstanceLocation(args []string) ([]string, int, error) {
+	const name = "--first-instance-location"
+	var rest []string
+	value := 0
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		var text string
+		switch {
+		case a == name:
+			if i+1 >= len(args) {
+				return nil, 0, fmt.Errorf("%s needs a number", name)
+			}
+			i++
+			text = args[i]
+		case strings.HasPrefix(a, name+"="):
+			text = strings.TrimPrefix(a, name+"=")
+		default:
+			rest = append(rest, a)
+			continue
+		}
+		n, err := strconv.Atoi(text)
+		if err != nil || n < 0 {
+			return nil, 0, fmt.Errorf("%s needs a non-negative number, got %q", name, text)
+		}
+		value = n
+	}
+	return rest, value, nil
 }

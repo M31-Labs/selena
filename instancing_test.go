@@ -299,3 +299,82 @@ func TestNoInstancingLeavesDescriptorAndShadersAlone(t *testing.T) {
 		t.Errorf("gles output changed for a material without instancing:\n%s", g.Vertex+g.Fragment)
 	}
 }
+
+// A host that binds engine per-instance data at locations 3 to 8 puts the
+// authored attributes at 9 and up. The WGSL @location and the descriptor agree.
+func TestFirstInstanceLocationRebasesEveryTarget(t *testing.T) {
+	src := readInstancing(t, "testdata/instancing/note-quad.sel")
+	r, err := Compile(src, CompileOptions{FirstInstanceLocation: 9})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, a := range r.Layout.InstanceAttributes {
+		if a.Location != 9+i {
+			t.Errorf("%s location = %d, want %d", a.Name, a.Location, 9+i)
+		}
+	}
+	if r.Layout.InstanceStride != 36 || r.Layout.InstanceAttributes[2].Offset != 32 {
+		t.Errorf("the record layout changed: %+v stride %d", r.Layout.InstanceAttributes, r.Layout.InstanceStride)
+	}
+	w, _ := r.Artifact(TargetWGSL)
+	for _, s := range []string{"@location(9) rect : vec4<f32>,", "@location(10) tone : vec4<f32>,", "@location(11) region : i32,"} {
+		if !strings.Contains(w.Source, s) {
+			t.Errorf("wgsl lacks %q:\n%s", s, w.Source)
+		}
+	}
+	m, _ := r.Artifact(TargetMetal)
+	for _, s := range []string{"float4 rect [[attribute(9)]];", "int region [[attribute(11)]];"} {
+		if !strings.Contains(m.Source, s) {
+			t.Errorf("metal lacks %q", s)
+		}
+	}
+	// Vertex attributes keep their own locations.
+	withGeo := `material M {
+    instance a : vec4
+    vertex(geo) -> vec4 { return mvp * vec4f(geo.position, 1.0) + a }
+    surface(geo) -> color { return rgb(1.0, 1.0, 1.0) }
+}`
+	g, err := Compile([]byte(withGeo), CompileOptions{FirstInstanceLocation: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gw, _ := g.Artifact(TargetWGSL)
+	if !strings.Contains(gw.Source, "@location(0) position") || !strings.Contains(gw.Source, "@location(3) a : vec4<f32>") {
+		t.Errorf("wgsl:\n%s", gw.Source)
+	}
+}
+
+func TestFirstInstanceLocationRules(t *testing.T) {
+	twoAttrs := `material M {
+    instance a : vec4
+    instance b : vec4
+    vertex(geo) -> vec4 { return mvp * vec4f(geo.position + geo.normal, 1.0) + a + b }
+    surface(geo) -> color { return rgb(1.0, 1.0, 1.0) }
+}`
+	_, err := Compile([]byte(twoAttrs), CompileOptions{FirstInstanceLocation: 1})
+	if err == nil || !strings.Contains(err.Error(), "location 1") || !strings.Contains(err.Error(), "2 vertex attributes") {
+		t.Errorf("base below the vertex attribute count: %v", err)
+	}
+	if _, err := Compile([]byte(twoAttrs), CompileOptions{FirstInstanceLocation: 14}); err != nil {
+		t.Errorf("base 14 with 2 attributes ends at 15 and is legal: %v", err)
+	}
+	_, err = Compile([]byte(twoAttrs), CompileOptions{FirstInstanceLocation: 15})
+	if err == nil || !strings.Contains(err.Error(), "location 16") || !strings.Contains(err.Error(), "below 16") {
+		t.Errorf("overflow past 16: %v", err)
+	}
+	// Without instance attributes the option changes nothing.
+	plain := readInstancing(t, "testdata/conformance/vertex.sel")
+	a, err := Compile(plain, CompileOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := Compile(plain, CompileOptions{FirstInstanceLocation: 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wa, _ := a.Artifact(TargetWGSL)
+	wb, _ := b.Artifact(TargetWGSL)
+	if wa.Source != wb.Source {
+		t.Error("the option changed a material without instance attributes")
+	}
+}

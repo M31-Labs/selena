@@ -195,7 +195,7 @@ func emitMeshAuthored(m ir.Module) (string, error) {
 			fmt.Fprintf(&b, "  %s %s [[attribute(%d)]];\n", typeName(a.Type), a.Name, i)
 		}
 		for i, a := range m.InstanceAttributes {
-			fmt.Fprintf(&b, "  %s %s [[attribute(%d)]];\n", typeName(a.Type), a.Name, len(m.Attributes)+i)
+			fmt.Fprintf(&b, "  %s %s [[attribute(%d)]];\n", typeName(a.Type), a.Name, m.InstanceLocation(i))
 		}
 		b.WriteString("};\n\n")
 	}
