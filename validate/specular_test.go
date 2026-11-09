@@ -1,8 +1,8 @@
 package validate
 
 import (
-	prismvalidate "m31labs.dev/prism/validate"
 	"m31labs.dev/selena"
+	"m31labs.dev/selena/internal/shadertest"
 	"testing"
 )
 
@@ -44,17 +44,17 @@ func TestSpecularMRTCompiles(t *testing.T) {
 				t.Run(string(a.Target), func(t *testing.T) {
 					switch a.Target {
 					case selena.TargetWGSL:
-						prismvalidate.Shader(t, "naga", a.SpecularMRT.Source, ".wgsl", nil)
+						shadertest.Shader(t, "naga", a.SpecularMRT.Source, ".wgsl", nil)
 					case selena.TargetGLSL:
-						prismvalidate.Shader(t, "glslangValidator", essl100(a.Vertex), ".vert", nil)
+						shadertest.Shader(t, "glslangValidator", essl100(a.Vertex), ".vert", nil)
 						// glslang does not implement GL_EXT_draw_buffers. The actual
 					// WebGL1 compile/link and pixel contract is exercised by
 					// TestSpecularMRTWebGL1 with SELENA_CHROME set.
 					case selena.TargetMetal:
 						t.Skip("MSL requires the native Apple compiler; source contract tested separately")
 					case selena.TargetGLES:
-						prismvalidate.Shader(t, "glslangValidator", a.Vertex, ".vert", nil)
-						prismvalidate.Shader(t, "glslangValidator", a.SpecularMRT.Fragment, ".frag", nil)
+						shadertest.Shader(t, "glslangValidator", a.Vertex, ".vert", nil)
+						shadertest.Shader(t, "glslangValidator", a.SpecularMRT.Fragment, ".frag", nil)
 					}
 				})
 			}

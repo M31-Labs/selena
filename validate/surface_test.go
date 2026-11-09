@@ -3,10 +3,10 @@ package validate
 import (
 	"testing"
 
-	prismvalidate "m31labs.dev/prism/validate"
 	"m31labs.dev/selena"
 	"m31labs.dev/selena/emit/gles"
 	"m31labs.dev/selena/emit/wgsl"
+	"m31labs.dev/selena/internal/shadertest"
 )
 
 const surfaceSource = `material Rock {
@@ -38,11 +38,11 @@ func TestSurfaceHooksValidate(t *testing.T) {
 	}
 	w, _ := r.Artifact(selena.TargetWGSL)
 	t.Run("wgsl", func(t *testing.T) {
-		prismvalidate.Shader(t, "naga", wgsl.SurfaceHarness(w.Source, len(r.Layout.Textures)), ".wgsl", nil)
+		shadertest.Shader(t, "naga", wgsl.SurfaceHarness(w.Source, len(r.Layout.Textures)), ".wgsl", nil)
 	})
 	g, _ := r.Artifact(selena.TargetGLES)
 	t.Run("essl300-frag", func(t *testing.T) {
-		prismvalidate.Shader(t, "glslangValidator", gles.SurfaceHarness(g.Fragment, len(r.Layout.Textures)), ".frag", nil)
+		shadertest.Shader(t, "glslangValidator", gles.SurfaceHarness(g.Fragment, len(r.Layout.Textures)), ".frag", nil)
 	})
 }
 
@@ -59,8 +59,8 @@ func TestSurfaceHookTexelReadsValidate(t *testing.T) {
 	}
 	w, _ := r.Artifact(selena.TargetWGSL)
 	g, _ := r.Artifact(selena.TargetGLES)
-	t.Run("wgsl", func(t *testing.T) { prismvalidate.Shader(t, "naga", wgsl.SurfaceHarness(w.Source, 1), ".wgsl", nil) })
+	t.Run("wgsl", func(t *testing.T) { shadertest.Shader(t, "naga", wgsl.SurfaceHarness(w.Source, 1), ".wgsl", nil) })
 	t.Run("essl300-frag", func(t *testing.T) {
-		prismvalidate.Shader(t, "glslangValidator", gles.SurfaceHarness(g.Fragment, 1), ".frag", nil)
+		shadertest.Shader(t, "glslangValidator", gles.SurfaceHarness(g.Fragment, 1), ".frag", nil)
 	})
 }

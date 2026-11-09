@@ -29,7 +29,10 @@ The validator package uses optional external tools:
 - `naga` for WGSL compile checks
 - `glslangValidator` for GLSL ES compile checks
 
-Tests skip those checks cleanly when the tools are not installed.
+Tests skip those checks cleanly when the tools are not installed. Set
+`SELENA_REQUIRE_VALIDATORS=1` to make a missing tool fail the test instead; CI
+does this. Install with `sudo apt-get install -y glslang-tools` and
+`cargo install naga-cli --version 29.0.3 --locked`.
 
 ## Pull Requests
 

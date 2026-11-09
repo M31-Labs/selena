@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	prismvalidate "m31labs.dev/prism/validate"
 	"m31labs.dev/selena"
+	"m31labs.dev/selena/internal/shadertest"
 )
 
 // The instancing materials must pass naga and glslangValidator on every target
@@ -37,14 +37,14 @@ func TestInstancingShadersValidate(t *testing.T) {
 				t.Fatal(err)
 			}
 			w, _ := r.Artifact(selena.TargetWGSL)
-			t.Run("wgsl", func(t *testing.T) { prismvalidate.Shader(t, "naga", w.Source, ".wgsl", nil) })
+			t.Run("wgsl", func(t *testing.T) { shadertest.Shader(t, "naga", w.Source, ".wgsl", nil) })
 			e, _ := r.Artifact(selena.TargetGLES)
-			t.Run("essl300-vert", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", e.Vertex, ".vert", nil) })
-			t.Run("essl300-frag", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", e.Fragment, ".frag", nil) })
+			t.Run("essl300-vert", func(t *testing.T) { shadertest.Shader(t, "glslangValidator", e.Vertex, ".vert", nil) })
+			t.Run("essl300-frag", func(t *testing.T) { shadertest.Shader(t, "glslangValidator", e.Fragment, ".frag", nil) })
 			if tc.essl100 {
 				g, _ := r.Artifact(selena.TargetGLSL)
-				t.Run("essl100-vert", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", essl100(g.Vertex), ".vert", nil) })
-				t.Run("essl100-frag", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", essl100(g.Fragment), ".frag", nil) })
+				t.Run("essl100-vert", func(t *testing.T) { shadertest.Shader(t, "glslangValidator", essl100(g.Vertex), ".vert", nil) })
+				t.Run("essl100-frag", func(t *testing.T) { shadertest.Shader(t, "glslangValidator", essl100(g.Fragment), ".frag", nil) })
 			}
 		})
 	}
@@ -68,10 +68,10 @@ func TestUintInstanceAttributeValidates(t *testing.T) {
 		t.Fatal(err)
 	}
 	w, _ := r.Artifact(selena.TargetWGSL)
-	t.Run("wgsl", func(t *testing.T) { prismvalidate.Shader(t, "naga", w.Source, ".wgsl", nil) })
+	t.Run("wgsl", func(t *testing.T) { shadertest.Shader(t, "naga", w.Source, ".wgsl", nil) })
 	e, _ := r.Artifact(selena.TargetGLES)
-	t.Run("essl300-vert", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", e.Vertex, ".vert", nil) })
-	t.Run("essl300-frag", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", e.Fragment, ".frag", nil) })
+	t.Run("essl300-vert", func(t *testing.T) { shadertest.Shader(t, "glslangValidator", e.Vertex, ".vert", nil) })
+	t.Run("essl300-frag", func(t *testing.T) { shadertest.Shader(t, "glslangValidator", e.Fragment, ".frag", nil) })
 }
 
 // A bit operator on uint must emit typed uint literals on every GLES resolver,
@@ -114,9 +114,9 @@ func TestBitOperatorsValidateWithoutAuthoredVertex(t *testing.T) {
 				t.Errorf("untyped uint literal in Metal source:\n%s", m.Source)
 			}
 			w, _ := r.Artifact(selena.TargetWGSL)
-			t.Run("wgsl", func(t *testing.T) { prismvalidate.Shader(t, "naga", w.Source, ".wgsl", nil) })
-			t.Run("essl300-vert", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", e.Vertex, ".vert", nil) })
-			t.Run("essl300-frag", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", e.Fragment, ".frag", nil) })
+			t.Run("wgsl", func(t *testing.T) { shadertest.Shader(t, "naga", w.Source, ".wgsl", nil) })
+			t.Run("essl300-vert", func(t *testing.T) { shadertest.Shader(t, "glslangValidator", e.Vertex, ".vert", nil) })
+			t.Run("essl300-frag", func(t *testing.T) { shadertest.Shader(t, "glslangValidator", e.Fragment, ".frag", nil) })
 		})
 	}
 }
