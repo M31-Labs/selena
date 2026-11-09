@@ -25,7 +25,7 @@ a Mac with Xcode's Metal toolchain.
 
 | Example | Look | Modules | Draw it with |
 |---|---|---|---|
-| `foliage.sel` | Two-sided leaves, wind sway, backlight glow | game, lighting | `DoubleSided` |
+| `foliage.sel` | Two-sided leaves, wind sway, backlight glow | game, lighting | both faces (glTF `doubleSided`) |
 | `toon.sel` | Three light bands, hard highlight, lit rim, outline | game | |
 | `dissolve.sel` | Burns away as `progress` goes 0 to 1, glowing edge | game | |
 | `hologram.sel` | Rim glow, moving scanlines, flicker | game | additive blend |
