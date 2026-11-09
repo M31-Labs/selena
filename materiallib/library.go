@@ -39,6 +39,11 @@ const Sky Module = "sky"
 // the renderer's scene lighting block (docs/engine-inputs.md#scene-lighting).
 const Lighting Module = "lighting"
 
+// Surface provides authoring helpers for surface-kind materials: PBR texture
+// sets, triplanar projection, height and slope layer masks, and detail normals
+// (docs/material-library/surface.md).
+const Surface Module = "surface"
+
 //go:embed modules/*.sel
 var sources embed.FS
 var cache sync.Map
