@@ -65,6 +65,8 @@ go run ./cmd/selena check examples/textured.sel
 go run ./cmd/selena inspect examples/tinted.sel Tinted
 go run ./cmd/selena inspect examples/defaults.sel
 go run ./cmd/selena emit wgsl examples/directional-diffuse.sel
+go run ./cmd/selena artifact -o - -targets wgsl,gles examples/tinted.sel
+go run ./cmd/selena artifact -modules lighting examples/scene-lit.sel
 go run ./cmd/selena demo /tmp/selena-textured.html textured
 go run ./cmd/selena demo /tmp/selena-defaults.html defaults
 ```
@@ -83,6 +85,11 @@ The opt-in [`materiallib` package](docs/material-library/README.md) provides typ
 BRDF, procedural, shape, normal and effect helpers authored in Selena. Use its
 functions with the GoSX adapter or compile a material with `materiallib.Compile`. Unused helpers add no
 shader source and the host binding descriptor stays unchanged.
+
+The `lighting` module lets a mesh material read the scene's lights, cascaded
+directional shadows and fog through the renderer's
+[scene lighting block](docs/engine-inputs.md#scene-lighting); see
+[lighting.md](docs/material-library/lighting.md) and `examples/scene-lit.sel`.
 
 Mesh materials can optionally expose a linear `specular(geo) -> color` companion.
 `CompileOptions{SpecularMRT: true}` adds typed color/specular MRT artifacts while
@@ -136,6 +143,40 @@ A separate composing hook — `vertex(geo) { ... }` that mutates geometry while
 the default derived-field and interpolant pipeline still runs — is not
 implemented yet.
 
+## Build-time artifacts
+
+Compile once at build time and ship the result. An artifact file holds, for
+every material in one `.sel` source, the binding layout and the shader for each
+target, plus the source's SHA-256, the build options, the language version and
+the Selena version that wrote it:
+
+```sh
+selena artifact -targets wgsl,gles -modules lighting materials/rock.sel   # writes materials/rock.sel.json
+selena artifact -check materials/rock.sel                                 # fails when the file is stale
+```
+
+The same source, options and Selena version always produce the same bytes.
+Package `artifact` decodes a file and converts a material to a `result.Result`;
+it imports only `bindings`, `hir`, `ir` and `result`, so a browser WASM module
+can load compiled materials without linking the parser, the tree-sitter grammar,
+the lowerer or the emitters (a test fails if that changes). Package
+`artifact/builder` writes files (`builder.Build`) and checks a shipped file
+against its source (`builder.Check`, which returns a `*builder.StaleError` when
+the source hash differs or the linked compiler emits a different layout or
+shader; a new Selena version that emits the same output is not stale).
+
+```go
+file, err := artifact.Decode(data)
+if err != nil {
+    return err
+}
+res, err := file.Result("Rock") // "" selects the file's default, the last material
+wgsl, _ := res.Artifact(result.TargetWGSL)
+```
+
+GoSX runs this step in `gosx build` and loads the files with
+`scene.MaterialFromSelenaArtifact`.
+
 ## How it plugs into GoSX
 
 - **Grammar engine:** `gotreesitter` + `grammargen` — the same stack that builds
@@ -165,7 +206,10 @@ adapter layers so the language stays reusable.
 | `emit/metal/` | IR → Metal MSL (iOS SceneKit) |
 | `emit/gles/` | IR → GLSL ES (Android GLES) |
 | `result/` | compile-result types (`Result`, `Artifact`, `Target`, …) in a leaf package that does not import the compiler |
-| `cmd/selena/` | CLI: `selena emit`, `selena check`, `selena inspect`, `selena demo` |
+| `artifact/` | the build artifact file format, decoded without the compiler |
+| `artifact/builder/` | writes and checks artifact files (links the compiler) |
+| `materiallib/` | opt-in Selena helper modules, including `lighting` for scene lights, shadows and fog |
+| `cmd/selena/` | CLI: `selena emit`, `selena check`, `selena inspect`, `selena artifact`, `selena demo` |
 | `examples/`, `testdata/` | sample materials, conformance inputs, and golden outputs |
 
 ## Open design decisions

@@ -144,7 +144,7 @@ whole pass is dropped.
 |---|---|
 | `OES_standard_derivatives` | `fwidth`, `dpdx`, `dpdy` |
 | `EXT_shader_texture_lod` | `sceneColorLevel` (fragment-stage explicit LOD) |
-| `WEBGL_depth_texture` | a `textureDepth2d` engine texture such as `opaqueDepth` |
+| `WEBGL_depth_texture` | a `textureDepth2d` or `textureDepth2dArray` engine texture such as `opaqueDepth` or `shadowMap0` |
 
 The `gles` (GLSL ES 3.00), `wgsl` and `metal` artifacts have all of this in core
 and need nothing. A host running a WebGL 2 context should prefer the `gles`
