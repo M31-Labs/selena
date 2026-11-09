@@ -25,6 +25,8 @@ func Emit(m ir.Module) (string, error) {
 			return emitPost(m)
 		case ir.KindFeedback:
 			return emitFeedback(m)
+		case ir.KindSurface:
+			return emitSurface(m)
 		default:
 			return emitMesh(m)
 		}

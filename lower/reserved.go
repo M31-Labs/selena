@@ -74,6 +74,24 @@ var generatedNames = map[string]string{
 	"gridHeight":    "generated grid uniform",
 	"a_vertexIndex": "generated GLSL vertex-index attribute",
 	"vertexIndex":   "generated vertex-index builtin",
+	// Surface-kind hook names (bindings.SurfaceABI).
+	"selenaGeo":           "generated surface hook geometry parameter",
+	"selenaParams":        "generated surface hook uniform binding",
+	"SelenaSurface":       "generated surface hook record",
+	"SelenaSurfaceGeo":    "generated surface hook geometry record",
+	"SelenaSurfaceParams": "generated surface hook uniform struct",
+	"pbr":                 "Selena Surface constructor",
+	"mixSurface":          "Selena Surface builtin",
+	"withBaseColor":       "Selena Surface builtin",
+	"withAlpha":           "Selena Surface builtin",
+	"withNormal":          "Selena Surface builtin",
+	"withRoughness":       "Selena Surface builtin",
+	"withMetallic":        "Selena Surface builtin",
+	"withOcclusion":       "Selena Surface builtin",
+	"withEmissive":        "Selena Surface builtin",
+	"withClearcoat":       "Selena Surface builtin",
+	"withSheen":           "Selena Surface builtin",
+	"withTransmission":    "Selena Surface builtin",
 }
 
 var shaderReservedNames = map[string]string{

@@ -1,105 +1,144 @@
 # Standard Material Interop
 
-Selena's long-term job is to make custom material authoring feel as portable as
-GoSX standard materials. That does not mean forking GoSX's PBR renderer.
+A Selena material reaches a host's PBR renderer in one of two ways:
 
-This document pins the current boundary and the intended extension path.
+| Kind | Source | What the host does | Lighting |
+|---|---|---|---|
+| Full material | `surface(geo) -> color` | Runs Selena's complete vertex and fragment shaders. | The material's own. The [scene lighting block](engine-inputs.md#scene-lighting) and the [lighting module](material-library/lighting.md) give it every light, shadow cascade and fog. |
+| Surface material | `surface(geo) -> Surface` | Splices Selena's fragment hook into its own standard material shader. | The host's standard lighting: the same lights, shadows, image-based lighting, fog, exposure and tone mapping as its StandardMaterial. |
 
-## Current Boundary
+Use a surface material when a custom look should still be lit like every
+other object: sculpted rock, layered terrain, painted props. Use a full
+material for unlit effects, stylized lighting, or anything the standard
+model cannot express.
 
-Selena currently emits complete custom shaders.
-
-- The GoSX adapter returns an `IRMaterial` with `Kind: "custom"`.
-- The adapter fills GLSL and WGSL custom shader slots from one `.sel` source.
-- Descriptor defaults flow into `IRMaterial.CustomUniforms`.
-- Standard material fields such as `Roughness`, `Metalness`, `NormalMap`,
-  `RoughnessMap`, `MetalnessMap`, image-based lighting, tone mapping, and
-  environment integration remain owned by the GoSX standard material renderer.
-
-In other words, today's Selena material is a custom material that is fully
-served across shader backends. It is not yet a standard/PBR material override.
-
-A custom material can still light itself the way the standard material does:
-the [scene lighting block](engine-inputs.md#scene-lighting) gives it every scene
-light, the directional shadow cascades and fog, and the
-[lighting module](material-library/lighting.md) matches the standard
-material's falloff, cone and fog terms. That is an interim bridge, not the hook
-model below: the material still replaces the whole shader.
-
-## Why The Boundary Matters
-
-The standard material path already handles production PBR concerns:
-
-- backend-specific lighting code
-- roughness/metalness workflows
-- normal, roughness, metalness, and emissive maps
-- renderer tone mapping and post-processing expectations
-- capability fallback through GoSX's backend gate
-
-Duplicating that logic inside Selena would create two material systems that
-drift. The better model is for Selena to author small, typed hooks into the
-standard material pipeline.
-
-## Intended Interop Model
-
-The next interop layer should be hook-based:
+## Surface materials
 
 ```selena
-material BrandedPlastic extends StandardLit {
-    param stripe : color = rgb(0.1, 0.7, 1.0)
-    param roughnessBoost : float = 0.12
+material WetRock {
+    param albedo : texture2d
+    param wet : float = 0.0
 
-    surface(geo, pbr) -> PBRSurface {
-        let base = super.surface(geo, pbr)
-        return pbrSurface(
-            base.color * stripe,
-            clamp(base.roughness + roughnessBoost, 0, 1),
-            base.metalness
-        )
+    surface(geo) -> Surface {
+        let s = pbr(sample(albedo, geo.uv).rgb, 0.85, 0.0)
+        return withRoughness(s, mix(s.roughness, 0.2, wet))
     }
 }
 ```
 
-The exact syntax is not committed yet, but the contract should be:
+`surface(geo) -> Surface` makes the material surface-kind; `material X kind
+surface` says the same explicitly. Selena splits every `Surface` value into one
+local per field during lowering, so the record costs nothing at run time.
 
-- `StandardLit` stays a renderer-owned shading model.
-- Selena can override typed surface properties, not the whole lighting loop.
-- Standard material maps remain host assets and stay in the GoSX descriptor.
-- Selena-generated hooks must emit for every backend before the material claims
-  standard-material compatibility.
-- The binding descriptor must expose which standard slots and custom params are
-  required.
+### The Surface record
 
-## Candidate Hook Outputs
+| Field | Type | Default from `pbr` | Meaning |
+|---|---|---|---|
+| `baseColor` | `vec3` | argument | Linear base color (albedo, or F0 for metals). |
+| `alpha` | `float` | 1 | Coverage. Multiplies the material opacity; the host's alpha cutoff and blend mode apply. |
+| `normal` | `vec3` | `normalize(geo.worldNormal)` | Shading normal, unit length, world space. |
+| `roughness` | `float` | argument | Perceptual roughness 0..1. The host clamps it to at least 0.04. |
+| `metallic` | `float` | argument | 0 dielectric, 1 metal. |
+| `occlusion` | `float` | 1 | Ambient occlusion; scales image and ambient light only. |
+| `emissive` | `vec3` | 0 | Linear emitted radiance, added after lighting. |
+| `clearcoat` | `float` | 0 | Clear-coat layer weight 0..1. |
+| `clearcoatRoughness` | `float` | 0.03 | Coat roughness; the host clamps it to at least 0.04. |
+| `sheen` | `float` | 0 | Grazing sheen weight, tinted by the base color. |
+| `transmission` | `float` | 0 | Thin transmission weight for dielectrics. |
 
-The first hook surface should stay small:
+### Building a Surface
 
-| Output | Type | Purpose |
+| Call | Result |
+|---|---|
+| `pbr(baseColor, roughness, metallic)` | A Surface with the defaults above. |
+| `withBaseColor(s, c)`, `withAlpha(s, a)`, `withNormal(s, n)`, `withRoughness(s, r)`, `withMetallic(s, m)`, `withOcclusion(s, ao)`, `withEmissive(s, e)`, `withSheen(s, k)`, `withTransmission(s, t)` | `s` with one field replaced. |
+| `withClearcoat(s, amount, roughness)` | `s` with the coat weight and roughness replaced. |
+| `mixSurface(a, b, t)` | Field-wise `mix`; the normal is renormalized. |
+| `s.roughness`, `s.normal`, ... | Reads a field. |
+| `cond ? a : b` | Picks a whole Surface. |
+
+A Surface can be bound with `let` or `var`, reassigned, passed to and
+returned from functions (`fn wetten(s: Surface, k: float) -> Surface`), and
+returned at the end of the surface body. It cannot be used as a plain value:
+`s * 2.0` is an error.
+
+### Geometry
+
+| Field | Type | Meaning |
 |---|---|---|
-| `color` | `color` / `vec3` | base color before lighting |
-| `roughness` | `float` | roughness override or adjustment |
-| `metalness` | `float` | metalness override or adjustment |
-| `emissive` | `color` / `vec3` | emitted light contribution |
-| `alpha` | `float` | opacity / cutout input |
-| `normal` | `vec3` | optional perturbed normal in the same space the renderer expects |
+| `geo.worldPos` | `vec3` | World position. |
+| `geo.worldNormal` | `vec3` | Interpolated geometric normal, unit length. |
+| `geo.uv` | `vec2` | First UV set. |
+| `geo.tangent`, `geo.bitangent` | `vec3` | Mesh tangent frame, world space, not normalized; zero when the mesh has no tangents. |
+| `geo.viewDir` | `vec3` | Unit vector from the surface toward the camera. |
+| `geo.color` | `vec4` | Instance or vertex color. The host already multiplies the base color by its rgb. |
 
-Add normal last. Normal-space mistakes are expensive and should be covered by
-browser pixel tests before being presented as stable.
+### Rules
 
-## Non-Goals For V1
+- Params and `context` values (for example `time`) work as in a full
+  material. Engine textures (`shadowMap0`, `opaqueColor`, ...) and
+  `textureCube` params are rejected: the host already does shadows and
+  reflections.
+- At most `bindings.SurfaceMaxTextures` (6) `texture2d` params. Hosts bind
+  them in their standard material texture slots, so they are color images:
+  `sample`, `sampleLevel`, `load` and `size` work, and a data `format` other
+  than `rgba8unorm` is rejected.
+- No `vertex()`, varyings, statefields or `specular` companion; the host's
+  standard vertex stage runs and it computes the specular output itself.
+- No early `return`; assign a `var` Surface and return it at the end.
+  `discard` works.
+- Targets: `wgsl` and `gles`. A surface material compiles with no target list
+  to exactly those two; asking for `glsl` (WebGL 1) or `metal` is an error.
 
-- No arbitrary lighting loops in `.sel`.
-- No separate Selena PBR implementation.
-- No implicit use of standard material texture maps from a custom shader.
-- No backend-specific escape hatches in the `.sel` source.
-- No claim that custom materials inherit standard material behavior unless the
-  descriptor and GoSX adapter can prove the backend is served.
+### The hook ABI
 
-## Practical Next Steps
+The layout of a surface material has `kind: "surface"` and a `surface`
+descriptor (`bindings.SurfaceHook`, ABI `selena.surface.v1`):
 
-1. Add a typed `PBRSurface` record to HIR/lowering without changing emitters.
-2. Add parser support for a `surface(geo, pbr) -> PBRSurface` form.
-3. Add a GoSX adapter path that marks a material as a standard hook instead of
-   a full custom shader.
-4. Add golden outputs for every hook target and browser pixel tests before the
-   feature is documented as stable.
+```json
+"surface": {
+  "abi": "selena.surface.v1",
+  "function": "selenaSurface",
+  "textureNames": ["selenaSurfaceTex0"],
+  "glUniformPrefix": "selena_"
+}
+```
+
+- The WGSL artifact's `source` and the GLES artifact's `fragment` each declare
+  the `SelenaSurfaceGeo` and `SelenaSurface` structs, the params, and
+  `selenaSurface(selenaGeo: SelenaSurfaceGeo) -> SelenaSurface`. They are
+  fragments to splice into a host fragment shader, not modules.
+- WGSL params are one struct, `selenaParams`, at `@group(2) @binding(0)`
+  (`layout.wgsl`), packed by `layout.uniformBlock` exactly as for a full
+  material. GLES params are plain uniforms named `glUniformPrefix + name`.
+- Texture `i` (`layout.textures[i]`) is referenced as `textureNames[i]`, with
+  the WGSL sampler `textureNames[i] + "Sampler"`. The hook declares neither;
+  the host declares them or renames them to its own bindings.
+- `wgsl.SurfaceHarness` and `gles.SurfaceHarness` wrap a hook in a complete
+  shader for validation; Selena's tests run every hook through naga and
+  glslangValidator that way.
+
+### GoSX
+
+`scene.CompileSelenaMaterial` and the artifact loaders return a
+`CustomMaterial` whose `FragmentGLSL` and `FragmentWGSL` are the two hooks.
+Both GoSX renderers replace the material-resolution block of their standard
+PBR fragment with a call to the hook, so a surface material and a
+StandardMaterial with the same inputs render the same pixels. The GoSX side is
+documented in `docs/scene3d-selena.md` in the GoSX repository.
+
+## Full materials
+
+A full material emits complete shaders. The GoSX adapter returns a
+`CustomMaterial` with GLSL and WGSL vertex and fragment programs, descriptor
+defaults flow into the material's uniforms, and the material replaces the
+whole shader. Standard material fields such as roughness maps, image-based
+lighting and tone mapping are not applied to it.
+
+## Non-goals
+
+- No arbitrary lighting loops in a surface material: the host owns lighting.
+- No separate Selena PBR implementation for surface materials.
+- No implicit use of a host's standard material texture maps from Selena
+  source; declare `texture2d` params.
+- No backend-specific escape hatches in `.sel` source.

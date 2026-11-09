@@ -27,6 +27,8 @@ func Emit(m ir.Module) (vertex, fragment string, err error) {
 			return emitPostVertex(m), emitPostFragment(m), nil
 		case ir.KindFeedback:
 			return emitFeedbackVertex(m), emitFeedbackFragment(m), nil
+		case ir.KindSurface:
+			return "", "", fmt.Errorf("surface material %q: the glsl (WebGL 1) target has no surface hook; emit wgsl or gles", m.Name)
 		default:
 			if m.VertexAuthored {
 				return emitVertexAuthored(m), emitFragmentAuthored(m), nil
