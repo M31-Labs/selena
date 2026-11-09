@@ -1,8 +1,8 @@
 struct Uniforms {
   strips : f32,
   screenSize : vec2<f32>,
-  levels : array<vec4<f32>, 128>,
-  holds : array<vec4<f32>, 128>,
+  levels : array<vec4<f32>, 64>,
+  holds : array<vec4<f32>, 64>,
 };
 @group(0) @binding(0) var<uniform> u : Uniforms;
 
@@ -35,7 +35,7 @@ struct ScreenInput {
 
 @fragment fn fragmentMain(in : ScreenInput) -> @location(0) vec4<f32> {
   let x = (in.v_uv.x * u.strips);
-  let i = i32(min(floor(x), 127.0));
+  let i = i32(min(floor(x), 63.0));
   let lane = fract(x);
   let gap = (u.strips / u.screenSize.x);
   let body = (step(gap, lane) * step(lane, (1.0 - gap)));

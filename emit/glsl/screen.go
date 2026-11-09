@@ -20,19 +20,22 @@ func emitScreenVertex(m ir.Module) string {
 	b.WriteString("varying vec2 v_uv;\n\n")
 	b.WriteString("void main() {\n")
 	b.WriteString("  v_uv = vec2(a_position.x * 0.5 + 0.5, 0.5 - a_position.y * 0.5);\n")
-	b.WriteString("  gl_Position = vec4(a_position, 0.0, 1.0);\n")
+	b.WriteString("  gl_Position = vec4(a_position, -1.0, 1.0);\n")
 	b.WriteString("}\n")
 	return b.String()
 }
 
 // emitScreenFragment emits the GLSL ES 1.00 fragment shader of a screen pass.
-// The default float precision is highp, because screen passes read data such as
+// The default float and int precision is highp where the device has fragment
+// highp (GL_FRAGMENT_PRECISION_HIGH), because screen passes read data such as
 // decibel levels and texel indices that mediump (10 bits on some GPUs) cannot
-// hold. Fragment highp is optional in GLSL ES 1.00; the host checks
-// getShaderPrecisionFormat.
+// hold. Fragment highp is optional in GLSL ES 1.00, so devices without it fall
+// back to mediump instead of failing to compile. The vertex z is -1 so the
+// triangle sits at window depth 0 under the default depth range.
 func emitScreenFragment(m ir.Module) string {
 	var b strings.Builder
-	writeFragmentPrologue(&b, m, "highp")
+	writeFragmentExtensions(&b, m)
+	b.WriteString("#ifdef GL_FRAGMENT_PRECISION_HIGH\nprecision highp float;\nprecision highp int;\n#else\nprecision mediump float;\nprecision mediump int;\n#endif\n")
 	for _, u := range m.Uniforms {
 		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
 	}

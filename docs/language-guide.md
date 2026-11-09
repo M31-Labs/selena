@@ -344,7 +344,7 @@ already there.
 material MeterStrip kind screen {
     render { blend additive  depth off }
 
-    param levels : array<vec4, 128>   // (peakL, peakR, rmsL, rmsR) in dB
+    param levels : array<vec4, 64>    // (peakL, peakR, rmsL, rmsR) in dB
     param strips : float = 16.0
 
     surface(screen) -> color {

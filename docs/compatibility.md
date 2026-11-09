@@ -344,20 +344,34 @@ Notes for the host:
   `vec2` field `screenSize` tagged `class: "context"` and listed in
   `layout.context`. Write the target rectangle's size in pixels each draw. It is
   absent when the body does not call `screenSize()`.
-- **WebGL 1 precision.** The `glsl` fragment declares `precision highp float`,
-  because screen passes read data such as decibel levels and texel indices that
-  `mediump` cannot hold. Fragment `highp` is optional in GLSL ES 1.00; check
-  `getShaderPrecisionFormat` and refuse the material on a device without it.
+- **WebGL 1 precision.** The `glsl` fragment declares `highp` for `float` and
+  `int` where the device has fragment `highp` (`GL_FRAGMENT_PRECISION_HIGH`),
+  and falls back to `mediump` where it does not, so the shader still compiles.
+  On a device without fragment `highp`, texel addressing in data textures
+  loses precision above about 1024 texels, and decibel levels lose resolution.
+  Check `getShaderPrecisionFormat` if the material needs `highp`.
 - **`uv` on WebGL 1.** The `glsl` vertex stage maps clip `y = +1` to `uv.y = 0`,
   so the origin matches the other targets whatever triangle or quad you draw.
   (`post` on this target maps the other way.)
 - **Depth.** `depthTest` and `depthWrite` assume the host has a depth buffer
-  attached to the target. The shader writes no depth: the fullscreen triangle
-  has `z = 0`, which the host may remap with the viewport's depth range.
+  attached to the target. The shader writes no depth. The triangle is drawn at
+  the nearest depth on every target: window depth 0 with the default depth
+  range (the GLSL vertex shaders emit clip `z = -1` to match WebGPU and Metal,
+  where clip `z = 0` is depth 0). The host chooses the depth compare function.
+- **Uniform array limits.** A `param x : array<vec4, N>` costs `N` uniform
+  vectors. GLSL ES 3.00 guarantees `MAX_FRAGMENT_UNIFORM_VECTORS` of 224 and
+  GLSL ES 1.00 guarantees 16, so the meter-strip example (two arrays of 64,
+  128 vectors) fits the GLSL ES 3.00 minimum but not the GLSL ES 1.00 one.
+  GLSL ES 1.00 Appendix A guarantees only constant and loop indices for uniform
+  arrays in fragment shaders, so a computed index (`levels[i]` with `i` from
+  arithmetic) may be rejected by a WebGL 1 implementation. For more than a
+  handful of values, use a data texture as in `screen-data-texture`.
 - **Data textures.** `load`, `size`, `format` and `sampleMode` behave as in
   [Data Textures](#data-textures).
 - **Validation.** The screen conformance shaders compile under naga (WGSL) and
-  glslangValidator (ESSL 100 and 300). The Metal source is compiled only by the
+  glslangValidator (ESSL 100 and 300). glslangValidator does not enforce the
+  WebGL 1 limits above, so `screen-meter-strip` is not validated for WebGL 1.
+  The Metal source is compiled only by the
   optional `xcrun metal` check. No browser or GPU has drawn a screen pass in
   this repository, so blend and depth behaviour is the host's to confirm.
 

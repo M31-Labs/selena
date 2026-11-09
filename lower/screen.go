@@ -144,6 +144,9 @@ func lowerScreen(m hir.Material) (ir.Module, bindings.Layout, error) {
 		if p.Name == bindings.ScreenSizeUniform {
 			return fail(diagnostic(CodeReservedName, p.Span, "param %q is reserved for the target size the host writes; read it with screenSize()", p.Name))
 		}
+		if reason, ok := screenGeneratedNames[p.Name]; ok {
+			return fail(diagnostic(CodeReservedName, p.Span, "param %q is reserved for %s in screen materials", p.Name, reason))
+		}
 		if seen[p.Name] {
 			return fail(diagnostic(CodeDuplicateParam, p.Span, "duplicate param %q", p.Name))
 		}
@@ -194,6 +197,9 @@ func lowerScreen(m hir.Material) (ir.Module, bindings.Layout, error) {
 	}
 
 	for _, c := range m.Context {
+		if reason, ok := screenGeneratedNames[c.Name]; ok {
+			return fail(diagnostic(CodeReservedName, c.Span, "context %q is reserved for %s in screen materials", c.Name, reason))
+		}
 		if c.Name == bindings.ScreenSizeUniform {
 			return fail(diagnostic(CodeReservedName, c.Span, "context %q is reserved for the target size the host writes; read it with screenSize()", c.Name))
 		}
@@ -233,6 +239,13 @@ func lowerScreen(m hir.Material) (ir.Module, bindings.Layout, error) {
 	reserved, err := interfaceNames(uniformsList, textures, nil, varyings)
 	if err != nil {
 		return fail(err)
+	}
+	// Locals may not take the screen-only generated names or the screenSize
+	// uniform: every read of such a local would resolve to the generated
+	// declaration. Kept out of generatedNames so other kinds are unaffected.
+	reserved[bindings.ScreenSizeUniform] = "the host-written target size uniform"
+	for name, reason := range screenGeneratedNames {
+		reserved[name] = reason
 	}
 	fragBody, fragOut, err := lowerFragment(m.Surface, reserved, rs, tp)
 	if err != nil {
@@ -279,4 +292,14 @@ func lowerScreen(m hir.Material) (ir.Module, bindings.Layout, error) {
 		Pipeline:        &pipelineCopy,
 	}
 	return mod, layout, nil
+}
+
+// screenGeneratedNames are the names the screen emitters declare. They are
+// reserved for screen materials only; mesh and other kinds may still use them.
+var screenGeneratedNames = map[string]string{
+	"ScreenInput":      "the generated WGSL fragment input struct",
+	"ScreenOutput":     "the generated WGSL vertex output struct",
+	"ScreenOut":        "the generated Metal vertex output struct",
+	"_screenPositions": "the generated WGSL triangle positions",
+	"_screenUVs":       "the generated WGSL triangle uvs",
 }

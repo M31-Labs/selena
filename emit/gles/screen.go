@@ -24,7 +24,7 @@ func emitScreenVertex(m ir.Module) string {
 	b.WriteString("    vec2(0.0, 1.0), vec2(2.0, 1.0), vec2(0.0, -1.0)\n")
 	b.WriteString("  );\n")
 	b.WriteString("  v_uv = uvs[gl_VertexID];\n")
-	b.WriteString("  gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);\n")
+	b.WriteString("  gl_Position = vec4(positions[gl_VertexID], -1.0, 1.0);\n")
 	b.WriteString("}\n")
 	return b.String()
 }

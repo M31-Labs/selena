@@ -4,8 +4,8 @@ using namespace metal;
 struct Uniforms {
   float strips;
   float2 screenSize;
-  float4 levels[128];
-  float4 holds[128];
+  float4 levels[64];
+  float4 holds[64];
 };
 
 struct ScreenOut {
@@ -24,7 +24,7 @@ vertex ScreenOut vertexMain(uint vid [[vertex_id]]) {
 
 fragment float4 fragmentMain(ScreenOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {
   float x = (in.v_uv.x * u.strips);
-  int i = int(min(floor(x), 127.0));
+  int i = int(min(floor(x), 63.0));
   float lane = fract(x);
   float gap = (u.strips / u.screenSize.x);
   float body = (step(gap, lane) * step(lane, (1.0 - gap)));
