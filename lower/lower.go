@@ -51,6 +51,7 @@ func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
 		return ir.Module{}, bindings.Layout{}, err
 	}
 	layout.Requires = hostRequirements(mod)
+	stampEngineVersion(&layout)
 	return mod, layout, nil
 }
 
@@ -83,6 +84,12 @@ func hostRequirements(mod ir.Module) bindings.Requirements {
 	if ir.UsesSceneSampleLevel(mod) || ir.UsesCubeSampleLevel(mod) {
 		req.GLExtensions = append(req.GLExtensions, "EXT_shader_texture_lod")
 		req.SceneColorMips = ir.RequiresSceneColorMips(mod)
+	}
+	for _, t := range mod.Textures {
+		if t.Depth {
+			req.GLExtensions = append(req.GLExtensions, "WEBGL_depth_texture")
+			break
+		}
 	}
 	if ir.UsesSceneSize(mod) {
 		req.GLSceneSizeUniform = "_sceneSize"
@@ -148,10 +155,7 @@ func lowerMesh(m hir.Material) (ir.Module, bindings.Layout, error) {
 	vertexOut := ir.Binary{Op: "*", L: ir.Ref{Name: "mvp"},
 		R: ir.Construct{Type: ir.Vec4, Args: []ir.Expr{ir.Ref{Name: "position"}, ir.Lit{Value: 1.0}}}}
 
-	irTextures := make([]ir.Texture, len(uniforms.textures))
-	for i, t := range uniforms.textures {
-		irTextures[i] = ir.Texture{Name: t, Cube: uniforms.cubeTextures[t]}
-	}
+	irTextures := planIRTextures(uniforms)
 
 	mod := ir.Module{
 		Name:          m.Name,
@@ -175,7 +179,7 @@ func lowerMesh(m hir.Material) (ir.Module, bindings.Layout, error) {
 		EntryPoints:     bindings.EntryPoints{Vertex: "vertexMain", Fragment: "fragmentMain"},
 		UniformBlock:    ub,
 		Attributes:      toAttrs(interfaces.attributes),
-		Textures:        bindings.ComputeTexturesMixed(uniforms.textures, uniforms.cubeTextures),
+		Textures:        planLayoutTextures(uniforms),
 		WGSL:            bindings.WGSLBinding{Group: 0, Binding: 0},
 		Metal:           bindings.MetalBinding{Buffer: 0},
 		Context:         uniforms.contextNames,

@@ -117,6 +117,9 @@ func renameRefs(e Expr, names map[string]string) (Expr, bool) {
 		x.UV = child(x.UV)
 		x.LOD = child(x.LOD)
 		return x, ok
+	case SampleDepth:
+		x.UV = child(x.UV)
+		return x, ok
 	case SampleCube:
 		x.Dir = child(x.Dir)
 		return x, ok

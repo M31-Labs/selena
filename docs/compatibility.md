@@ -144,6 +144,7 @@ whole pass is dropped.
 |---|---|
 | `OES_standard_derivatives` | `fwidth`, `dpdx`, `dpdy` |
 | `EXT_shader_texture_lod` | `sceneColorLevel` (fragment-stage explicit LOD) |
+| `WEBGL_depth_texture` | a `textureDepth2d` engine texture such as `opaqueDepth` |
 
 The `gles` (GLSL ES 3.00), `wgsl` and `metal` artifacts have all of this in core
 and need nothing. A host running a WebGL 2 context should prefer the `gles`
@@ -184,6 +185,14 @@ declares the need. The host should compare the value with
 fewer units, use the `gles` artifact on a WebGL 2 context (at least 16 vertex
 units) or pick another material. Otherwise the program fails to link in the
 browser only. `wgsl`, `gles` and `metal` need nothing for this.
+
+### textures[].engine and fields[].source
+
+`textures[].engine` names the engine input bound to a texture declared in
+`context`, and `uniformBlock.fields[].source: "engine"` marks a registered
+engine value. `engineVersion` on the descriptor names the registry version the
+material was compiled against. `textures[].dimension` is `"depth2d"` for a
+depth texture. See [engine-inputs.md](engine-inputs.md).
 
 ### textures[].vertexStage
 

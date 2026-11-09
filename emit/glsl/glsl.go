@@ -106,9 +106,13 @@ func emitFragmentAuthored(m ir.Module) string {
 		fmt.Fprintf(&b, "varying %s %s;\n", typeName(v.Type), v.Name)
 	}
 	for _, t := range m.Textures {
-		if t.Cube {
+		switch {
+		case t.Cube:
 			fmt.Fprintf(&b, "uniform samplerCube %s;\n", t.Name)
-		} else {
+		case t.Depth:
+			// highp: depth needs full precision, and a sampler2D defaults lower.
+			fmt.Fprintf(&b, "uniform highp sampler2D %s;\n", t.Name)
+		default:
 			fmt.Fprintf(&b, "uniform sampler2D %s;\n", t.Name)
 		}
 	}
@@ -224,9 +228,13 @@ func emitFragment(m ir.Module) string {
 		fmt.Fprintf(&b, "varying %s %s;\n", typeName(v.Type), v.Name)
 	}
 	for _, t := range m.Textures {
-		if t.Cube {
+		switch {
+		case t.Cube:
 			fmt.Fprintf(&b, "uniform samplerCube %s;\n", t.Name)
-		} else {
+		case t.Depth:
+			// highp: depth needs full precision, and a sampler2D defaults lower.
+			fmt.Fprintf(&b, "uniform highp sampler2D %s;\n", t.Name)
+		default:
 			fmt.Fprintf(&b, "uniform sampler2D %s;\n", t.Name)
 		}
 	}

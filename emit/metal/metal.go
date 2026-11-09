@@ -146,11 +146,7 @@ func emitMesh(m ir.Module) (string, error) {
 	}
 	fragSig := "fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]"
 	for i, t := range m.Textures {
-		if t.Cube {
-			fragSig += fmt.Sprintf(", texturecube<float> %s [[texture(%d)]], sampler %sSampler [[sampler(%d)]]", t.Name, i, t.Name, i)
-		} else {
-			fragSig += fmt.Sprintf(", texture2d<float> %s [[texture(%d)]], sampler %sSampler [[sampler(%d)]]", t.Name, i, t.Name, i)
-		}
+		fragSig += fmt.Sprintf(", %s %s [[texture(%d)]], sampler %sSampler [[sampler(%d)]]", metalTextureType(t), t.Name, i, t.Name, i)
 	}
 	b.WriteString(fragSig + ") {\n")
 	internal.EmitStmtList(&b, m.Fragment.Body, fs, "  ", false)
@@ -218,7 +214,7 @@ func emitMeshAuthored(m ir.Module) (string, error) {
 	}
 	for i, t := range m.Textures {
 		if sampledInVertex[t.Name] {
-			vparams = append(vparams, fmt.Sprintf("texture2d<float> %s [[texture(%d)]]", t.Name, i), fmt.Sprintf("sampler %sSampler [[sampler(%d)]]", t.Name, i))
+			vparams = append(vparams, fmt.Sprintf("%s %s [[texture(%d)]]", metalTextureType(t), t.Name, i), fmt.Sprintf("sampler %sSampler [[sampler(%d)]]", t.Name, i))
 		}
 	}
 	if m.StateField != "" {
@@ -237,11 +233,7 @@ func emitMeshAuthored(m ir.Module) (string, error) {
 	}
 	fragSig := "fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]"
 	for i, t := range m.Textures {
-		if t.Cube {
-			fragSig += fmt.Sprintf(", texturecube<float> %s [[texture(%d)]], sampler %sSampler [[sampler(%d)]]", t.Name, i, t.Name, i)
-		} else {
-			fragSig += fmt.Sprintf(", texture2d<float> %s [[texture(%d)]], sampler %sSampler [[sampler(%d)]]", t.Name, i, t.Name, i)
-		}
+		fragSig += fmt.Sprintf(", %s %s [[texture(%d)]], sampler %sSampler [[sampler(%d)]]", metalTextureType(t), t.Name, i, t.Name, i)
 	}
 	if m.StateField != "" {
 		fragSig += ", constant StateGrid& _stateGrid [[buffer(1)]], const device float4* _inState [[buffer(2)]]"
@@ -465,3 +457,14 @@ vertex PostOut vertexMain(uint vid [[vertex_id]]) {
 
 // typeName spells an ir.Type in Metal, delegating to prism/dialect.
 func typeName(t ir.Type) string { return prismDialect.TypeName(internal.TypeToGPU(t)) }
+
+// metalTextureType is the MSL type of a texture binding.
+func metalTextureType(t ir.Texture) string {
+	switch {
+	case t.Cube:
+		return "texturecube<float>"
+	case t.Depth:
+		return "depth2d<float>"
+	}
+	return "texture2d<float>"
+}

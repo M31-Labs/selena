@@ -90,6 +90,10 @@ type Layout struct {
 	// authored. It is empty for every material that needs nothing beyond the
 	// standard contract. See Requirements.
 	Requires Requirements `json:"requires,omitzero"`
+	// EngineVersion is EngineVersion when the material declares at least one
+	// engine input (a field with Source "engine" or a texture with Engine set).
+	// Empty otherwise, so descriptors for other materials are unchanged.
+	EngineVersion string `json:"engineVersion,omitempty"`
 }
 
 // Requirements is the host-side contract a compiled material needs beyond
@@ -107,6 +111,7 @@ type Requirements struct {
 	//
 	//   OES_standard_derivatives — dpdx / dpdy / fwidth
 	//   EXT_shader_texture_lod   — sceneColorLevel (fragment-stage explicit LOD)
+	//   WEBGL_depth_texture      — a textureDepth2d engine texture (opaqueDepth)
 	//
 	// The GLES (GLSL ES 3.00), WGSL and Metal artifacts have all of this in
 	// core and need nothing.
@@ -226,6 +231,11 @@ type Field struct {
 	// never surfaced as a customUniforms default. "auto" (mvp/normalMatrix) is
 	// reserved for future use and not currently emitted.
 	Class string `json:"class,omitempty"`
+	// Source is "engine" when the field is a registered engine input (see
+	// EngineInputs): the renderer supplies it by name, with the type and meaning
+	// the registry gives it. Empty for author params and host-custom context
+	// fields.
+	Source string `json:"source,omitempty"`
 }
 
 // DefaultValue is a host-packable default for one uniform field. Values are
@@ -263,6 +273,10 @@ type Texture struct {
 	// WebGL the same texture unit (see Requirements.GLVertexTextureUnits). Absent
 	// (false) means fragment-only, as in every descriptor before this field.
 	VertexStage bool `json:"vertexStage,omitempty"`
+	// Engine names the engine input the renderer binds to this texture (see
+	// EngineInputs), for a texture declared in `context { ... }`. Empty for an
+	// author texture param, which the host binds from the material's own values.
+	Engine string `json:"engine,omitempty"`
 }
 
 // WGSLTexBinding gives the bind-group slots for the texture and its sampler.

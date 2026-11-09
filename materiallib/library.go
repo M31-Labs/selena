@@ -32,6 +32,9 @@ const Normals Module = "normals"
 // loads Procedural, which supplies its filtered dust noise.
 const Effects Module = "effects"
 
+// Sky provides the physical daylight sky, physicalSky(dir, betaR, betaM, sun, g).
+const Sky Module = "sky"
+
 //go:embed modules/*.sel
 var sources embed.FS
 var cache sync.Map

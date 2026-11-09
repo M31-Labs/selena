@@ -1,0 +1,27 @@
+// engine-values.sel — typed engine inputs declared in `context`.
+//
+// The names below are in the engine registry (bindings.EngineInputs), so the
+// compiler checks their types and the descriptor marks each field
+// source:"engine". `tint` is not in the registry: it stays a host-custom
+// context field.
+material EngineLit {
+    context {
+        cameraPos : vec3
+        sunDir    : vec3
+        sunColor  : vec3
+        ambient   : vec3
+        fog       : vec4
+        exposure  : float
+        tint      : vec3
+    }
+
+    surface(geo) -> color {
+        let n = normalize(geo.worldNormal)
+        let v = normalize(cameraPos - geo.position)
+        let diffuse = max(dot(n, sunDir), 0.0)
+        let lit = (ambient + sunColor * diffuse) * tint * exposure
+        let dist = length(cameraPos - geo.position)
+        let f = 1.0 - exp(-fog.w * dist)
+        return mix(lit, fog.xyz, f) * (0.5 + 0.5 * dot(n, v))
+    }
+}

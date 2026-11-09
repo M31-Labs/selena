@@ -122,9 +122,12 @@ func emitMesh(m ir.Module) (string, error) {
 	// uniform block is binding 0, then texture i takes 1+2i and its sampler 2+2i.
 	// Cube-map textures use texture_cube<f32>; regular 2D textures use texture_2d<f32>.
 	for i, t := range m.Textures {
-		if t.Cube {
+		switch {
+		case t.Cube:
 			fmt.Fprintf(&b, "@group(0) @binding(%d) var %s : texture_cube<f32>;\n", 1+2*i, t.Name)
-		} else {
+		case t.Depth:
+			fmt.Fprintf(&b, "@group(0) @binding(%d) var %s : texture_depth_2d;\n", 1+2*i, t.Name)
+		default:
 			fmt.Fprintf(&b, "@group(0) @binding(%d) var %s : texture_2d<f32>;\n", 1+2*i, t.Name)
 		}
 		fmt.Fprintf(&b, "@group(0) @binding(%d) var %sSampler : sampler;\n", 2+2*i, t.Name)
@@ -187,9 +190,12 @@ func emitMeshAuthored(m ir.Module) (string, error) {
 	}
 
 	for i, t := range m.Textures {
-		if t.Cube {
+		switch {
+		case t.Cube:
 			fmt.Fprintf(&b, "@group(0) @binding(%d) var %s : texture_cube<f32>;\n", 1+2*i, t.Name)
-		} else {
+		case t.Depth:
+			fmt.Fprintf(&b, "@group(0) @binding(%d) var %s : texture_depth_2d;\n", 1+2*i, t.Name)
+		default:
 			fmt.Fprintf(&b, "@group(0) @binding(%d) var %s : texture_2d<f32>;\n", 1+2*i, t.Name)
 		}
 		fmt.Fprintf(&b, "@group(0) @binding(%d) var %sSampler : sampler;\n", 2+2*i, t.Name)
