@@ -1,0 +1,24 @@
+// Water surface: rippled normals, a Fresnel blend from the deep color to the
+// sky reflection, and a sun glint. For ponds and pools on a flat mesh; the
+// ocean has its own renderer. Needs the game module.
+material WaterSurface {
+    context {
+        cameraPos : vec3
+        sunDir    : vec3
+        sunColor  : vec3
+        time      : float
+    }
+    param deepColor : color = rgb(0.02, 0.12, 0.16)
+    param skyColor  : color = rgb(0.55, 0.70, 0.85)
+    param waveScale : float = 1.5
+    param choppy    : float = 0.25
+
+    surface(geo) -> color {
+        let n = mlWaterRipples(geo.worldPos.xz, time, waveScale, choppy)
+        let v = normalize(cameraPos - geo.worldPos)
+        let l = normalize(sunDir)
+        let f = mlWaterFresnel(n, v)
+        let glint = pow(max(dot(reflect(-l, n), v), 0.0), 240.0) * sunColor * 6.0
+        return mix(deepColor, skyColor, f) + glint
+    }
+}

@@ -1,0 +1,45 @@
+// Foliage: two-sided leaves that sway in the scene wind and glow when backlit.
+// vertex() bends each vertex by mlWindSway, with uv.y as the bend weight
+// (0 at the stem, 1 at the tip), so export leaf cards with V running up the
+// blade. Draw the mesh double sided; mlFoliageNormal lights the back face as
+// a front face. Link the lighting and game modules.
+material Foliage {
+    context {
+        cameraPos  : vec3
+        ambient    : vec3
+        fog        : vec4
+        lightCount : float
+        lights     : array<vec4, 32>
+        wind       : vec4
+        windGust   : vec4
+    }
+    param leafColor  : color = rgb(0.18, 0.42, 0.10)
+    param backColor  : color = rgb(0.55, 0.80, 0.18)
+    param stiffness  : float = 1.0
+    param thickness  : float = 0.35
+
+    varying worldPos    : vec3
+    varying worldNormal : vec3
+    varying leafUV      : vec2
+
+    vertex(geo) -> vec4 {
+        let p = geo.position + mlWindSway(geo.position, geo.uv.y, stiffness, wind, windGust)
+        worldPos = p
+        worldNormal = normalMatrix * geo.normal
+        leafUV = geo.uv
+        return mvp * vec4f(p, 1.0)
+    }
+
+    surface(geo) -> color {
+        let v = normalize(cameraPos - geo.worldPos)
+        let n = mlFoliageNormal(normalize(geo.worldNormal), v)
+        // Darken toward the stem: inner leaves get less sky.
+        var lit = ambient * leafColor * (0.6 + 0.4 * geo.leafUV.y)
+        for (var i = 0i; i < 8i; i = i + 1i) {
+            let l = mlLightDir(i, geo.worldPos)
+            let back = mlFoliageTranslucency(n, v, l, thickness) * mlLightActive(i)
+            lit = lit + leafColor * mlLightDiffuse(i, n, geo.worldPos) + backColor * mlLightRadiance(i, n, geo.worldPos) * back
+        }
+        return mlFog(lit, geo.worldPos)
+    }
+}

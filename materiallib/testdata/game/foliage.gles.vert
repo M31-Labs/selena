@@ -1,0 +1,46 @@
+#version 300 es
+in vec3 position;
+in vec3 normal;
+in vec2 uv;
+uniform mat4 mvp;
+uniform mat3 normalMatrix;
+uniform vec3 leafColor;
+uniform vec3 backColor;
+uniform float stiffness;
+uniform float thickness;
+uniform vec3 cameraPos;
+uniform vec3 ambient;
+uniform vec4 fog;
+uniform float lightCount;
+uniform vec4 wind;
+uniform vec4 windGust;
+uniform vec4 lights[32];
+out vec3 worldPos;
+out vec3 worldNormal;
+out vec2 leafUV;
+
+void main() {
+  vec3 selenaLib95 = position;
+  float selenaLib96 = uv.y;
+  float selenaLib97 = stiffness;
+  vec4 selenaLib98 = wind;
+  vec4 selenaLib99 = windGust;
+  vec3 selenaLib100 = selenaLib95;
+  vec4 selenaLib101 = selenaLib98;
+  vec4 selenaLib102 = selenaLib99;
+  float selenaLib103 = max(selenaLib102.y, 1.0);
+  float selenaLib104 = ((selenaLib100.x * selenaLib101.x) + (selenaLib100.z * selenaLib101.y));
+  float selenaLib105 = ((selenaLib100.x * selenaLib101.y) - (selenaLib100.z * selenaLib101.x));
+  float selenaLib106 = (0.35 * sin(((selenaLib105 * 6.2831855) / (selenaLib103 * 1.7))));
+  float selenaLib107 = ((((selenaLib104 - (selenaLib102.z * selenaLib101.w)) * 6.2831855) / selenaLib103) + selenaLib106);
+  float selenaLib108 = (1.0 + (selenaLib102.x * sin(selenaLib107)));
+  float selenaLib109 = ((clamp((selenaLib98.z / 10.0), 0.0, 1.5) * selenaLib108) / max(selenaLib97, 0.05));
+  float selenaLib110 = (sin((((selenaLib98.w * selenaLib99.w) * 6.2831855) + dot(selenaLib95.xz, vec2(0.37, 0.61)))) * 0.25);
+  float selenaLib111 = (((selenaLib96 * selenaLib96) * selenaLib109) * (1.0 + selenaLib110));
+  vec3 selenaLib112 = vec3(((selenaLib98.x * selenaLib111) * 0.3), ((-(selenaLib111 * selenaLib111)) * 0.03), ((selenaLib98.y * selenaLib111) * 0.3));
+  vec3 p = (position + selenaLib112);
+  worldPos = p;
+  worldNormal = (normalMatrix * normal);
+  leafUV = uv;
+  gl_Position = (mvp * vec4(p, 1.0));
+}

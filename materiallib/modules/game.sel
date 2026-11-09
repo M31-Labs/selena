@@ -1,0 +1,226 @@
+// Game material helpers: wind sway and translucency for foliage, toon (cel)
+// shading with outlines, dissolve, hologram and force-field effects, ice and
+// water surface terms, and a cheap subsurface approximation for skin and wax.
+//
+// The helpers take plain vectors, so they combine with the lighting module
+// (loop over mlLightDir and mlLightRadiance for every scene light) or with
+// one key light from the sunDir and sunColor engine inputs.
+//
+// Wind follows GoSX's scene.Wind field: wind = (dirX, dirZ, speed, time) and
+// windGust = (gust, gustScale, gustSpeed, frequency), with the direction a
+// unit XZ vector, speed in m/s and time in seconds. Declare them in the
+// material's context block as `wind : vec4` and `windGust : vec4`.
+
+// mlGameHash returns a pseudo-random value in 0..1 for a 2D cell.
+fn mlGameHash(p: vec2) -> float {
+    return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453)
+}
+
+// mlGameNoise is one octave of smooth value noise in 0..1.
+fn mlGameNoise(p: vec2) -> float {
+    let i = floor(p)
+    let f = fract(p)
+    let u = f * f * (3.0 - 2.0 * f)
+    let a = mlGameHash(i)
+    let b = mlGameHash(i + vec2f(1.0, 0.0))
+    let c = mlGameHash(i + vec2f(0.0, 1.0))
+    let d = mlGameHash(i + vec2f(1.0, 1.0))
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y)
+}
+
+// mlGameNoise3 is value noise of a 3D point, the average of two planar
+// projections, for meshes without good UVs.
+fn mlGameNoise3(p: vec3) -> float {
+    return (mlGameNoise(p.xy) + mlGameNoise(p.zx + vec2f(17.0, 31.0))) * 0.5
+}
+
+// mlRimFactor is 1 where the surface is seen edge on and 0 where it faces the
+// viewer; power narrows the rim. n and v are unit vectors, v toward the camera.
+fn mlRimFactor(n: vec3, v: vec3, power: float) -> float {
+    return pow(1.0 - clamp(dot(n, v), 0.0, 1.0), power)
+}
+
+// --- Foliage ---
+
+// mlWindGust is the gust factor 1 +- gust at worldPos: a front that rolls
+// downwind every gustScale meters, with a slow cross-wind wobble. It is the
+// expression GoSX evaluates for scene.Wind.Sample, so shaders and gameplay
+// agree on the wind.
+fn mlWindGust(worldPos: vec3, wind: vec4, gust: vec4) -> float {
+    let scale = max(gust.y, 1.0)
+    let along = worldPos.x * wind.x + worldPos.z * wind.y
+    let across = worldPos.x * wind.y - worldPos.z * wind.x
+    let wobble = 0.35 * sin(across * 6.2831855 / (scale * 1.7))
+    let phase = (along - gust.z * wind.w) * 6.2831855 / scale + wobble
+    return 1.0 + gust.x * sin(phase)
+}
+
+// mlWindSway returns the world-space offset that bends a plant vertex. bend is
+// 0 at the root and 1 at the tip, for example uv.y; the offset grows with bend
+// squared, so roots stay planted. stiffness 1 suits grass, higher values sway
+// less. Sway reaches full strength at 10 m/s and flutters at the wind
+// frequency, out of phase between neighbouring plants.
+fn mlWindSway(worldPos: vec3, bend: float, stiffness: float, wind: vec4, gust: vec4) -> vec3 {
+    let strength = clamp(wind.z / 10.0, 0.0, 1.5) * mlWindGust(worldPos, wind, gust) / max(stiffness, 0.05)
+    let flutter = sin(wind.w * gust.w * 6.2831855 + dot(worldPos.xz, vec2f(0.37, 0.61))) * 0.25
+    let w = bend * bend * strength * (1.0 + flutter)
+    return vec3f(wind.x * w * 0.3, -(w * w) * 0.03, wind.y * w * 0.3)
+}
+
+// mlFoliageNormal turns n toward the viewer, so both faces of a two-sided
+// leaf are lit as front faces.
+fn mlFoliageNormal(n: vec3, v: vec3) -> vec3 {
+    return dot(n, v) < 0.0 ? -n : n
+}
+
+// mlSubsurfaceBack is the share of light from direction l that scatters
+// through thin material toward the viewer v: strongest when looking into the
+// light. distortion bends the light along n (0.2 to 0.5 is typical); power
+// narrows the glow; thickness 0..1 blocks it (1 opaque).
+fn mlSubsurfaceBack(n: vec3, v: vec3, l: vec3, distortion: float, power: float, thickness: float) -> float {
+    let h = normalize(l + n * distortion)
+    return pow(clamp(dot(v, -h), 0.0, 1.0), max(power, 1.0)) * (1.0 - clamp(thickness, 0.0, 1.0))
+}
+
+// mlFoliageTranslucency is mlSubsurfaceBack tuned for leaves.
+fn mlFoliageTranslucency(n: vec3, v: vec3, l: vec3, thickness: float) -> float {
+    return mlSubsurfaceBack(n, v, l, 0.35, 4.0, thickness)
+}
+
+// --- Toon ---
+
+// mlToonBands quantizes a Lambert term ndl into bands flat steps. softness
+// 0..0.5 widens the edge of each step, which keeps the steps from aliasing.
+fn mlToonBands(ndl: float, bands: float, softness: float) -> float {
+    let n = max(bands, 1.0)
+    let x = clamp(ndl, 0.0, 1.0) * n
+    return (floor(x) + smoothstep(1.0 - max(softness, 0.0001), 1.0, fract(x))) / n
+}
+
+// mlToonSpecular is a hard-edged highlight: 1 inside a disc whose size 0..1
+// grows with size, softened over softness.
+fn mlToonSpecular(n: vec3, v: vec3, l: vec3, size: float, softness: float) -> float {
+    let threshold = 1.0 - clamp(size, 0.0, 1.0) * 0.1
+    return smoothstep(threshold - softness, threshold + softness, dot(n, normalize(l + v)))
+}
+
+// mlToonRim is a lit rim on the side that faces the light; width 0..1.
+fn mlToonRim(n: vec3, v: vec3, l: vec3, width: float, softness: float) -> float {
+    let rim = (1.0 - clamp(dot(n, v), 0.0, 1.0)) * clamp(dot(n, l) * 0.5 + 0.5, 0.0, 1.0)
+    let edge = 1.0 - clamp(width, 0.0, 1.0)
+    return smoothstep(edge - softness, edge + softness, rim)
+}
+
+// mlToonOutline is 1 on the silhouette, where the surface turns away from the
+// viewer, about width pixels wide. It uses screen derivatives, so call it from
+// surface() only. An inverted-hull copy of the mesh draws a thicker, even
+// outline; this is the one-pass approximation.
+fn mlToonOutline(n: vec3, v: vec3, width: float) -> float {
+    let ndv = dot(n, v)
+    let w = max(fwidth(ndv) * max(width, 0.0), 0.0001)
+    return 1.0 - smoothstep(w, w * 2.0, ndv)
+}
+
+// --- Dissolve ---
+
+// mlDissolveMask is positive where the surface remains: progress 0 keeps all
+// of it and 1 removes all of it. noise is 0..1, from mlGameNoise3 or a texture.
+// Discard where the mask is negative.
+fn mlDissolveMask(noise: float, progress: float) -> float {
+    return clamp(noise, 0.0, 1.0) - clamp(progress, 0.0, 1.0) * 1.02 + 0.01
+}
+
+// mlDissolveEdge is 1 in a band of the given width inside the cut, for a
+// glowing burn edge, and 0 elsewhere.
+fn mlDissolveEdge(mask: float, width: float) -> float {
+    return 1.0 - smoothstep(0.0, max(width, 0.0001), mask)
+}
+
+// --- Hologram and force field ---
+
+// mlScanlines is a line pattern along height: density lines per meter that
+// move at speed m/s; sharpness 1 or more thins each line.
+fn mlScanlines(height: float, time: float, density: float, speed: float, sharpness: float) -> float {
+    let x = fract(height * density - time * speed)
+    return pow(1.0 - abs(x * 2.0 - 1.0), max(sharpness, 1.0))
+}
+
+// mlHologram is the brightness of a hologram: a dim body, a bright rim and
+// moving scanlines, with flicker 0..1 dimming it at random every 1/24 s.
+// Draw the material with additive blending.
+fn mlHologram(n: vec3, v: vec3, worldPos: vec3, time: float, density: float, flicker: float) -> float {
+    let rim = mlRimFactor(n, v, 2.0)
+    let lines = mlScanlines(worldPos.y, time, density, 0.6, 8.0)
+    let dim = 1.0 - clamp(flicker, 0.0, 1.0) * mlGameHash(vec2f(floor(time * 24.0), 7.0))
+    return (0.25 + rim * 0.9 + lines * 0.5) * dim
+}
+
+// mlForceFieldHit is an expanding ring from an impact at hitPos, age seconds
+// ago: it travels at speed m/s, is width meters wide and fades over one second.
+fn mlForceFieldHit(worldPos: vec3, hitPos: vec3, age: float, speed: float, width: float) -> float {
+    let d = abs(distance(worldPos, hitPos) - max(age, 0.0) * speed)
+    let alive = age >= 0.0 ? clamp(1.0 - age, 0.0, 1.0) : 0.0
+    return (1.0 - smoothstep(0.0, max(width, 0.0001), d)) * alive
+}
+
+// mlForceField is the brightness of an energy shell: a strong rim and slow
+// bands sweeping across it. Add mlForceFieldHit for impacts and draw it with
+// additive blending.
+fn mlForceField(n: vec3, v: vec3, worldPos: vec3, time: float) -> float {
+    let rim = mlRimFactor(n, v, 3.0)
+    let bands = mlScanlines(worldPos.y + worldPos.x * 0.3, time, 3.0, 0.4, 4.0) * 0.35
+    return clamp(rim + bands, 0.0, 2.0)
+}
+
+// --- Ice and water ---
+
+// mlWaterFresnel is Schlick's reflectance for water (F0 0.02): the share of
+// light the surface reflects at view angle n.v.
+fn mlWaterFresnel(n: vec3, v: vec3) -> float {
+    let c = 1.0 - clamp(dot(n, v), 0.0, 1.0)
+    let c2 = c * c
+    return 0.02 + 0.98 * c2 * c2 * c
+}
+
+// mlWaterRipples returns an upward world normal tilted by three moving sine
+// waves across xz; scale is waves per meter and strength 0..1 their slope.
+fn mlWaterRipples(xz: vec2, time: float, scale: float, strength: float) -> vec3 {
+    let p = xz * scale
+    let g1 = vec2f(0.8, 0.6) * cos(dot(p, vec2f(0.8, 0.6)) + time * 1.3)
+    let g2 = vec2f(-0.4, 0.9) * (cos(dot(p, vec2f(-0.4, 0.9)) * 1.7 + time * 1.9) * 0.6)
+    let g3 = vec2f(0.95, -0.3) * (cos(dot(p, vec2f(0.95, -0.3)) * 2.9 + time * 2.7) * 0.35)
+    let g = (g1 + g2 + g3) * strength
+    return normalize(vec3f(-g.x, 1.0, -g.y))
+}
+
+// mlIceSparkle is a glint where a randomly tilted facet of a cell density
+// per meter reflects light l toward the viewer v; about 30% of cells sparkle.
+fn mlIceSparkle(worldPos: vec3, n: vec3, v: vec3, l: vec3, density: float) -> float {
+    let cell = floor(worldPos * density)
+    let r = mlGameHash(cell.xy + vec2f(cell.z * 13.1, cell.z * 7.7))
+    let tilt = vec3f(mlGameHash(cell.xz) - 0.5, mlGameHash(cell.yz + vec2f(3.7, 1.3)) - 0.5, r - 0.5)
+    let facet = normalize(n + tilt * 0.6)
+    return pow(clamp(dot(facet, normalize(l + v)), 0.0, 1.0), 200.0) * step(0.7, r)
+}
+
+// mlIceTint blends the surface color toward the deep color where the view
+// looks straight into the ice and more of the body shows.
+fn mlIceTint(surface: vec3, deep: vec3, n: vec3, v: vec3) -> vec3 {
+    return mix(surface, deep, clamp(dot(n, v), 0.0, 1.0))
+}
+
+// --- Subsurface ---
+
+// mlSubsurfaceWrap is wrapped diffuse from vectors: light reaches past the
+// shadow line by wrap 0..1, which softens the terminator of skin and wax.
+fn mlSubsurfaceWrap(n: vec3, l: vec3, wrap: float) -> float {
+    return clamp((dot(n, l) + wrap) / (1.0 + wrap), 0.0, 1.0)
+}
+
+// mlSubsurfaceTint is the color that shows near the shadow line, where light
+// scattered under the surface comes back out: scatter times a band of the
+// given width around n.l = 0.
+fn mlSubsurfaceTint(n: vec3, l: vec3, scatter: vec3, width: float) -> vec3 {
+    let band = clamp(1.0 - abs(dot(n, l)) / max(width, 0.0001), 0.0, 1.0)
+    return scatter * band
+}

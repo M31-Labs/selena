@@ -1,0 +1,164 @@
+#include <metal_stdlib>
+using namespace metal;
+
+struct Uniforms {
+  float4x4 mvp;
+  float3x3 normalMatrix;
+  float3 surfaceColor;
+  float3 deepColor;
+  float sparkle;
+  float3 cameraPos;
+  float3 ambient;
+  float4 fog;
+  float lightCount;
+  float3 sunDir;
+  float3 sunColor;
+  float4 lights[32];
+};
+
+struct VertexIn {
+  float3 position [[attribute(0)]];
+  float3 normal [[attribute(1)]];
+};
+
+struct VertexOut {
+  float4 position [[position]];
+  float3 vWorldNormal;
+  float3 vWorldPos;
+};
+
+vertex VertexOut vertexMain(VertexIn in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {
+  VertexOut out;
+  out.vWorldNormal = normalize((u.normalMatrix * in.normal));
+  out.vWorldPos = in.position;
+  out.position = (u.mvp * float4(in.position, 1.0));
+  return out;
+}
+
+fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {
+  float3 n = normalize(in.vWorldNormal);
+  float3 v = normalize((u.cameraPos - in.vWorldPos));
+  float3 selenaLib0 = u.surfaceColor;
+  float3 selenaLib1 = u.deepColor;
+  float3 selenaLib2 = n;
+  float3 selenaLib3 = v;
+  float3 selenaLib4 = mix(selenaLib0, selenaLib1, clamp(dot(selenaLib2, selenaLib3), 0.0, 1.0));
+  float3 body = selenaLib4;
+  float3 lit = (u.ambient * body);
+  for (int i = 0; (i < 8); i = (i + 1)) {
+    int selenaLib5 = i;
+    float3 selenaLib6 = n;
+    float3 selenaLib7 = in.vWorldPos;
+    int selenaLib8 = selenaLib5;
+    float selenaLib9 = u.lights[(selenaLib8 * 4)].w;
+    float selenaLib10 = selenaLib9;
+    bool selenaLib11 = ((selenaLib10 == 0.0) || (selenaLib10 == 4.0));
+    int selenaLib12 = selenaLib5;
+    float3 selenaLib13 = selenaLib7;
+    float4 selenaLib14 = u.lights[(selenaLib12 * 4)];
+    float4 selenaLib15 = u.lights[((selenaLib12 * 4) + 1)];
+    float3 selenaLib16 = (selenaLib14.xyz - selenaLib13);
+    bool selenaLib17 = ((selenaLib14.w == 2.0) || (selenaLib14.w == 3.0));
+    float3 selenaLib18 = (selenaLib17 ? (selenaLib16 / max(length(selenaLib16), 0.0001)) : normalize(((-selenaLib15.xyz) + float3(0.0, 0.000001, 0.0))));
+    float selenaLib19 = (selenaLib11 ? 1.0 : max(dot(selenaLib6, selenaLib18), 0.0));
+    int selenaLib20 = selenaLib5;
+    float3 selenaLib21 = selenaLib6;
+    float3 selenaLib22 = selenaLib7;
+    float4 selenaLib23 = u.lights[(selenaLib20 * 4)];
+    float4 selenaLib24 = u.lights[((selenaLib20 * 4) + 1)];
+    float4 selenaLib25 = u.lights[((selenaLib20 * 4) + 2)];
+    float4 selenaLib26 = u.lights[((selenaLib20 * 4) + 3)];
+    float selenaLib27 = length((selenaLib23.xyz - selenaLib22));
+    float selenaLib28 = (pow(clamp((1.0 - pow((selenaLib27 / max(selenaLib24.w, 0.0001)), 4.0)), 0.0, 1.0), 2.0) / max((selenaLib27 * selenaLib27), 0.0001));
+    float selenaLib29 = (1.0 / max(pow(max(selenaLib27, 0.0001), selenaLib25.w), 0.0001));
+    float selenaLib30 = (((selenaLib23.w == 2.0) || (selenaLib23.w == 3.0)) ? ((selenaLib24.w > 0.0) ? selenaLib28 : selenaLib29) : 1.0);
+    int selenaLib31 = selenaLib20;
+    float3 selenaLib32 = selenaLib22;
+    float4 selenaLib33 = u.lights[(selenaLib31 * 4)];
+    float4 selenaLib34 = u.lights[((selenaLib31 * 4) + 1)];
+    float3 selenaLib35 = (selenaLib33.xyz - selenaLib32);
+    bool selenaLib36 = ((selenaLib33.w == 2.0) || (selenaLib33.w == 3.0));
+    float3 selenaLib37 = (selenaLib36 ? (selenaLib35 / max(length(selenaLib35), 0.0001)) : normalize(((-selenaLib34.xyz) + float3(0.0, 0.000001, 0.0))));
+    float selenaLib38 = dot((-selenaLib37), normalize((selenaLib24.xyz + float3(0.0, 0.000001, 0.0))));
+    float selenaLib39 = ((selenaLib23.w == 3.0) ? smoothstep(selenaLib26.x, selenaLib26.y, selenaLib38) : 1.0);
+    float3 selenaLib40 = ((selenaLib23.w == 4.0) ? mix(selenaLib26.xyz, selenaLib25.xyz, clamp(((selenaLib21.y * 0.5) + 0.5), 0.0, 1.0)) : selenaLib25.xyz);
+    int selenaLib41 = selenaLib20;
+    float selenaLib42 = ((float(selenaLib41) < u.lightCount) ? 1.0 : 0.0);
+    float3 selenaLib43 = (((selenaLib40 * selenaLib30) * selenaLib39) * selenaLib42);
+    float3 selenaLib44 = (selenaLib43 * selenaLib19);
+    int selenaLib45 = i;
+    float3 selenaLib46 = n;
+    float3 selenaLib47 = v;
+    float3 selenaLib48 = in.vWorldPos;
+    float selenaLib49 = 96.0;
+    int selenaLib50 = selenaLib45;
+    float selenaLib51 = u.lights[(selenaLib50 * 4)].w;
+    float selenaLib52 = selenaLib51;
+    int selenaLib53 = selenaLib45;
+    float3 selenaLib54 = selenaLib48;
+    float4 selenaLib55 = u.lights[(selenaLib53 * 4)];
+    float4 selenaLib56 = u.lights[((selenaLib53 * 4) + 1)];
+    float3 selenaLib57 = (selenaLib55.xyz - selenaLib54);
+    bool selenaLib58 = ((selenaLib55.w == 2.0) || (selenaLib55.w == 3.0));
+    float3 selenaLib59 = (selenaLib58 ? (selenaLib57 / max(length(selenaLib57), 0.0001)) : normalize(((-selenaLib56.xyz) + float3(0.0, 0.000001, 0.0))));
+    float3 selenaLib60 = selenaLib59;
+    float3 selenaLib61 = normalize((selenaLib60 + selenaLib47));
+    float selenaLib62 = ((((dot(selenaLib46, selenaLib60) > 0.0) && (selenaLib52 != 0.0)) && (selenaLib52 != 4.0)) ? 1.0 : 0.0);
+    float selenaLib63 = ((selenaLib49 + 8.0) / 25.1327412287);
+    int selenaLib64 = selenaLib45;
+    float3 selenaLib65 = selenaLib46;
+    float3 selenaLib66 = selenaLib48;
+    float4 selenaLib67 = u.lights[(selenaLib64 * 4)];
+    float4 selenaLib68 = u.lights[((selenaLib64 * 4) + 1)];
+    float4 selenaLib69 = u.lights[((selenaLib64 * 4) + 2)];
+    float4 selenaLib70 = u.lights[((selenaLib64 * 4) + 3)];
+    float selenaLib71 = length((selenaLib67.xyz - selenaLib66));
+    float selenaLib72 = (pow(clamp((1.0 - pow((selenaLib71 / max(selenaLib68.w, 0.0001)), 4.0)), 0.0, 1.0), 2.0) / max((selenaLib71 * selenaLib71), 0.0001));
+    float selenaLib73 = (1.0 / max(pow(max(selenaLib71, 0.0001), selenaLib69.w), 0.0001));
+    float selenaLib74 = (((selenaLib67.w == 2.0) || (selenaLib67.w == 3.0)) ? ((selenaLib68.w > 0.0) ? selenaLib72 : selenaLib73) : 1.0);
+    int selenaLib75 = selenaLib64;
+    float3 selenaLib76 = selenaLib66;
+    float4 selenaLib77 = u.lights[(selenaLib75 * 4)];
+    float4 selenaLib78 = u.lights[((selenaLib75 * 4) + 1)];
+    float3 selenaLib79 = (selenaLib77.xyz - selenaLib76);
+    bool selenaLib80 = ((selenaLib77.w == 2.0) || (selenaLib77.w == 3.0));
+    float3 selenaLib81 = (selenaLib80 ? (selenaLib79 / max(length(selenaLib79), 0.0001)) : normalize(((-selenaLib78.xyz) + float3(0.0, 0.000001, 0.0))));
+    float selenaLib82 = dot((-selenaLib81), normalize((selenaLib68.xyz + float3(0.0, 0.000001, 0.0))));
+    float selenaLib83 = ((selenaLib67.w == 3.0) ? smoothstep(selenaLib70.x, selenaLib70.y, selenaLib82) : 1.0);
+    float3 selenaLib84 = ((selenaLib67.w == 4.0) ? mix(selenaLib70.xyz, selenaLib69.xyz, clamp(((selenaLib65.y * 0.5) + 0.5), 0.0, 1.0)) : selenaLib69.xyz);
+    int selenaLib85 = selenaLib64;
+    float selenaLib86 = ((float(selenaLib85) < u.lightCount) ? 1.0 : 0.0);
+    float3 selenaLib87 = (((selenaLib84 * selenaLib74) * selenaLib83) * selenaLib86);
+    float3 selenaLib88 = (((selenaLib87 * pow(max(dot(selenaLib46, selenaLib61), 0.0), selenaLib49)) * selenaLib63) * selenaLib62);
+    lit = ((lit + (body * selenaLib44)) + (0.6 * selenaLib88));
+  }
+  float3 selenaLib89 = in.vWorldPos;
+  float3 selenaLib90 = n;
+  float3 selenaLib91 = v;
+  float3 selenaLib92 = normalize(u.sunDir);
+  float selenaLib93 = u.sparkle;
+  float3 selenaLib94 = floor((selenaLib89 * selenaLib93));
+  float2 selenaLib95 = (selenaLib94.xy + float2((selenaLib94.z * 13.1), (selenaLib94.z * 7.7)));
+  float selenaLib96 = fract((sin(dot(selenaLib95, float2(127.1, 311.7))) * 43758.5453));
+  float selenaLib97 = selenaLib96;
+  float2 selenaLib98 = selenaLib94.xz;
+  float selenaLib99 = fract((sin(dot(selenaLib98, float2(127.1, 311.7))) * 43758.5453));
+  float2 selenaLib100 = (selenaLib94.yz + float2(3.7, 1.3));
+  float selenaLib101 = fract((sin(dot(selenaLib100, float2(127.1, 311.7))) * 43758.5453));
+  float3 selenaLib102 = float3((selenaLib99 - 0.5), (selenaLib101 - 0.5), (selenaLib97 - 0.5));
+  float3 selenaLib103 = normalize((selenaLib90 + (selenaLib102 * 0.6)));
+  float selenaLib104 = (pow(clamp(dot(selenaLib103, normalize((selenaLib92 + selenaLib91))), 0.0, 1.0), 200.0) * step(0.7, selenaLib97));
+  float3 glint = ((selenaLib104 * u.sunColor) * 4.0);
+  float3 selenaLib105 = n;
+  float3 selenaLib106 = v;
+  float selenaLib107 = 4.0;
+  float selenaLib108 = pow((1.0 - clamp(dot(selenaLib105, selenaLib106), 0.0, 1.0)), selenaLib107);
+  float3 rim = ((selenaLib108 * u.surfaceColor) * 0.5);
+  float3 selenaLib109 = ((lit + glint) + rim);
+  float3 selenaLib110 = in.vWorldPos;
+  float3 selenaLib111 = selenaLib110;
+  float selenaLib112 = (length((selenaLib111 - u.cameraPos)) * u.fog.w);
+  float selenaLib113 = clamp(exp((-(selenaLib112 * selenaLib112))), 0.0, 1.0);
+  float3 selenaLib114 = mix(u.fog.xyz, selenaLib109, selenaLib113);
+  return float4(selenaLib114, 1.0);
+}

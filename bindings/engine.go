@@ -83,6 +83,10 @@ var engineInputs = []EngineInput{
 	{Name: "shadowMatrices1", Type: "vec4", Kind: EngineValue, Count: ShadowCascadeCapacity * 4, Space: "world to shadow uvz, column-major", Doc: "Slot 1 matrices, as shadowMatrices0."},
 	{Name: "shadowMap0", Type: "textureDepth2dArray", Kind: EngineTexture, Space: "depth 0..1, one layer per cascade", Doc: "Slot 0 shadow depth; read with sampleDepth(shadowMap0, uv, cascade)."},
 	{Name: "shadowMap1", Type: "textureDepth2dArray", Kind: EngineTexture, Space: "depth 0..1, one layer per cascade", Doc: "Slot 1 shadow depth; read with sampleDepth(shadowMap1, uv, cascade)."},
+
+	// Wind (GoSX scene.Wind; the materiallib game module's mlWindSway reads it).
+	{Name: "wind", Type: "vec4", Kind: EngineValue, Space: "xy unit XZ direction, z m/s, w seconds", Doc: "Scene wind: the direction it blows toward in xy (world x and z), speed in z and the wind clock in w; all zero when the scene has no wind."},
+	{Name: "windGust", Type: "vec4", Kind: EngineValue, Space: "x 0..1, y meters, z m/s, w Hz", Doc: "Wind gusts: strength (speed swings by +-x), distance between gust fronts, speed of the fronts and flutter frequency."},
 }
 
 // Declaration returns the type a context block declares for in:

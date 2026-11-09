@@ -1,0 +1,54 @@
+#extension GL_OES_standard_derivatives : enable
+precision mediump float;
+uniform mat4 mvp;
+uniform mat3 normalMatrix;
+uniform vec3 baseColor;
+uniform vec3 shadowColor;
+uniform vec3 outlineColor;
+uniform float bands;
+uniform float outlineWidth;
+uniform vec3 cameraPos;
+uniform vec3 sunDir;
+uniform vec3 sunColor;
+uniform vec3 ambient;
+varying vec3 vWorldNormal;
+varying vec3 vWorldPos;
+
+void main() {
+  vec3 n = normalize(vWorldNormal);
+  vec3 v = normalize((cameraPos - vWorldPos));
+  vec3 l = normalize(sunDir);
+  float selenaLib0 = dot(n, l);
+  float selenaLib1 = bands;
+  float selenaLib2 = 0.08;
+  float selenaLib3 = max(selenaLib1, 1.0);
+  float selenaLib4 = (clamp(selenaLib0, 0.0, 1.0) * selenaLib3);
+  float selenaLib5 = ((floor(selenaLib4) + smoothstep((1.0 - max(selenaLib2, 0.0001)), 1.0, fract(selenaLib4))) / selenaLib3);
+  float light = selenaLib5;
+  vec3 body = (mix(shadowColor, baseColor, light) * (sunColor + ambient));
+  vec3 selenaLib6 = n;
+  vec3 selenaLib7 = v;
+  vec3 selenaLib8 = l;
+  float selenaLib9 = 0.4;
+  float selenaLib10 = 0.01;
+  float selenaLib11 = (1.0 - (clamp(selenaLib9, 0.0, 1.0) * 0.1));
+  float selenaLib12 = smoothstep((selenaLib11 - selenaLib10), (selenaLib11 + selenaLib10), dot(selenaLib6, normalize((selenaLib8 + selenaLib7))));
+  vec3 highlight = (selenaLib12 * sunColor);
+  vec3 selenaLib13 = n;
+  vec3 selenaLib14 = v;
+  vec3 selenaLib15 = l;
+  float selenaLib16 = 0.35;
+  float selenaLib17 = 0.04;
+  float selenaLib18 = ((1.0 - clamp(dot(selenaLib13, selenaLib14), 0.0, 1.0)) * clamp(((dot(selenaLib13, selenaLib15) * 0.5) + 0.5), 0.0, 1.0));
+  float selenaLib19 = (1.0 - clamp(selenaLib16, 0.0, 1.0));
+  float selenaLib20 = smoothstep((selenaLib19 - selenaLib17), (selenaLib19 + selenaLib17), selenaLib18);
+  float rim = (selenaLib20 * 0.6);
+  vec3 shaded = ((body + highlight) + (baseColor * rim));
+  vec3 selenaLib21 = n;
+  vec3 selenaLib22 = v;
+  float selenaLib23 = outlineWidth;
+  float selenaLib24 = dot(selenaLib21, selenaLib22);
+  float selenaLib25 = max((fwidth(selenaLib24) * max(selenaLib23, 0.0)), 0.0001);
+  float selenaLib26 = (1.0 - smoothstep(selenaLib25, (selenaLib25 * 2.0), selenaLib24));
+  gl_FragColor = vec4(mix(shaded, outlineColor, selenaLib26), 1.0);
+}

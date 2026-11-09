@@ -237,6 +237,21 @@ func call(name string, a []val) (val, error) {
 		return mapv(a[0], math.Acos), nil
 	case "cos":
 		return mapv(a[0], math.Cos), nil
+	case "sin":
+		return mapv(a[0], math.Sin), nil
+	case "abs":
+		return mapv(a[0], math.Abs), nil
+	case "floor":
+		return mapv(a[0], math.Floor), nil
+	case "fract":
+		return mapv(a[0], func(x float64) float64 { return x - math.Floor(x) }), nil
+	case "step":
+		return zip(a[0], a[1], func(edge, x float64) float64 {
+			if x < edge {
+				return 0
+			}
+			return 1
+		}), nil
 	case "exp":
 		return mapv(a[0], math.Exp), nil
 	case "sqrt":

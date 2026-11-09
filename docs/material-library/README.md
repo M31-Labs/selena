@@ -26,6 +26,7 @@ growth. Standard user functions keep their existing substitution behavior.
 | [Effects](normals-effects.md) | Finite ripple, dust and flash from event uniforms; loads Procedural |
 | [Sky](sky.md) | Physical daylight sky from the engine's sky inputs |
 | [Lighting](lighting.md) | Every scene light, cascaded directional shadows and fog from the engine's scene lighting block |
+| [Game](game.md) | Foliage wind sway and translucency, toon shading and outlines, dissolve, hologram, force field, ice, water and subsurface skin |
 
 ## Integration boundary
 
