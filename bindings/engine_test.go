@@ -27,13 +27,30 @@ func TestEngineRegistryIsWellFormed(t *testing.T) {
 		}
 	}
 	for _, name := range []string{"cameraPos", "sunDir", "sunColor", "ambient", "fog", "exposure", "time",
-		"environmentInfo", "skyBetaR", "skyBetaM", "skySun", "skyG", "planarReflection", "opaqueColor", "opaqueDepth"} {
+		"environmentInfo", "skyBetaR", "skyBetaM", "skySun", "skyG", "planarReflection", "opaqueColor", "opaqueDepth",
+		"cameraForward", "lightCount", "lights", "shadow0", "shadow1", "shadowSplits0", "shadowSplits1",
+		"shadowMatrices0", "shadowMatrices1", "shadowMap0", "shadowMap1"} {
 		if !seen[name] {
 			t.Errorf("registry lacks %s", name)
 		}
 	}
 	if _, ok := LookupEngineInput("lightDir"); ok {
 		t.Error("lightDir is a host-custom context name, not an engine input")
+	}
+}
+
+func TestEngineArrayInputsDeclareTheirLength(t *testing.T) {
+	lights, _ := LookupEngineInput("lights")
+	if got := lights.Declaration(); got != "array<vec4, 32>" {
+		t.Fatalf("lights declaration = %q", got)
+	}
+	matrices, _ := LookupEngineInput("shadowMatrices0")
+	if matrices.Count != ShadowCascadeCapacity*4 {
+		t.Fatalf("shadowMatrices0 count = %d", matrices.Count)
+	}
+	sun, _ := LookupEngineInput("sunDir")
+	if sun.Declaration() != "vec3" {
+		t.Fatalf("sunDir declaration = %q", sun.Declaration())
 	}
 }
 
@@ -51,8 +68,8 @@ func TestEngineInputsDocumentedInReference(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, in := range EngineInputs() {
-		if !strings.Contains(string(doc), "| `"+in.Name+"` | `"+in.Type+"` |") {
-			t.Errorf("docs/engine-inputs.md does not list %s as %s", in.Name, in.Type)
+		if !strings.Contains(string(doc), "| `"+in.Name+"` | `"+in.Declaration()+"` |") {
+			t.Errorf("docs/engine-inputs.md does not list %s as %s", in.Name, in.Declaration())
 		}
 	}
 	if !strings.Contains(string(doc), EngineVersion) {

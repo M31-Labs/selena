@@ -24,6 +24,9 @@ type uniformPlan struct {
 	// context block, appended after the author texture params.
 	depthTextures  map[string]bool
 	engineTextures map[string]string
+	// layeredTextures marks textureDepth2dArray engine textures (also in
+	// depthTextures).
+	layeredTextures map[string]bool
 	// paramArrays maps array-param names to their element type + count (B3.2).
 	// These are uniform arrays declared as `param name : array<T, N>` and are
 	// excluded from the scalar uniforms list. The typer uses this to allow
@@ -215,7 +218,7 @@ func buildUniformPlan(params []hir.Param, context []hir.ContextField) (uniformPl
 			continue
 		}
 		switch c.Type {
-		case hir.Texture2D, hir.TextureDepth2D:
+		case hir.Texture2D, hir.TextureDepth2D, hir.TextureDepth2DArray:
 			// Only registered engine textures: the renderer binds them by name.
 			if in, ok := bindings.LookupEngineInput(c.Name); !ok || in.Kind != bindings.EngineTexture {
 				return uniformPlan{}, diagnostic(CodeUnsupportedType, c.Span, "context %q: a context block can declare only engine textures (%s); declare other textures as `param name : texture2d`", c.Name, engineTextureNames())
@@ -225,11 +228,17 @@ func buildUniformPlan(params []hir.Param, context []hir.ContextField) (uniformPl
 				plan.engineTextures = map[string]string{}
 			}
 			plan.engineTextures[c.Name] = c.Name
-			if c.Type == hir.TextureDepth2D {
+			if c.Type == hir.TextureDepth2D || c.Type == hir.TextureDepth2DArray {
 				if plan.depthTextures == nil {
 					plan.depthTextures = map[string]bool{}
 				}
 				plan.depthTextures[c.Name] = true
+			}
+			if c.Type == hir.TextureDepth2DArray {
+				if plan.layeredTextures == nil {
+					plan.layeredTextures = map[string]bool{}
+				}
+				plan.layeredTextures[c.Name] = true
 			}
 		case hir.Sun, hir.TextureCube:
 			return uniformPlan{}, diagnostic(CodeUnsupportedType, c.Span, "context %q: type %q is not supported in a context block (no records or cube textures; engine textures are %s)", c.Name, c.Type, engineTextureNames())
@@ -299,7 +308,7 @@ func lowerContextFields(
 			continue
 		}
 		switch c.Type {
-		case hir.Texture2D, hir.TextureDepth2D:
+		case hir.Texture2D, hir.TextureDepth2D, hir.TextureDepth2DArray:
 			return nil, diagnostic(CodeUnsupportedType, c.Span, "context %q: engine textures are supported only in mesh materials", c.Name)
 		case hir.Sun, hir.TextureCube:
 			return nil, diagnostic(CodeUnsupportedType, c.Span, "context %q: type %q is not supported in a context block (no records or textures)", c.Name, c.Type)
@@ -347,11 +356,12 @@ func checkEngineInput(c hir.ContextField) error {
 	if !ok {
 		return nil
 	}
+	declared := string(c.Type)
 	if c.IsArray {
-		return diagnostic(CodeEngineInput, c.Span, "context %q: engine input %s is %s, not an array", c.Name, c.Name, in.Type)
+		declared = fmt.Sprintf("array<%s, %d>", c.Type, c.ArraySize)
 	}
-	if string(c.Type) != in.Type {
-		return diagnostic(CodeEngineInput, c.Span, "context %q: engine input %s is %s, declared as %s", c.Name, c.Name, in.Type, c.Type)
+	if declared != in.Declaration() {
+		return diagnostic(CodeEngineInput, c.Span, "context %q: engine input %s is %s, declared as %s", c.Name, c.Name, in.Declaration(), declared)
 	}
 	return nil
 }
@@ -820,7 +830,7 @@ func engineTextureNames() string {
 func planIRTextures(plan uniformPlan) []ir.Texture {
 	out := make([]ir.Texture, len(plan.textures))
 	for i, t := range plan.textures {
-		out[i] = ir.Texture{Name: t, Cube: plan.cubeTextures[t], Depth: plan.depthTextures[t]}
+		out[i] = ir.Texture{Name: t, Cube: plan.cubeTextures[t], Depth: plan.depthTextures[t], Layered: plan.layeredTextures[t]}
 	}
 	return out
 }
@@ -830,7 +840,10 @@ func planIRTextures(plan uniformPlan) []ir.Texture {
 func planLayoutTextures(plan uniformPlan) []bindings.Texture {
 	out := bindings.ComputeTexturesMixed(plan.textures, plan.cubeTextures)
 	for i := range out {
-		if plan.depthTextures[out[i].Name] {
+		switch {
+		case plan.layeredTextures[out[i].Name]:
+			out[i].Dimension = "depth2d-array"
+		case plan.depthTextures[out[i].Name]:
 			out[i].Dimension = "depth2d"
 		}
 		out[i].Engine = plan.engineTextures[out[i].Name]

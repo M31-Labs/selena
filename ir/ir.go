@@ -85,6 +85,11 @@ type Texture struct {
 	// Depth marks a 2D depth texture: WGSL texture_depth_2d, Metal depth2d<float>,
 	// GLSL a sampler2D over a depth format. It is read with SampleDepth.
 	Depth bool
+	// Layered marks a Depth texture as a 2D array: WGSL texture_depth_2d_array,
+	// Metal depth2d_array<float>, GLSL ES 3.00 sampler2DArray. GLSL ES 1.00 has
+	// no array textures and binds layer 0 as a sampler2D. Read with SampleDepth
+	// and a Layer.
+	Layered bool
 }
 
 // Binding is a named, typed interface slot.
@@ -326,14 +331,24 @@ type SampleLevel struct {
 // GLSL ES 1.00: texture2D(tex, uv).x
 // GLSL ES 3.00: textureLod(tex, uv, 0.0).x
 // Metal:        tex.sample(texSampler, uv, level(0.0))
+//
+// Layer, when set, selects an array layer of a Layered depth texture (an int
+// expression). It is nil for a plain 2D depth texture.
 type SampleDepth struct {
 	Texture string
 	UV      Expr
+	Layer   Expr
 }
 
 // DepthDialect is the optional Dialect extension that renders SampleDepth.
 type DepthDialect interface {
 	SampleDepth(tex, uv string) string
+}
+
+// DepthArrayDialect is the optional Dialect extension that renders a
+// SampleDepth with a Layer.
+type DepthArrayDialect interface {
+	SampleDepthLayer(tex, uv, layer string) string
 }
 
 // SampleCube samples a cube-map Texture by a vec3 direction vector. Each
@@ -582,6 +597,13 @@ func Print(e Expr, d Dialect) string {
 	case SampleLevel:
 		return d.SampleLevel(x.Texture, Print(x.UV, d), Print(x.LOD, d))
 	case SampleDepth:
+		if x.Layer != nil {
+			if dd, ok := d.(DepthArrayDialect); ok {
+				return dd.SampleDepthLayer(x.Texture, Print(x.UV, d), Print(x.Layer, d))
+			}
+			emitPanic(CodeEmitUnwiredNode, "dialect does not support layered depth texture reads")
+			return ""
+		}
 		if dd, ok := d.(DepthDialect); ok {
 			return dd.SampleDepth(x.Texture, Print(x.UV, d))
 		}

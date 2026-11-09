@@ -1,0 +1,153 @@
+// Scene lighting: every scene light, directional shadow cascades and fog, read
+// from the renderer's scene lighting block (docs/engine-inputs.md#scene-lighting).
+// A material that calls these helpers declares the engine inputs they read in
+// its context block; mlFog reads cameraPos and fog, the light helpers read
+// lights and lightCount, and the shadow helpers read cameraPos, cameraForward,
+// shadow0/1, shadowSplits0/1, shadowMatrices0/1 and shadowMap0/1.
+//
+// Functions cannot loop, so the material loops over the light capacity (8) and
+// calls a per-light helper with the index. A helper returns zero for an index
+// at or past lightCount. Compute both shadow factors once, before the loop:
+//
+//     let s0 = mlShadow0(geo.worldPos)
+//     let s1 = mlShadow1(geo.worldPos)
+//     var lit = vec3f(0.0, 0.0, 0.0)
+//     for (var i = 0i; i < 8i; i = i + 1i) {
+//         lit = lit + mlLightDiffuse(i, n, geo.worldPos) * mlLightShadow(i, s0, s1)
+//     }
+//
+// Light kinds (lights[4i].w): 0 ambient, 1 directional, 2 point, 3 spot,
+// 4 hemisphere. Falloff and cone match the GoSX standard material.
+
+// mlFogFactor is the fraction of surface color that survives fog at worldPos:
+// exp(-(density * distance)^2), 1 when fog is off (density 0).
+fn mlFogFactor(worldPos: vec3) -> float {
+    let d = length(worldPos - cameraPos) * fog.w
+    return clamp(exp(-(d * d)), 0.0, 1.0)
+}
+
+// mlFog blends color toward the scene fog color by distance from the camera.
+fn mlFog(color: vec3, worldPos: vec3) -> vec3 {
+    return mix(fog.xyz, color, mlFogFactor(worldPos))
+}
+
+// mlLightActive is 1 for an index below lightCount and 0 past it.
+fn mlLightActive(i: int) -> float {
+    return float(i) < lightCount ? 1.0 : 0.0
+}
+
+// mlLightKind returns light i's kind code.
+fn mlLightKind(i: int) -> float {
+    return lights[i * 4i].w
+}
+
+// mlLightDir returns the unit vector from worldPos toward light i: toward the
+// position of a point or spot light, against the travel direction of any other
+// kind. Ambient and hemisphere lights have no direction; the diffuse and
+// specular helpers ignore it for them.
+fn mlLightDir(i: int, worldPos: vec3) -> vec3 {
+    let p = lights[i * 4i]
+    let d = lights[i * 4i + 1i]
+    let toLight = p.xyz - worldPos
+    let positional = p.w == 2.0 || p.w == 3.0
+    return positional ? toLight / max(length(toLight), 0.0001) : normalize(-d.xyz + vec3f(0.0, 0.000001, 0.0))
+}
+
+// mlLightRadiance returns the linear radiance light i delivers to worldPos
+// before the cosine term: color times intensity, times distance falloff for
+// point and spot lights and the cone for spot lights. A hemisphere light blends
+// its ground color (lights[4i+3].xyz) to its sky color by n.y.
+fn mlLightRadiance(i: int, n: vec3, worldPos: vec3) -> vec3 {
+    let p = lights[i * 4i]
+    let d = lights[i * 4i + 1i]
+    let c = lights[i * 4i + 2i]
+    let e = lights[i * 4i + 3i]
+    let dist = length(p.xyz - worldPos)
+    let ranged = pow(clamp(1.0 - pow(dist / max(d.w, 0.0001), 4.0), 0.0, 1.0), 2.0) / max(dist * dist, 0.0001)
+    let unranged = 1.0 / max(pow(max(dist, 0.0001), c.w), 0.0001)
+    let falloff = (p.w == 2.0 || p.w == 3.0) ? (d.w > 0.0 ? ranged : unranged) : 1.0
+    let cosAxis = dot(-mlLightDir(i, worldPos), normalize(d.xyz + vec3f(0.0, 0.000001, 0.0)))
+    let cone = p.w == 3.0 ? smoothstep(e.x, e.y, cosAxis) : 1.0
+    let color = p.w == 4.0 ? mix(e.xyz, c.xyz, clamp(n.y * 0.5 + 0.5, 0.0, 1.0)) : c.xyz
+    return color * falloff * cone * mlLightActive(i)
+}
+
+// mlLightDiffuse returns light i's Lambert irradiance at a surface with unit
+// normal n. Ambient and hemisphere lights apply without the cosine term, as in
+// the standard material.
+fn mlLightDiffuse(i: int, n: vec3, worldPos: vec3) -> vec3 {
+    let kind = mlLightKind(i)
+    let flat = kind == 0.0 || kind == 4.0
+    let ndl = flat ? 1.0 : max(dot(n, mlLightDir(i, worldPos)), 0.0)
+    return mlLightRadiance(i, n, worldPos) * ndl
+}
+
+// mlLightSpecular returns light i's Blinn-Phong highlight for unit normal n and
+// unit view vector v (surface toward camera); shininess is the Phong exponent.
+// Ambient and hemisphere lights add no highlight.
+fn mlLightSpecular(i: int, n: vec3, v: vec3, worldPos: vec3, shininess: float) -> vec3 {
+    let kind = mlLightKind(i)
+    let l = mlLightDir(i, worldPos)
+    let h = normalize(l + v)
+    let facing = dot(n, l) > 0.0 && kind != 0.0 && kind != 4.0 ? 1.0 : 0.0
+    let norm = (shininess + 8.0) / 25.1327412287
+    return mlLightRadiance(i, n, worldPos) * pow(max(dot(n, h), 0.0), shininess) * norm * facing
+}
+
+// mlLightShadow picks the shadow factor for light i from the two slot factors:
+// s0 when light i casts slot 0's shadow, s1 for slot 1, otherwise 1 (lit).
+fn mlLightShadow(i: int, s0: float, s1: float) -> float {
+    let slot = lights[i * 4i + 3i].w
+    return slot == 0.0 ? s0 : (slot == 1.0 ? s1 : 1.0)
+}
+
+// mlShadowCascade picks the cascade for a view depth from a slot's cascade
+// count and split distances: the first cascade whose far split lies beyond
+// depth.
+fn mlShadowCascade(depth: float, count: float, splits: vec4) -> int {
+    let c1 = count >= 2.0 && depth >= splits.x ? 1i : 0i
+    let c2 = count >= 3.0 && depth >= splits.y ? 2i : c1
+    return count >= 4.0 && depth >= splits.z ? 3i : c2
+}
+
+// mlShadowInside is 1 when a shadow-map coordinate lies inside the map and in
+// front of its far plane.
+fn mlShadowInside(uvz: vec3) -> float {
+    return uvz.x >= 0.0 && uvz.x <= 1.0 && uvz.y >= 0.0 && uvz.y <= 1.0 && uvz.z <= 1.0 ? 1.0 : 0.0
+}
+
+// mlShadowTap0 compares one depth tap of slot 0's cascade layer with ref.
+fn mlShadowTap0(uv: vec2, layer: int, ref: float) -> float {
+    return ref <= sampleDepth(shadowMap0, uv, layer) ? 1.0 : 0.0
+}
+
+// mlShadowTap1 compares one depth tap of slot 1's cascade layer with ref.
+fn mlShadowTap1(uv: vec2, layer: int, ref: float) -> float {
+    return ref <= sampleDepth(shadowMap1, uv, layer) ? 1.0 : 0.0
+}
+
+// mlShadow0 returns 1 where worldPos is lit by slot 0's light and 0 where it
+// is in shadow, filtered over five taps shadow0.z apart. It returns 1 when slot
+// 0 is empty (shadow0.x == 0) or worldPos falls outside the cascade.
+fn mlShadow0(worldPos: vec3) -> float {
+    let c = mlShadowCascade(dot(worldPos - cameraPos, cameraForward), shadow0.x, shadowSplits0)
+    let s = shadowMatrices0[c * 4i] * worldPos.x + shadowMatrices0[c * 4i + 1i] * worldPos.y + shadowMatrices0[c * 4i + 2i] * worldPos.z + shadowMatrices0[c * 4i + 3i]
+    let uvz = s.xyz / max(s.w, 0.000001)
+    let ref = uvz.z - shadow0.y
+    let r = shadow0.z
+    let taps = mlShadowTap0(uvz.xy, c, ref) + mlShadowTap0(uvz.xy + vec2f(r, 0.0), c, ref) + mlShadowTap0(uvz.xy - vec2f(r, 0.0), c, ref) + mlShadowTap0(uvz.xy + vec2f(0.0, r), c, ref) + mlShadowTap0(uvz.xy - vec2f(0.0, r), c, ref)
+    let use = shadow0.x >= 1.0 ? mlShadowInside(uvz) : 0.0
+    return mix(1.0, taps * 0.2, use)
+}
+
+// mlShadow1 is mlShadow0 for slot 1.
+fn mlShadow1(worldPos: vec3) -> float {
+    let c = mlShadowCascade(dot(worldPos - cameraPos, cameraForward), shadow1.x, shadowSplits1)
+    let s = shadowMatrices1[c * 4i] * worldPos.x + shadowMatrices1[c * 4i + 1i] * worldPos.y + shadowMatrices1[c * 4i + 2i] * worldPos.z + shadowMatrices1[c * 4i + 3i]
+    let uvz = s.xyz / max(s.w, 0.000001)
+    let ref = uvz.z - shadow1.y
+    let r = shadow1.z
+    let taps = mlShadowTap1(uvz.xy, c, ref) + mlShadowTap1(uvz.xy + vec2f(r, 0.0), c, ref) + mlShadowTap1(uvz.xy - vec2f(r, 0.0), c, ref) + mlShadowTap1(uvz.xy + vec2f(0.0, r), c, ref) + mlShadowTap1(uvz.xy - vec2f(0.0, r), c, ref)
+    let use = shadow1.x >= 1.0 ? mlShadowInside(uvz) : 0.0
+    return mix(1.0, taps * 0.2, use)
+}

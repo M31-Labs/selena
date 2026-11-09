@@ -26,6 +26,27 @@ func modules(t *testing.T) []Module {
 	return out
 }
 
+// moduleContext is the context block a probe declares for a module whose
+// helpers read engine inputs by name.
+var moduleContext = map[Module]string{
+	Lighting: `context {
+    cameraPos       : vec3
+    cameraForward   : vec3
+    fog             : vec4
+    lightCount      : float
+    lights          : array<vec4, 32>
+    shadow0         : vec4
+    shadow1         : vec4
+    shadowSplits0   : vec4
+    shadowSplits1   : vec4
+    shadowMatrices0 : array<vec4, 16>
+    shadowMatrices1 : array<vec4, 16>
+    shadowMap0      : textureDepth2dArray
+    shadowMap1      : textureDepth2dArray
+}
+`,
+}
+
 // Every helper is called with dynamic parameters so validators cannot hide
 // an invalid implementation behind constant folding or an unused branch.
 func TestEveryHelperConformsAcrossTargets(t *testing.T) {
@@ -44,12 +65,14 @@ func TestEveryHelperConformsAcrossTargets(t *testing.T) {
 				}
 				value := f.Name + "(" + strings.Join(args, ", ") + ")"
 				switch f.Returns {
+				case "int":
+					value = "rgb(float(" + value + "), 0.0, 0.0)"
 				case "float":
 					value = "rgb(" + value + ", 0.0, 0.0)"
 				case "vec2":
 					value = "vec3f(" + value + ", 0.0)"
 				}
-				source := []byte("material Probe {\n" + strings.Join(declarations, "\n") + "\nsurface(geo) -> color { return " + value + " }\n}")
+				source := []byte("material Probe {\n" + moduleContext[module] + strings.Join(declarations, "\n") + "\nsurface(geo) -> color { return " + value + " }\n}")
 				res, err := Compile(source, selena.CompileOptions{}, module)
 				if err != nil {
 					t.Fatal(err)

@@ -121,3 +121,64 @@ func TestEngineDepthTextureInVertexStage(t *testing.T) {
 		t.Errorf("GLVertexTextureUnits = %d, want 1", layout.Requires.GLVertexTextureUnits)
 	}
 }
+
+const shadowArraySrc = `material Shadowed {
+    context {
+        lights          : array<vec4, 32>
+        shadowMatrices0 : array<vec4, 16>
+        shadowMap0      : textureDepth2dArray
+    }
+    surface(geo) -> color {
+        let c = shadowMatrices0[1i]
+        let d = sampleDepth(shadowMap0, c.xy, 2i)
+        return lights[0i].xyz * d
+    }
+}`
+
+func TestLayeredShadowMapAndArrayEngineInputs(t *testing.T) {
+	layout, err := lowerEngineSrc(t, shadowArraySrc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(layout.Textures) != 1 || layout.Textures[0].Dimension != "depth2d-array" || layout.Textures[0].Engine != "shadowMap0" {
+		t.Fatalf("textures = %+v", layout.Textures)
+	}
+	counts := map[string]int{}
+	for _, f := range layout.UniformBlock.Fields {
+		if f.Class == "context" && f.Source != "engine" {
+			t.Errorf("%s source = %q", f.Name, f.Source)
+		}
+		counts[f.Name] = f.Count
+	}
+	if counts["lights"] != 32 || counts["shadowMatrices0"] != 16 {
+		t.Fatalf("array counts = %v", counts)
+	}
+	if !strings.Contains(strings.Join(layout.Requires.GLExtensions, ","), "WEBGL_depth_texture") {
+		t.Fatalf("requires = %+v, want WEBGL_depth_texture for the WebGL 1 artifact", layout.Requires)
+	}
+}
+
+func TestLayeredShadowMapDiagnostics(t *testing.T) {
+	for name, tc := range map[string]struct{ src, want string }{
+		"array length": {strings.Replace(shadowArraySrc, "array<vec4, 32>", "array<vec4, 16>", 1), "is array<vec4, 32>, declared as array<vec4, 16>"},
+		"not an array": {strings.Replace(shadowArraySrc, "lights          : array<vec4, 32>", "lights : vec4", 1), "is array<vec4, 32>, declared as vec4"},
+		"2d as array":  {strings.Replace(shadowArraySrc, "textureDepth2dArray", "textureDepth2d", 1), "engine input shadowMap0 is textureDepth2dArray"},
+		"no layer":     {strings.Replace(shadowArraySrc, "sampleDepth(shadowMap0, c.xy, 2i)", "sampleDepth(shadowMap0, c.xy)", 1), "takes (texture, uv, layer)"},
+		"float layer":  {strings.Replace(shadowArraySrc, "c.xy, 2i)", "c.xy, 2.0)", 1), "layer must be int"},
+		"sample":       {strings.Replace(shadowArraySrc, "sampleDepth(shadowMap0, c.xy, 2i)", "sample(shadowMap0, c.xy).r", 1), "first argument must be a texture2d"},
+		"post kind": {`material P kind post {
+    context { shadowMap0 : textureDepth2dArray }
+    surface(post) -> color { return vec3f(1.0, 1.0, 1.0) }
+}`, "only in mesh materials"},
+	} {
+		_, err := lowerEngineSrc(t, tc.src)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: err = %v, want %q", name, err, tc.want)
+		}
+	}
+	// A plain depth texture rejects a layer.
+	_, err := lowerEngineSrc(t, strings.Replace(engineTextureSrc, "sampleDepth(opaqueDepth, uv)", "sampleDepth(opaqueDepth, uv, 0i)", 1))
+	if err == nil || !strings.Contains(err.Error(), "takes (texture, uv)") {
+		t.Fatalf("layer on textureDepth2d: %v", err)
+	}
+}

@@ -463,6 +463,8 @@ func metalTextureType(t ir.Texture) string {
 	switch {
 	case t.Cube:
 		return "texturecube<float>"
+	case t.Depth && t.Layered:
+		return "depth2d_array<float>"
 	case t.Depth:
 		return "depth2d<float>"
 	}

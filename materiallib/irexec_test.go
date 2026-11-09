@@ -54,7 +54,13 @@ func mapv(a val, f func(x float64) float64) val {
 
 func clamp1(x, lo, hi float64) float64 { return math.Max(lo, math.Min(hi, x)) }
 
-type machine struct{ env map[string]val }
+// machine evaluates a stage. env holds scalars and vectors; arrays holds
+// uniform arrays element by element; depth, when set, answers sampleDepth.
+type machine struct {
+	env    map[string]val
+	arrays map[string][]val
+	depth  func(tex string, uv val, layer int) float64
+}
 
 func (m machine) run(stage ir.Stage) (val, error) {
 	for _, s := range stage.Body {
@@ -74,6 +80,40 @@ func (m machine) eval(e ir.Expr) (val, error) {
 	switch x := e.(type) {
 	case ir.Lit:
 		return sc32(x.Value), nil
+	case ir.IntLit:
+		return val{float64(x.Value)}, nil
+	case ir.Index:
+		ref, ok := x.Arr.(ir.Ref)
+		if !ok {
+			return nil, fmt.Errorf("index of %T", x.Arr)
+		}
+		idx, err := m.eval(x.Idx)
+		if err != nil {
+			return nil, err
+		}
+		arr, ok := m.arrays[ref.Name]
+		i := int(idx[0])
+		if !ok || i < 0 || i >= len(arr) {
+			return nil, fmt.Errorf("index %s[%d] out of range", ref.Name, i)
+		}
+		return arr[i], nil
+	case ir.SampleDepth:
+		if m.depth == nil {
+			return nil, fmt.Errorf("sampleDepth without a depth function")
+		}
+		uv, err := m.eval(x.UV)
+		if err != nil {
+			return nil, err
+		}
+		layer := 0
+		if x.Layer != nil {
+			l, err := m.eval(x.Layer)
+			if err != nil {
+				return nil, err
+			}
+			layer = int(l[0])
+		}
+		return sc32(m.depth(x.Texture, uv, layer)), nil
 	case ir.Ref:
 		v, ok := m.env[x.Name]
 		if !ok {
@@ -88,6 +128,12 @@ func (m machine) eval(e ir.Expr) (val, error) {
 				return nil, err
 			}
 			out = append(out, v...)
+		}
+		switch x.Type {
+		case ir.Int:
+			return val{math.Trunc(out[0])}, nil
+		case ir.Float:
+			return val{out[0]}, nil
 		}
 		want := map[ir.Type]int{ir.Vec2: 2, ir.Vec3: 3, ir.Vec4: 4}[x.Type]
 		if want == 0 {
@@ -141,12 +187,21 @@ func (m machine) eval(e ir.Expr) (val, error) {
 		case "/":
 			return zip(l, r, func(a, b float64) float64 { return a / b }), nil
 		case "<=":
-			return zip(l, r, func(a, b float64) float64 {
-				if a <= b {
-					return 1
-				}
-				return 0
-			}), nil
+			return zip(l, r, func(a, b float64) float64 { return truth(a <= b) }), nil
+		case "<":
+			return zip(l, r, func(a, b float64) float64 { return truth(a < b) }), nil
+		case ">=":
+			return zip(l, r, func(a, b float64) float64 { return truth(a >= b) }), nil
+		case ">":
+			return zip(l, r, func(a, b float64) float64 { return truth(a > b) }), nil
+		case "==":
+			return zip(l, r, func(a, b float64) float64 { return truth(a == b) }), nil
+		case "!=":
+			return zip(l, r, func(a, b float64) float64 { return truth(a != b) }), nil
+		case "&&":
+			return zip(l, r, func(a, b float64) float64 { return truth(a != 0 && b != 0) }), nil
+		case "||":
+			return zip(l, r, func(a, b float64) float64 { return truth(a != 0 || b != 0) }), nil
 		}
 		return nil, fmt.Errorf("binary %q", x.Op)
 	case ir.Conditional:
@@ -174,6 +229,10 @@ func (m machine) eval(e ir.Expr) (val, error) {
 
 func call(name string, a []val) (val, error) {
 	switch name {
+	case "float":
+		return a[0], nil
+	case "int":
+		return mapv(a[0], math.Trunc), nil
 	case "acos":
 		return mapv(a[0], math.Acos), nil
 	case "cos":

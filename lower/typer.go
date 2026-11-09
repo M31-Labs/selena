@@ -378,12 +378,17 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 		}
 		return ir.Vec4, nil
 	case builtinSampleDepth:
-		if len(c.Args) != spec.arity {
-			return "", diagnostic(CodeInvalidCall, c.Span, "sampleDepth(texture, uv) takes 2 arguments")
+		if err := checkSampleDepthArgs(c, t.paramKind); err != nil {
+			return "", err
 		}
-		tex, ok := c.Args[0].(hir.Ref)
-		if !ok || t.paramKind[tex.Name] != hir.TextureDepth2D {
-			return "", diagnostic(CodeInvalidCall, c.Span, "sampleDepth: first argument must be a textureDepth2d engine texture such as opaqueDepth")
+		if len(c.Args) == 3 {
+			layer, err := t.typeOf(c.Args[2])
+			if err != nil {
+				return "", err
+			}
+			if layer != ir.Int {
+				return "", diagnostic(CodeTypeMismatch, c.Span, "sampleDepth: layer must be int (write 0i, or int(x)), got %s", layer)
+			}
 		}
 		uv, err := t.typeOf(c.Args[1])
 		if err != nil {
@@ -763,4 +768,24 @@ func swizzleType(base ir.Type, field string) (ir.Type, error) {
 		return ir.Vec4, nil
 	}
 	return "", fmt.Errorf("invalid swizzle .%s", field)
+}
+
+// checkSampleDepthArgs checks the texture and argument count of a sampleDepth
+// call: sampleDepth(tex, uv) for a textureDepth2d, sampleDepth(tex, uv, layer)
+// for a textureDepth2dArray.
+func checkSampleDepthArgs(c hir.Call, paramKind map[string]hir.Type) error {
+	if len(c.Args) < 2 || len(c.Args) > 3 {
+		return diagnostic(CodeInvalidCall, c.Span, "sampleDepth takes (texture, uv) or, for a textureDepth2dArray, (texture, uv, layer)")
+	}
+	tex, ok := c.Args[0].(hir.Ref)
+	kind := paramKind[tex.Name]
+	switch {
+	case !ok || (kind != hir.TextureDepth2D && kind != hir.TextureDepth2DArray):
+		return diagnostic(CodeInvalidCall, c.Span, "sampleDepth: first argument must be a textureDepth2d or textureDepth2dArray engine texture such as opaqueDepth or shadowMap0")
+	case kind == hir.TextureDepth2D && len(c.Args) != 2:
+		return diagnostic(CodeInvalidCall, c.Span, "sampleDepth: %s is a textureDepth2d and takes (texture, uv)", tex.Name)
+	case kind == hir.TextureDepth2DArray && len(c.Args) != 3:
+		return diagnostic(CodeInvalidCall, c.Span, "sampleDepth: %s is a textureDepth2dArray and takes (texture, uv, layer)", tex.Name)
+	}
+	return nil
 }

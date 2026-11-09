@@ -57,7 +57,7 @@ func emitVertexAuthored(m ir.Module) string {
 	// Textures the authored vertex() samples with sampleLevel. highp: a
 	// vertex-stage sampler2D defaults to lowp, too coarse for a height field.
 	for _, name := range ir.VertexSampledTextures(m) {
-		fmt.Fprintf(&b, "uniform highp sampler2D %s;\n", name)
+		fmt.Fprintf(&b, "uniform %s %s;\n", samplerType(textureNamed(m, name), true), name)
 	}
 	for _, v := range m.Varyings {
 		fmt.Fprintf(&b, "out %s %s;\n", typeName(v.Type), v.Name)
@@ -93,15 +93,7 @@ func emitFragmentAuthored(m ir.Module) string {
 		fmt.Fprintf(&b, "in %s %s;\n", typeName(v.Type), v.Name)
 	}
 	for _, t := range m.Textures {
-		switch {
-		case t.Cube:
-			fmt.Fprintf(&b, "uniform samplerCube %s;\n", t.Name)
-		case t.Depth:
-			// highp: depth needs full precision, and a sampler2D defaults lower.
-			fmt.Fprintf(&b, "uniform highp sampler2D %s;\n", t.Name)
-		default:
-			fmt.Fprintf(&b, "uniform sampler2D %s;\n", t.Name)
-		}
+		fmt.Fprintf(&b, "uniform %s %s;\n", samplerType(t, false), t.Name)
 	}
 	res := internal.NewBare(prismDialect)
 	res.StateSampleUVFn = func(uv string) string { return fmt.Sprintf("texture(stateTex, %s)", uv) }
@@ -214,15 +206,7 @@ func emitFragment(m ir.Module) string {
 		fmt.Fprintf(&b, "in %s %s;\n", typeName(v.Type), v.Name)
 	}
 	for _, t := range m.Textures {
-		switch {
-		case t.Cube:
-			fmt.Fprintf(&b, "uniform samplerCube %s;\n", t.Name)
-		case t.Depth:
-			// highp: depth needs full precision, and a sampler2D defaults lower.
-			fmt.Fprintf(&b, "uniform highp sampler2D %s;\n", t.Name)
-		default:
-			fmt.Fprintf(&b, "uniform sampler2D %s;\n", t.Name)
-		}
+		fmt.Fprintf(&b, "uniform %s %s;\n", samplerType(t, false), t.Name)
 	}
 	res := internal.NewBare(prismDialect)
 	writeMeshFragment(&b, m, res)
@@ -398,3 +382,29 @@ func emitPostFragment(m ir.Module) string {
 
 // typeName spells an ir.Type in GLSL ES, delegating to prism/dialect.
 func typeName(t ir.Type) string { return prismDialect.TypeName(internal.TypeToGPU(t)) }
+
+// samplerType is the GLSL sampler declaration type for t. highp: depth needs
+// full precision, and a vertex-stage sampler defaults to lowp, too coarse for a
+// height field.
+func samplerType(t ir.Texture, vertex bool) string {
+	switch {
+	case t.Cube:
+		return "samplerCube"
+	case t.Depth && t.Layered:
+		return "highp sampler2DArray"
+	case t.Depth || vertex:
+		return "highp sampler2D"
+	}
+	return "sampler2D"
+}
+
+// textureNamed returns the module texture called name, or a plain 2D texture
+// when none matches.
+func textureNamed(m ir.Module, name string) ir.Texture {
+	for _, t := range m.Textures {
+		if t.Name == name {
+			return t
+		}
+	}
+	return ir.Texture{Name: name}
+}

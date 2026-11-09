@@ -26,6 +26,10 @@ const (
 	// TextureDepth2D is a 2D depth texture, declared only for engine inputs in a
 	// context block (opaqueDepth); read with sampleDepth(tex, uv) -> float.
 	TextureDepth2D Type = "textureDepth2d"
+	// TextureDepth2DArray is a layered 2D depth texture, declared only for
+	// engine inputs in a context block (shadowMap0, shadowMap1, one layer per
+	// shadow cascade); read with sampleDepth(tex, uv, layer) -> float.
+	TextureDepth2DArray Type = "textureDepth2dArray"
 )
 
 // Position is a 1-based source position with a 0-based byte offset.

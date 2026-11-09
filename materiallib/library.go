@@ -35,6 +35,10 @@ const Effects Module = "effects"
 // Sky provides the physical daylight sky, physicalSky(dir, betaR, betaM, sun, g).
 const Sky Module = "sky"
 
+// Lighting reads every scene light, directional shadow cascades and fog from
+// the renderer's scene lighting block (docs/engine-inputs.md#scene-lighting).
+const Lighting Module = "lighting"
+
 //go:embed modules/*.sel
 var sources embed.FS
 var cache sync.Map

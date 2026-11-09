@@ -125,6 +125,8 @@ func emitMesh(m ir.Module) (string, error) {
 		switch {
 		case t.Cube:
 			fmt.Fprintf(&b, "@group(0) @binding(%d) var %s : texture_cube<f32>;\n", 1+2*i, t.Name)
+		case t.Depth && t.Layered:
+			fmt.Fprintf(&b, "@group(0) @binding(%d) var %s : texture_depth_2d_array;\n", 1+2*i, t.Name)
 		case t.Depth:
 			fmt.Fprintf(&b, "@group(0) @binding(%d) var %s : texture_depth_2d;\n", 1+2*i, t.Name)
 		default:
@@ -193,6 +195,8 @@ func emitMeshAuthored(m ir.Module) (string, error) {
 		switch {
 		case t.Cube:
 			fmt.Fprintf(&b, "@group(0) @binding(%d) var %s : texture_cube<f32>;\n", 1+2*i, t.Name)
+		case t.Depth && t.Layered:
+			fmt.Fprintf(&b, "@group(0) @binding(%d) var %s : texture_depth_2d_array;\n", 1+2*i, t.Name)
 		case t.Depth:
 			fmt.Fprintf(&b, "@group(0) @binding(%d) var %s : texture_depth_2d;\n", 1+2*i, t.Name)
 		default:
