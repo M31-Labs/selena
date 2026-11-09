@@ -228,3 +228,34 @@ func TestSurfaceKindExplicitKindAndConditional(t *testing.T) {
 		t.Fatalf("conditional Surface not split per field:\n%s", w.Source)
 	}
 }
+
+// Texel reads in a hook use the hook's texture names, and data formats are
+// rejected: hosts bind surface textures in their image slots.
+func TestSurfaceKindTexelReadsAndDataFormats(t *testing.T) {
+	src := `material Texel {
+    param albedo : texture2d
+    surface(geo) -> Surface {
+        let size = size(albedo)
+        let texel = load(albedo, int(geo.uv.x * size.x), int(geo.uv.y * size.y))
+        return pbr(texel.rgb, 0.5, 0.0)
+    }
+}`
+	res, err := Compile([]byte(src), CompileOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, _ := res.Artifact(TargetWGSL)
+	g, _ := res.Artifact(TargetGLES)
+	for _, hook := range []string{w.Source, g.Fragment} {
+		if strings.Contains(hook, "(albedo") || !strings.Contains(hook, "selenaSurfaceTex0") {
+			t.Fatalf("texel read kept the param name:\n%s", hook)
+		}
+	}
+	bad := `material Data {
+    param heights : texture2d format r16float
+    surface(geo) -> Surface { return pbr(rgb(1, 1, 1), load(heights, 0i, 0i).r, 0.0) }
+}`
+	if _, err := Compile([]byte(bad), CompileOptions{}); err == nil || !strings.Contains(err.Error(), "data formats") {
+		t.Fatalf("err = %v, want a data-format rejection", err)
+	}
+}

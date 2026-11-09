@@ -45,3 +45,22 @@ func TestSurfaceHooksValidate(t *testing.T) {
 		prismvalidate.Shader(t, "glslangValidator", gles.SurfaceHarness(g.Fragment, len(r.Layout.Textures)), ".frag", nil)
 	})
 }
+
+func TestSurfaceHookTexelReadsValidate(t *testing.T) {
+	r, err := selena.Compile([]byte(`material Texel {
+    param albedo : texture2d
+    surface(geo) -> Surface {
+        let size = size(albedo)
+        return pbr(load(albedo, int(geo.uv.x * size.x), int(geo.uv.y * size.y)).rgb, 0.5, 0.0)
+    }
+}`), selena.CompileOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, _ := r.Artifact(selena.TargetWGSL)
+	g, _ := r.Artifact(selena.TargetGLES)
+	t.Run("wgsl", func(t *testing.T) { prismvalidate.Shader(t, "naga", wgsl.SurfaceHarness(w.Source, 1), ".wgsl", nil) })
+	t.Run("essl300-frag", func(t *testing.T) {
+		prismvalidate.Shader(t, "glslangValidator", gles.SurfaceHarness(g.Fragment, 1), ".frag", nil)
+	})
+}

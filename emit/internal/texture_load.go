@@ -21,6 +21,7 @@ var _ ir.TexelDialect = Resolver{}
 //
 // Metal:        t.read(uint2(x, y), 0)
 func (r Resolver) Load(tex, x, y string) string {
+	tex = r.tex(tex)
 	switch r.Dialect.(type) {
 	case dialect.WGSL:
 		return "textureLoad(" + tex + ", vec2<i32>(" + x + ", " + y + "), 0)"
@@ -41,6 +42,7 @@ func (r Resolver) Load(tex, x, y string) string {
 // GLSL ES 1.00: _texSize_t, a host-set uniform
 // Metal:        float2(t.get_width(), t.get_height())
 func (r Resolver) TextureSize(tex string) string {
+	tex = r.tex(tex)
 	switch r.Dialect.(type) {
 	case dialect.WGSL:
 		return "vec2<f32>(textureDimensions(" + tex + "))"

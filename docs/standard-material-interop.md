@@ -80,7 +80,9 @@ returned at the end of the surface body. It cannot be used as a plain value:
   `textureCube` params are rejected: the host already does shadows and
   reflections.
 - At most `bindings.SurfaceMaxTextures` (6) `texture2d` params. Hosts bind
-  them in their standard material texture slots.
+  them in their standard material texture slots, so they are color images:
+  `sample`, `sampleLevel`, `load` and `size` work, and a data `format` other
+  than `rgba8unorm` is rejected.
 - No `vertex()`, varyings, statefields or `specular` companion; the host's
   standard vertex stage runs and it computes the specular output itself.
 - No early `return`; assign a `var` Surface and return it at the end.

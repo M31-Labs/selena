@@ -642,6 +642,10 @@ func lowerSurface(m hir.Material) (ir.Module, bindings.Layout, error) {
 		return ir.Module{}, bindings.Layout{}, diagnostic(CodeUnsupportedFeat, m.States[0].Span, "surface materials cannot declare a statefield")
 	}
 	for _, p := range m.Params {
+		if p.Format != "" && p.Format != "rgba8unorm" {
+			return ir.Module{}, bindings.Layout{}, diagnostic(CodeUnsupportedType, p.Span,
+				"param %q: surface materials sample color images bound in the host's material slots; data formats (%s) need a full material", p.Name, p.Format)
+		}
 		if p.Type == hir.TextureCube {
 			return ir.Module{}, bindings.Layout{}, diagnostic(CodeUnsupportedType, p.Span,
 				"param %q: surface materials sample texture2d params only; the host supplies image-based lighting", p.Name)
