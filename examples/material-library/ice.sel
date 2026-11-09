@@ -1,0 +1,30 @@
+// Ice: a cold body color that deepens where the view looks straight in, a
+// white rim, sparkling facets under the key light and every scene light.
+// Link the lighting and game modules.
+material Ice {
+    context {
+        cameraPos  : vec3
+        ambient    : vec3
+        fog        : vec4
+        lightCount : float
+        lights     : array<vec4, 32>
+        sunDir     : vec3
+        sunColor   : vec3
+    }
+    param surfaceColor : color = rgb(0.85, 0.93, 1.0)
+    param deepColor    : color = rgb(0.10, 0.38, 0.62)
+    param sparkle      : float = 6.0
+
+    surface(geo) -> color {
+        let n = normalize(geo.worldNormal)
+        let v = normalize(cameraPos - geo.worldPos)
+        let body = mlIceTint(surfaceColor, deepColor, n, v)
+        var lit = ambient * body
+        for (var i = 0i; i < 8i; i = i + 1i) {
+            lit = lit + body * mlLightDiffuse(i, n, geo.worldPos) + 0.6 * mlLightSpecular(i, n, v, geo.worldPos, 96.0)
+        }
+        let glint = mlIceSparkle(geo.worldPos, n, v, normalize(sunDir), sparkle) * sunColor * 4.0
+        let rim = mlRimFactor(n, v, 4.0) * surfaceColor * 0.5
+        return mlFog(lit + glint + rim, geo.worldPos)
+    }
+}

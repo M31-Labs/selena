@@ -1,0 +1,25 @@
+// Dissolve: the surface burns away as progress goes from 0 to 1, with a
+// glowing edge. Noise comes from the world position, so no UVs are needed;
+// animate progress from Go (customUniforms). Needs the game module.
+material Dissolve {
+    context {
+        sunDir   : vec3
+        sunColor : vec3
+        ambient  : vec3
+    }
+    param baseColor  : color = rgb(0.55, 0.55, 0.6)
+    param edgeColor  : color = rgb(4.0, 1.6, 0.3)
+    param progress   : float = 0.0
+    param noiseScale : float = 3.0
+    param edgeWidth  : float = 0.06
+
+    surface(geo) -> color {
+        let mask = mlDissolveMask(mlGameNoise3(geo.worldPos * noiseScale), progress)
+        if (mask < 0.0) {
+            discard
+        }
+        let n = normalize(geo.worldNormal)
+        let lit = baseColor * (ambient + sunColor * max(dot(n, normalize(sunDir)), 0.0))
+        return lit + edgeColor * mlDissolveEdge(mask, edgeWidth) * (progress > 0.0 ? 1.0 : 0.0)
+    }
+}

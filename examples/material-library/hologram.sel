@@ -1,0 +1,18 @@
+// Hologram: a flickering projection with a bright rim and moving scanlines.
+// Draw it with additive blending (BlendMode additive on the GoSX material).
+// Needs the game module.
+material Hologram {
+    context {
+        cameraPos : vec3
+        time      : float
+    }
+    param tint    : color = rgb(0.2, 0.8, 1.0)
+    param density : float = 24.0
+    param flicker : float = 0.25
+
+    surface(geo) -> color {
+        let n = normalize(geo.worldNormal)
+        let v = normalize(cameraPos - geo.worldPos)
+        return tint * mlHologram(n, v, geo.worldPos, time, density, flicker)
+    }
+}

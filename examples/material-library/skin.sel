@@ -1,0 +1,31 @@
+// Subsurface skin: wrapped diffuse that softens the shadow line, a warm band
+// where light scatters back out, and backlight through thin parts such as
+// ears. For wax, raise wrap to about 0.6, lower thickness and pick a pale
+// scatter color. Link the lighting and game modules.
+material SubsurfaceSkin {
+    context {
+        cameraPos  : vec3
+        ambient    : vec3
+        fog        : vec4
+        lightCount : float
+        lights     : array<vec4, 32>
+    }
+    param albedo    : color = rgb(0.80, 0.55, 0.45)
+    param scatter   : color = rgb(0.85, 0.25, 0.15)
+    param wrap      : float = 0.35
+    param thickness : float = 0.6
+
+    surface(geo) -> color {
+        let n = normalize(geo.worldNormal)
+        let v = normalize(cameraPos - geo.worldPos)
+        var lit = ambient * albedo
+        for (var i = 0i; i < 8i; i = i + 1i) {
+            let l = mlLightDir(i, geo.worldPos)
+            let radiance = mlLightRadiance(i, n, geo.worldPos)
+            let soft = mlSubsurfaceWrap(n, l, wrap) * mlLightActive(i)
+            let back = mlSubsurfaceBack(n, v, l, 0.3, 3.0, thickness) * mlLightActive(i)
+            lit = lit + radiance * (albedo * soft + mlSubsurfaceTint(n, l, scatter, 0.35) * mlLightActive(i) + scatter * back) + 0.15 * mlLightSpecular(i, n, v, geo.worldPos, 24.0)
+        }
+        return mlFog(lit, geo.worldPos)
+    }
+}

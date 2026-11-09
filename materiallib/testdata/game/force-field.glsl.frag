@@ -1,0 +1,48 @@
+precision mediump float;
+uniform mat4 mvp;
+uniform mat3 normalMatrix;
+uniform vec3 tint;
+uniform vec3 hitColor;
+uniform vec3 hitPos;
+uniform float hitAge;
+uniform vec3 cameraPos;
+uniform float time;
+varying vec3 vWorldNormal;
+varying vec3 vWorldPos;
+
+void main() {
+  vec3 n = normalize(vWorldNormal);
+  vec3 v = normalize((cameraPos - vWorldPos));
+  vec3 selenaLib0 = n;
+  vec3 selenaLib1 = v;
+  vec3 selenaLib2 = ((dot(selenaLib0, selenaLib1) < 0.0) ? (-selenaLib0) : selenaLib0);
+  vec3 selenaLib3 = selenaLib2;
+  vec3 selenaLib4 = v;
+  vec3 selenaLib5 = vWorldPos;
+  float selenaLib6 = time;
+  vec3 selenaLib7 = selenaLib3;
+  vec3 selenaLib8 = selenaLib4;
+  float selenaLib9 = 3.0;
+  float selenaLib10 = pow((1.0 - clamp(dot(selenaLib7, selenaLib8), 0.0, 1.0)), selenaLib9);
+  float selenaLib11 = selenaLib10;
+  float selenaLib12 = (selenaLib5.y + (selenaLib5.x * 0.3));
+  float selenaLib13 = selenaLib6;
+  float selenaLib14 = 3.0;
+  float selenaLib15 = 0.4;
+  float selenaLib16 = 4.0;
+  float selenaLib17 = fract(((selenaLib12 * selenaLib14) - (selenaLib13 * selenaLib15)));
+  float selenaLib18 = pow((1.0 - abs(((selenaLib17 * 2.0) - 1.0))), max(selenaLib16, 1.0));
+  float selenaLib19 = (selenaLib18 * 0.35);
+  float selenaLib20 = clamp((selenaLib11 + selenaLib19), 0.0, 2.0);
+  float shell = selenaLib20;
+  vec3 selenaLib21 = vWorldPos;
+  vec3 selenaLib22 = hitPos;
+  float selenaLib23 = hitAge;
+  float selenaLib24 = 3.0;
+  float selenaLib25 = 0.25;
+  float selenaLib26 = abs((distance(selenaLib21, selenaLib22) - (max(selenaLib23, 0.0) * selenaLib24)));
+  float selenaLib27 = ((selenaLib23 >= 0.0) ? clamp((1.0 - selenaLib23), 0.0, 1.0) : 0.0);
+  float selenaLib28 = ((1.0 - smoothstep(0.0, max(selenaLib25, 0.0001), selenaLib26)) * selenaLib27);
+  float hit = selenaLib28;
+  gl_FragColor = vec4(((tint * shell) + (hitColor * hit)), 1.0);
+}

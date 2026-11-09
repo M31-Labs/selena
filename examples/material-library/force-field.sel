@@ -1,0 +1,22 @@
+// Force field: an energy shell with a strong rim, sweeping bands and a ring
+// that expands from the last impact. Set hitPos and hitAge (seconds since the
+// hit, negative for none) from Go, and draw it with additive blending and no
+// depth write. Needs the game module.
+material ForceField {
+    context {
+        cameraPos : vec3
+        time      : float
+    }
+    param tint     : color = rgb(0.3, 0.6, 1.0)
+    param hitColor : color = rgb(1.0, 0.9, 0.6)
+    param hitPos   : vec3 = vec3(0.0, 0.0, 0.0)
+    param hitAge   : float = -1.0
+
+    surface(geo) -> color {
+        let n = normalize(geo.worldNormal)
+        let v = normalize(cameraPos - geo.worldPos)
+        let shell = mlForceField(mlFoliageNormal(n, v), v, geo.worldPos, time)
+        let hit = mlForceFieldHit(geo.worldPos, hitPos, hitAge, 3.0, 0.25)
+        return tint * shell + hitColor * hit
+    }
+}

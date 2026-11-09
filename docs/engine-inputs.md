@@ -53,6 +53,8 @@ material EngineLit {
 | `skyBetaM` | `vec4` | physical sky block 1 | Mie coefficients in xyz and sun fade in w. |
 | `skySun` | `vec4` | physical sky block 2 | Unit direction toward the sun in xyz and the cosine of the sun disk radius in w (above 1 hides the disk). |
 | `skyG` | `float` | physical sky block 3 | Mie directional factor g. |
+| `wind` | `vec4` | xy unit XZ direction, z m/s, w seconds | Scene wind: the direction it blows toward in xy (world x and z), speed in z and the wind clock in w; all zero when the scene has no wind. |
+| `windGust` | `vec4` | x 0..1, y meters, z m/s, w Hz | Wind gusts: strength (speed swings by ±x), distance between gust fronts, speed of the fronts and flutter frequency. |
 
 ## Textures
 

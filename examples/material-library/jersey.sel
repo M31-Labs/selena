@@ -1,0 +1,25 @@
+// Jersey: one material for every player, with each player's number read from
+// a runtime text atlas (GoSX scene.TextAtlas). labels is the atlas texture,
+// labelRect the player's cell (TextAtlas.Region), and numberRect where the
+// number sits on the mesh's UVs. A blank label leaves the shirt plain.
+// Needs the game module.
+material Jersey {
+    context {
+        sunDir   : vec3
+        sunColor : vec3
+        ambient  : vec3
+    }
+    param labels      : texture2d
+    param labelRect   : vec4 = vec4(0.0, 0.0, 1.0, 1.0)
+    param numberRect  : vec4 = vec4(0.2, 0.15, 0.8, 0.85)
+    param shirtColor  : color = rgb(0.12, 0.30, 0.75)
+    param numberColor : color = rgb(1.0, 1.0, 1.0)
+
+    surface(geo) -> color {
+        let glyph = sample(labels, mlAtlasUV(mlRectLocal(geo.uv, numberRect), labelRect))
+        let ink = glyph.a * mlRectMask(geo.uv, numberRect)
+        let n = normalize(geo.worldNormal)
+        let light = ambient + sunColor * max(dot(n, normalize(sunDir)), 0.0)
+        return mix(shirtColor, numberColor * glyph.rgb, ink) * light
+    }
+}

@@ -8,6 +8,7 @@
 //	selena compile --bundle dir [--validate-shaders] <file.sel> [material]
 //	selena artifact [-o out] [-targets t,...] [-materials A,...] [-modules m,...] [-specular-mrt] [-check] <file.sel>
 //	selena demo  <out.html> [material]
+//	selena lsp                                  # language server on stdin/stdout
 //
 // emit/check parse a .sel file through the full pipeline (parse -> HIR -> lower
 // -> emit). The names "sample"/"directional-diffuse" and "textured" resolve to
@@ -22,6 +23,7 @@ import (
 	"m31labs.dev/selena/bindings"
 	"m31labs.dev/selena/hir"
 	"m31labs.dev/selena/ir"
+	"m31labs.dev/selena/lsp"
 	"m31labs.dev/selena/parse"
 )
 
@@ -39,6 +41,8 @@ usage:
                                     write (or -check) the deterministic build
                                     artifact: layout + shaders + source hash
   selena doctor                     print local compiler/runtime facts
+  selena lsp                        run the language server on stdin/stdout
+                                    (diagnostics, hover, completion, definition)
   selena demo <out.html> [material] render harness (material: directional-diffuse|textured|defaults)
   selena help                       show this help
 
@@ -112,6 +116,11 @@ func run(args []string) error {
 		return artifactCommand(args[1:], os.Stdout)
 	case "doctor":
 		return doctor(args[1:])
+	case "lsp":
+		if len(args) != 1 {
+			return fmt.Errorf("usage: selena lsp")
+		}
+		return lsp.Serve(os.Stdin, os.Stdout)
 	case "demo":
 		if len(args) < 2 || len(args) > 3 {
 			return fmt.Errorf("usage: selena demo <out.html> [material]  (material: directional-diffuse|textured|defaults)")
