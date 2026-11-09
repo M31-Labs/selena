@@ -345,3 +345,33 @@ selena: SEL2001 at 3:16: unknown name "missing"
   |                ^^^^^^^ unknown name "missing"
 hint: Declare a material param or let binding with this name, or correct the identifier.
 ```
+
+## Editor Support
+
+`selena lsp` runs the Selena language server on stdin and stdout. `gosx lsp`
+serves `.sel` files with the same server inside a GoSX project. It provides:
+
+- compiler diagnostics as you type, with the code (for example `SEL2001`) and
+  the hint shown above;
+- hover with the type of params, context fields, locals and `geo` fields, the
+  registry entry of each engine input (type, space, meaning), and the signature
+  and documentation of builtins and material library helpers;
+- completion of builtins, material library helpers, the file's functions,
+  params and locals, `geo.` fields for the material's kind, engine inputs inside
+  a `context` block, and type names after `:`;
+- go-to-definition for locals, params, functions and materials in the file, and
+  for material library helpers, whose module source it writes to the user cache
+  directory (`selena/materiallib/<module>.sel`).
+
+A file that calls a material library helper, such as `mlFog`, links that
+helper's module without configuration. While a line is half typed, the server
+keeps answering from the rest of the file.
+
+Register the `.sel` extension with your editor's LSP client and run `selena
+lsp` (or `gosx lsp`). For example, in Neovim:
+
+```lua
+vim.filetype.add({ extension = { sel = "selena" } })
+vim.lsp.config("selena", { cmd = { "selena", "lsp" }, filetypes = { "selena" } })
+vim.lsp.enable("selena")
+```

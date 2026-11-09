@@ -114,6 +114,25 @@ SceneKit binding details are intentionally host-owned. Selena's contract is the
 MSL source plus the descriptor coordinates needed to bind matching buffers,
 textures, and samplers.
 
+### Validating Metal output
+
+On a Mac with Xcode's Metal toolchain, Apple's offline compiler checks the
+emitted MSL. The check is optional: hosts without the toolchain (Linux, or a Mac
+with only the Command Line Tools) skip it.
+
+```sh
+selena doctor                                   # prints "metal: <path>" or "metal: unavailable"
+selena shaders --target metal --validate --out out examples/textured.sel
+go test ./validate/ -run TestMetalCompilesWithXcrun -v
+```
+
+The test compiles every material in `testdata/conformance` and `examples` with
+`xcrun --sdk macosx metal -c`; on 2026-11-09 all 64 compiled with Xcode 15.4
+(Apple metal 32023.155). If `xcode-select` points at the Command Line Tools,
+the check retries with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`;
+set `DEVELOPER_DIR` to choose another Xcode. Package `mslcheck` exposes the same
+check to Go code.
+
 ## Host Requirements
 
 Some shader features need the host to do something the shader source cannot
@@ -338,5 +357,5 @@ Validation includes Naga for WGSL, glslangValidator for GLES3, and an opt-in rea
 Chromium WebGL1 compile/link/readback test (`SELENA_CHROME=/path/to/chrome go test
 ./validate -run Specular`). glslang does not implement `GL_EXT_draw_buffers`;
 its GLSL1 check covers the shared vertex source, while Chromium checks the MRT
-fragment and both attachments. MSL source contracts are tested here; actual
-Metal compilation still requires Apple's toolchain.
+fragment and both attachments. Metal output compiles with `xcrun metal` where
+Xcode's Metal toolchain is installed (see Validating Metal output).
