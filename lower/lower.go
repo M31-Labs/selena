@@ -46,8 +46,14 @@ func LowerWith(m hir.Material, funcs []hir.FuncDecl) (ir.Module, bindings.Layout
 // host binding layout. Dispatches to the appropriate lowerer based on material
 // kind, then stamps the host requirements the emitted shaders imply.
 func Lower(m hir.Material) (ir.Module, bindings.Layout, error) {
+	if err := checkTextureParams(m); err != nil {
+		return ir.Module{}, bindings.Layout{}, err
+	}
 	mod, layout, err := lowerByKind(m)
 	if err != nil {
+		return ir.Module{}, bindings.Layout{}, err
+	}
+	if err := stampTextureData(m, &mod, &layout); err != nil {
 		return ir.Module{}, bindings.Layout{}, err
 	}
 	layout.Requires = hostRequirements(mod)
@@ -95,6 +101,9 @@ func hostRequirements(mod ir.Module) bindings.Requirements {
 		req.GLSceneSizeUniform = "_sceneSize"
 	}
 	req.GLVertexTextureUnits = len(ir.VertexSampledTextures(mod))
+	for _, name := range ir.TexSizeTextures(mod) {
+		req.GLTexSizeUniforms = append(req.GLTexSizeUniforms, ir.TexSizeUniform(name))
+	}
 	return req
 }
 

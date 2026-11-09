@@ -90,6 +90,12 @@ type Texture struct {
 	// no array textures and binds layer 0 as a sampler2D. Read with SampleDepth
 	// and a Layer.
 	Layered bool
+	// Format is the declared storage format of a 2D texture
+	// (`param t : texture2d format r16float`); empty means the default,
+	// rgba8unorm. It does not change the emitted shader source (every float
+	// format reads as texture_2d<f32> / sampler2D / texture2d<float>); it feeds
+	// the binding descriptor and the rule that rejects sampling 32-bit floats.
+	Format string
 }
 
 // Binding is a named, typed interface slot.
@@ -596,6 +602,10 @@ func Print(e Expr, d Dialect) string {
 		return d.Sample(x.Texture, Print(x.UV, d))
 	case SampleLevel:
 		return d.SampleLevel(x.Texture, Print(x.UV, d), Print(x.LOD, d))
+	case Load:
+		return printLoad(x, d)
+	case TextureSize:
+		return printTextureSize(x, d)
 	case SampleDepth:
 		if x.Layer != nil {
 			if dd, ok := d.(DepthArrayDialect); ok {

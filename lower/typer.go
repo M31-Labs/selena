@@ -398,6 +398,8 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 			return "", diagnostic(CodeTypeMismatch, c.Span, "sampleDepth: second argument must be vec2 uv, got %s", uv)
 		}
 		return ir.Float, nil
+	case builtinLoad, builtinTextureSize:
+		return t.typeTexelCall(c, spec.kind)
 	case builtinSampleLevel:
 		if len(c.Args) != spec.arity {
 			return "", diagnostic(CodeInvalidCall, c.Span, "sampleLevel(texture, uv, lod) takes 3 arguments")

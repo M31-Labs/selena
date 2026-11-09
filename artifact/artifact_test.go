@@ -70,6 +70,61 @@ func TestMaterialRoundTripsThroughResult(t *testing.T) {
 	}
 }
 
+// Data-texture fields (textures[].format, sampleMode, requires.glTexSizeUniforms)
+// survive Decode, Result/FromResult and Encode, and an artifact without them
+// decodes with all three empty.
+func TestDataTextureFieldsRoundTrip(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("builder", "testdata", "data-texture.sel.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := artifact.Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	layout := f.Materials[0].Layout
+	want := []struct{ name, format, mode string }{
+		{"spectrum", "r16float", "load"},
+		{"gains", "rgba32float", "load"},
+		{"palette", "rgba16float", "both"},
+	}
+	for i, w := range want {
+		g := layout.Textures[i]
+		if g.Name != w.name || g.Format != w.format || g.SampleMode != w.mode {
+			t.Errorf("texture %d = %s/%s/%s, want %s/%s/%s", i, g.Name, g.Format, g.SampleMode, w.name, w.format, w.mode)
+		}
+	}
+	if got := layout.Requires.GLTexSizeUniforms; len(got) != 3 || got[0] != "_texSize_spectrum" {
+		t.Errorf("GLTexSizeUniforms = %v", got)
+	}
+	back := artifact.FromResult(f.Materials[0].Result())
+	if !reflect.DeepEqual(back, f.Materials[0]) {
+		t.Fatal("data-texture fields changed through Result/FromResult")
+	}
+	again, err := artifact.Encode(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(again) != string(data) {
+		t.Fatal("re-encoding the decoded file changed its bytes")
+	}
+
+	old, err := artifact.Decode(golden(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range old.Materials {
+		for _, tex := range m.Layout.Textures {
+			if tex.Format != "" || tex.SampleMode != "" {
+				t.Errorf("%s/%s: unexpected data-texture fields %q %q", m.Name, tex.Name, tex.Format, tex.SampleMode)
+			}
+		}
+		if len(m.Layout.Requires.GLTexSizeUniforms) != 0 {
+			t.Errorf("%s: unexpected GLTexSizeUniforms", m.Name)
+		}
+	}
+}
+
 func TestMatchesUsesTheSourceHash(t *testing.T) {
 	src, err := os.ReadFile(filepath.Join("builder", "testdata", "tinted.sel"))
 	if err != nil {

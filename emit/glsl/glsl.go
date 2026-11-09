@@ -69,6 +69,7 @@ func emitVertexAuthored(m ir.Module) string {
 	for _, name := range ir.VertexSampledTextures(m) {
 		fmt.Fprintf(&b, "uniform %s %s;\n", samplerType(textureNamed(m, name), true), name)
 	}
+	writeTexSizeUniforms(&b, m, false)
 	for _, v := range m.Varyings {
 		fmt.Fprintf(&b, "varying %s %s;\n", typeName(v.Type), v.Name)
 	}
@@ -108,6 +109,7 @@ func emitFragmentAuthored(m ir.Module) string {
 	for _, t := range m.Textures {
 		fmt.Fprintf(&b, "uniform %s %s;\n", samplerType(t, false), t.Name)
 	}
+	writeTexSizeUniforms(&b, m, true)
 	res := internal.NewBare(prismDialect)
 	res.Fragment = true
 	res.StateSampleUVFn = func(uv string) string { return fmt.Sprintf("texture2D(stateTex, %s)", uv) }
@@ -222,6 +224,7 @@ func emitFragment(m ir.Module) string {
 	for _, t := range m.Textures {
 		fmt.Fprintf(&b, "uniform %s %s;\n", samplerType(t, false), t.Name)
 	}
+	writeTexSizeUniforms(&b, m, true)
 	res := internal.NewBare(prismDialect)
 	res.Fragment = true
 	writeMeshFragment(&b, m, res)

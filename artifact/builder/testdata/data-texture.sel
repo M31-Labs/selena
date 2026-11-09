@@ -1,0 +1,35 @@
+// data-texture.sel — reading data textures at integer texel positions.
+//
+// `spectrum` is a float data texture the host fills (a scrolling spectrogram:
+// one column per frame). surface() finds the column with size() and load(), so
+// no filtering or sampler is involved. `gains` is a 32-bit float row read only
+// by vertex(). `palette` is read both ways: load() for an exact entry and
+// sample() for a filtered one.
+material DataTexture {
+    param spectrum : texture2d format r16float
+    param gains    : texture2d format rgba32float
+    param palette  : texture2d format rgba16float
+    param head     : float = 0.0
+
+    varying vLevel : float
+    varying vUv    : vec2
+
+    vertex(geo) -> vec4 {
+        let columns = size(gains).x
+        let column = int(clamp(geo.uv.x * columns, 0.0, columns - 1.0))
+        let level = load(gains, column, 0i).r
+        vLevel = level
+        vUv = geo.uv
+        return mvp * vec4f(geo.position + geo.normal * level, 1.0)
+    }
+
+    surface(geo) -> color {
+        let sz = size(spectrum)
+        let col = int(mod(geo.vUv.x * sz.x + head, sz.x))
+        let row = int(geo.vUv.y * sz.y)
+        let mag = load(spectrum, col, row).r
+        let exact = load(palette, 0i, 0i)
+        let soft = sample(palette, geo.vUv)
+        return rgb(mag * exact.r + soft.r * 0.25, mag * 0.6 + geo.vLevel, 1.0 - mag)
+    }
+}
