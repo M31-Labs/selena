@@ -16,7 +16,7 @@ var updateGameGolden = flag.Bool("update-game-golden", false, "rewrite the game 
 
 // gameExamples are the examples/material-library sources built on the game
 // module.
-var gameExamples = []string{"foliage", "toon", "dissolve", "hologram", "force-field", "ice", "water-surface", "skin"}
+var gameExamples = []string{"foliage", "toon", "dissolve", "hologram", "force-field", "ice", "water-surface", "skin", "jersey"}
 
 func TestGameExamplesMatchGolden(t *testing.T) {
 	for _, name := range gameExamples {
@@ -172,5 +172,29 @@ func TestGameModuleIsListed(t *testing.T) {
 	}
 	if !strings.Contains(string(src), "fn mlWindSway(") {
 		t.Fatal("game module lacks mlWindSway")
+	}
+}
+
+func TestAtlasHelpersMapIntoTheRegion(t *testing.T) {
+	const params = "    param uv : vec2\n    param rect : vec4\n    param region : vec4"
+	env := func(u, v float64) map[string]val {
+		return map[string]val{"uv": {u, v}, "rect": {0.2, 0.1, 0.6, 0.5}, "region": {0.5, 0.25, 0.75, 0.5}}
+	}
+	// The rect's center maps to the region's center.
+	if u := gameProbe(t, params, "mlAtlasUV(mlRectLocal(uv, rect), region).x", env(0.4, 0.3)); math.Abs(u-0.625) > 1e-5 {
+		t.Errorf("center u = %v, want 0.625", u)
+	}
+	if v := gameProbe(t, params, "mlAtlasUV(mlRectLocal(uv, rect), region).y", env(0.4, 0.3)); math.Abs(v-0.375) > 1e-5 {
+		t.Errorf("center v = %v, want 0.375", v)
+	}
+	// Outside the rect the local uv clamps to the region's edge and the mask is 0.
+	if u := gameProbe(t, params, "mlAtlasUV(mlRectLocal(uv, rect), region).x", env(0.9, 0.3)); math.Abs(u-0.75) > 1e-5 {
+		t.Errorf("outside u = %v, want the region edge 0.75", u)
+	}
+	if m := gameProbe(t, params, "mlRectMask(uv, rect)", env(0.9, 0.3)); m != 0 {
+		t.Errorf("mask outside = %v", m)
+	}
+	if m := gameProbe(t, params, "mlRectMask(uv, rect)", env(0.4, 0.3)); m != 1 {
+		t.Errorf("mask inside = %v", m)
 	}
 }

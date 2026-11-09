@@ -33,6 +33,7 @@ a Mac with Xcode's Metal toolchain.
 | `ice.sel` | Deep body color, white rim, sparkling facets | game, lighting | |
 | `water-surface.sel` | Rippled normals, Fresnel sky reflection, sun glint | game | |
 | `skin.sel` | Soft shadow line, warm scatter band, backlit ears | game, lighting | |
+| `jersey.sel` | A shirt with a number from a runtime text atlas | game | the atlas texture and the player's cell |
 
 ## Wind
 
@@ -62,6 +63,23 @@ vertex(geo) -> vec4 {
 with its square, so stems stay planted. Export leaf cards with V running up
 the blade, or pass a height you compute.
 
+## Text atlases
+
+GoSX's `scene.TextAtlas` draws short labels (jersey numbers, nameplates) into
+one texture in the browser. `jersey.sel` shows a number from it: every player
+uses the same material and the same atlas texture, and only two uniforms
+differ, `labels` (the atlas, the same for everyone) and `labelRect` (the
+player's cell, `TextAtlas.Region(i)`).
+
+```selena
+let glyph = sample(labels, mlAtlasUV(mlRectLocal(geo.uv, numberRect), labelRect))
+let ink = glyph.a * mlRectMask(geo.uv, numberRect)
+return mix(shirtColor, numberColor * glyph.rgb, ink) * light
+```
+
+A blank label leaves its cell transparent, so `ink` is 0 and the shirt shows
+plain.
+
 ## Helpers
 
 | Helper | Returns | Use |
@@ -88,6 +106,9 @@ the blade, or pass a height you compute.
 | `mlSubsurfaceBack(n, v, l, distortion, power, thickness)` | `float` | Light that scatters through thin parts toward the viewer. |
 | `mlSubsurfaceTint(n, l, scatter, width)` | `vec3` | Scatter color near the shadow line. |
 | `mlRimFactor(n, v, power)` | `float` | 1 where the surface is seen edge on. |
+| `mlRectLocal(uv, rect)` | `vec2` | uv mapped into a rectangle of the mesh's UV space, 0..1 across it. |
+| `mlRectMask(uv, rect)` | `float` | 1 inside the rectangle, 0 outside. |
+| `mlAtlasUV(local, region)` | `vec2` | A local 0..1 uv mapped into one atlas cell. |
 | `mlGameHash(p)`, `mlGameNoise(p)`, `mlGameNoise3(p)` | `float` | Hash and value noise, 0..1. |
 
 `n` and `v` are unit vectors, with `v` pointing from the surface to the

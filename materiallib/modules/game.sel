@@ -224,3 +224,26 @@ fn mlSubsurfaceTint(n: vec3, l: vec3, scatter: vec3, width: float) -> vec3 {
     let band = clamp(1.0 - abs(dot(n, l)) / max(width, 0.0001), 0.0, 1.0)
     return scatter * band
 }
+
+// --- Text atlases ---
+
+// mlRectLocal maps uv into a rectangle rect = (u0, v0, u1, v1) of the mesh's
+// UV space, with u0 < u1 and v0 < v1: (0, 0) at (u0, v0) and (1, 1) at (u1, v1).
+fn mlRectLocal(uv: vec2, rect: vec4) -> vec2 {
+    return (uv - rect.xy) / max(rect.zw - rect.xy, vec2f(0.000001, 0.000001))
+}
+
+// mlRectMask is 1 inside rect and 0 outside, for where a decal such as a
+// jersey number sits on the mesh.
+fn mlRectMask(uv: vec2, rect: vec4) -> float {
+    let local = mlRectLocal(uv, rect)
+    return step(0.0, local.x) * step(local.x, 1.0) * step(0.0, local.y) * step(local.y, 1.0)
+}
+
+// mlAtlasUV maps a local uv (0..1 across one label) into the atlas cell
+// region = (u0, v0, u1, v1), as GoSX's scene.TextAtlas.Region returns it.
+// Every player can share one atlas texture and one material; only the region
+// uniform differs.
+fn mlAtlasUV(local: vec2, region: vec4) -> vec2 {
+    return mix(region.xy, region.zw, clamp(local, vec2f(0.0, 0.0), vec2f(1.0, 1.0)))
+}
