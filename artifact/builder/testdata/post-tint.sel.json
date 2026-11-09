@@ -1,0 +1,73 @@
+{
+  "schema": "selena.artifact.v1",
+  "compiler": "golden",
+  "languageVersion": "selena.lang.v1",
+  "source": {
+    "path": "post-tint.sel",
+    "sha256": "d207de6b4a275421dd18701274734a0b21004396ae28bcd3ef29bff831b9fb22"
+  },
+  "options": {
+    "targets": [
+      "wgsl",
+      "gles"
+    ]
+  },
+  "default": "PostTint",
+  "materials": [
+    {
+      "name": "PostTint",
+      "layout": {
+        "schemaVersion": "selena.descriptor.v1",
+        "languageVersion": "selena.lang.v1",
+        "material": "PostTint",
+        "kind": "post",
+        "entryPoints": {
+          "vertex": "vertexMain",
+          "fragment": "fragmentMain"
+        },
+        "uniformBlock": {
+          "size": 16,
+          "fields": [
+            {
+              "name": "tint",
+              "type": "vec3",
+              "offset": 0,
+              "size": 12
+            }
+          ],
+          "defaults": [
+            {
+              "name": "tint",
+              "type": "vec3",
+              "values": [
+                1,
+                0.9,
+                0.8
+              ]
+            }
+          ]
+        },
+        "attributes": [],
+        "textures": [],
+        "wgsl": {
+          "group": 0,
+          "binding": 4
+        },
+        "metal": {
+          "buffer": 1
+        }
+      },
+      "shaders": [
+        {
+          "target": "wgsl",
+          "source": "@group(0) @binding(0) var _sceneColorTex  : texture_2d<f32>;\n@group(0) @binding(1) var _sceneColorSamp : sampler;\n@group(0) @binding(2) var _sceneDepthTex  : texture_depth_2d;\n@group(0) @binding(3) var _sceneDepthSamp : sampler;\n\nstruct UserUniforms {\n  tint : vec3<f32>,\n};\n@group(0) @binding(4) var<uniform> u : UserUniforms;\n\nstruct PostOutput {\n  @builtin(position) pos : vec4<f32>,\n  @location(0) v_uv      : vec2<f32>,\n};\n\nconst _postPositions = array<vec2<f32>, 3>(\n  vec2<f32>(-1.0, -1.0),\n  vec2<f32>( 3.0, -1.0),\n  vec2<f32>(-1.0,  3.0),\n);\nconst _postUVs = array<vec2<f32>, 3>(\n  vec2<f32>(0.0, 1.0),\n  vec2<f32>(2.0, 1.0),\n  vec2<f32>(0.0, -1.0),\n);\n\n@vertex fn vertexMain(@builtin(vertex_index) vi : u32) -> PostOutput {\n  var out : PostOutput;\n  out.pos  = vec4<f32>(_postPositions[vi], 0.0, 1.0);\n  out.v_uv = _postUVs[vi];\n  return out;\n}\n\nstruct PostInput {\n  @location(0) v_uv : vec2<f32>,\n};\n\n@fragment fn fragmentMain(in : PostInput) -> @location(0) vec4<f32> {\n  return vec4<f32>((textureSample(_sceneColorTex, _sceneColorSamp, in.v_uv).rgb * u.tint), 1.0);\n}\n"
+        },
+        {
+          "target": "gles",
+          "vertex": "#version 300 es\n\nout vec2 v_uv;\n\nvoid main() {\n  const vec2[3] positions = vec2[3](\n    vec2(-1.0, -1.0), vec2(3.0, -1.0), vec2(-1.0, 3.0)\n  );\n  const vec2[3] uvs = vec2[3](\n    vec2(0.0, 1.0), vec2(2.0, 1.0), vec2(0.0, -1.0)\n  );\n  v_uv = uvs[gl_VertexID];\n  gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);\n}\n",
+          "fragment": "#version 300 es\nprecision highp float;\nin vec2 v_uv;\n\nuniform sampler2D _sceneColor;\nuniform sampler2D _sceneDepth;\nuniform vec3 tint;\nout vec4 fragColor;\n\nvoid main() {\n  fragColor = vec4((texture(_sceneColor, v_uv).rgb * tint), 1.0);\n}\n"
+        }
+      ]
+    }
+  ]
+}

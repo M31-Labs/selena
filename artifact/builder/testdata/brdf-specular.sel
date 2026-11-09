@@ -1,0 +1,24 @@
+// A mesh material that calls a materiallib helper and authors a specular
+// companion, built with -modules brdf -specular-mrt.
+material Glossy {
+    context {
+        cameraPos : vec3
+        sunDir    : vec3
+        sunColor  : vec3
+    }
+    param baseColor : color = rgb(0.6, 0.5, 0.4)
+    param roughness : float = 0.4
+
+    surface(geo) -> color {
+        let n = normalize(geo.worldNormal)
+        return baseColor * sunColor * max(dot(n, sunDir), 0.0)
+    }
+
+    specular(geo) -> color {
+        let n = normalize(geo.worldNormal)
+        let v = normalize(cameraPos - geo.worldPos)
+        let h = normalize(v + sunDir)
+        let f = mlFresnelSchlick(max(dot(v, h), 0.0), vec3f(0.04, 0.04, 0.04))
+        return f * sunColor * pow(max(dot(n, h), 0.0), 2.0 / max(roughness * roughness, 0.001))
+    }
+}

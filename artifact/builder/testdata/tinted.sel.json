@@ -1,0 +1,202 @@
+{
+  "schema": "selena.artifact.v1",
+  "compiler": "golden",
+  "languageVersion": "selena.lang.v1",
+  "source": {
+    "path": "tinted.sel",
+    "sha256": "edac809a9df1b39026945e2e456c25076ccfd441777e4750fdf7326d56a240e2"
+  },
+  "options": {
+    "targets": [
+      "wgsl",
+      "glsl",
+      "metal",
+      "gles"
+    ]
+  },
+  "default": "Tinted",
+  "materials": [
+    {
+      "name": "Base",
+      "layout": {
+        "schemaVersion": "selena.descriptor.v1",
+        "languageVersion": "selena.lang.v1",
+        "material": "Base",
+        "kind": "mesh",
+        "entryPoints": {
+          "vertex": "vertexMain",
+          "fragment": "fragmentMain"
+        },
+        "uniformBlock": {
+          "size": 144,
+          "fields": [
+            {
+              "name": "mvp",
+              "type": "mat4",
+              "offset": 0,
+              "size": 64
+            },
+            {
+              "name": "normalMatrix",
+              "type": "mat3",
+              "offset": 64,
+              "size": 48
+            },
+            {
+              "name": "baseColor",
+              "type": "vec3",
+              "offset": 112,
+              "size": 12
+            },
+            {
+              "name": "light_ambient",
+              "type": "float",
+              "offset": 124,
+              "size": 4
+            },
+            {
+              "name": "light_dir",
+              "type": "vec3",
+              "offset": 128,
+              "size": 12
+            }
+          ]
+        },
+        "attributes": [
+          {
+            "name": "position",
+            "location": 0,
+            "type": "vec3"
+          },
+          {
+            "name": "normal",
+            "location": 1,
+            "type": "vec3"
+          }
+        ],
+        "textures": [],
+        "wgsl": {
+          "group": 0,
+          "binding": 0
+        },
+        "metal": {
+          "buffer": 0
+        }
+      },
+      "shaders": [
+        {
+          "target": "wgsl",
+          "source": "struct Uniforms {\n  mvp : mat4x4<f32>,\n  normalMatrix : mat3x3<f32>,\n  baseColor : vec3<f32>,\n  light_ambient : f32,\n  light_dir : vec3<f32>,\n};\n@group(0) @binding(0) var<uniform> u : Uniforms;\n\nstruct VertexInput {\n  @location(0) position : vec3<f32>,\n  @location(1) normal : vec3<f32>,\n};\n\nstruct VertexOutput {\n  @builtin(position) position : vec4<f32>,\n  @location(0) vWorldNormal : vec3<f32>,\n};\n\n@vertex\nfn vertexMain(in : VertexInput) -> VertexOutput {\n  var out : VertexOutput;\n  out.vWorldNormal = normalize((u.normalMatrix * in.normal));\n  out.position = (u.mvp * vec4<f32>(in.position, 1.0));\n  return out;\n}\n\n@fragment\nfn fragmentMain(in : VertexOutput) -> @location(0) vec4<f32> {\n  let n = normalize(in.vWorldNormal);\n  return vec4<f32>((u.baseColor * (u.light_ambient + max(dot(n, u.light_dir), 0.0))), 1.0);\n}\n"
+        },
+        {
+          "target": "glsl",
+          "vertex": "attribute vec3 position;\nattribute vec3 normal;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform vec3 baseColor;\nuniform float light_ambient;\nuniform vec3 light_dir;\nvarying vec3 vWorldNormal;\n\nvoid main() {\n  vWorldNormal = normalize((normalMatrix * normal));\n  gl_Position = (mvp * vec4(position, 1.0));\n}\n",
+          "fragment": "precision mediump float;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform vec3 baseColor;\nuniform float light_ambient;\nuniform vec3 light_dir;\nvarying vec3 vWorldNormal;\n\nvoid main() {\n  vec3 n = normalize(vWorldNormal);\n  gl_FragColor = vec4((baseColor * (light_ambient + max(dot(n, light_dir), 0.0))), 1.0);\n}\n"
+        },
+        {
+          "target": "metal",
+          "source": "#include <metal_stdlib>\nusing namespace metal;\n\nstruct Uniforms {\n  float4x4 mvp;\n  float3x3 normalMatrix;\n  float3 baseColor;\n  float light_ambient;\n  float3 light_dir;\n};\n\nstruct VertexIn {\n  float3 position [[attribute(0)]];\n  float3 normal [[attribute(1)]];\n};\n\nstruct VertexOut {\n  float4 position [[position]];\n  float3 vWorldNormal;\n};\n\nvertex VertexOut vertexMain(VertexIn in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {\n  VertexOut out;\n  out.vWorldNormal = normalize((u.normalMatrix * in.normal));\n  out.position = (u.mvp * float4(in.position, 1.0));\n  return out;\n}\n\nfragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {\n  float3 n = normalize(in.vWorldNormal);\n  return float4((u.baseColor * (u.light_ambient + max(dot(n, u.light_dir), 0.0))), 1.0);\n}\n"
+        },
+        {
+          "target": "gles",
+          "vertex": "#version 300 es\nin vec3 position;\nin vec3 normal;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform vec3 baseColor;\nuniform float light_ambient;\nuniform vec3 light_dir;\nout vec3 vWorldNormal;\n\nvoid main() {\n  vWorldNormal = normalize((normalMatrix * normal));\n  gl_Position = (mvp * vec4(position, 1.0));\n}\n",
+          "fragment": "#version 300 es\nprecision highp float;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform vec3 baseColor;\nuniform float light_ambient;\nuniform vec3 light_dir;\nin vec3 vWorldNormal;\nout vec4 fragColor;\n\nvoid main() {\n  vec3 n = normalize(vWorldNormal);\n  fragColor = vec4((baseColor * (light_ambient + max(dot(n, light_dir), 0.0))), 1.0);\n}\n"
+        }
+      ]
+    },
+    {
+      "name": "Tinted",
+      "layout": {
+        "schemaVersion": "selena.descriptor.v1",
+        "languageVersion": "selena.lang.v1",
+        "material": "Tinted",
+        "kind": "mesh",
+        "entryPoints": {
+          "vertex": "vertexMain",
+          "fragment": "fragmentMain"
+        },
+        "uniformBlock": {
+          "size": 160,
+          "fields": [
+            {
+              "name": "mvp",
+              "type": "mat4",
+              "offset": 0,
+              "size": 64
+            },
+            {
+              "name": "normalMatrix",
+              "type": "mat3",
+              "offset": 64,
+              "size": 48
+            },
+            {
+              "name": "baseColor",
+              "type": "vec3",
+              "offset": 112,
+              "size": 12
+            },
+            {
+              "name": "light_ambient",
+              "type": "float",
+              "offset": 124,
+              "size": 4
+            },
+            {
+              "name": "light_dir",
+              "type": "vec3",
+              "offset": 128,
+              "size": 12
+            },
+            {
+              "name": "tint",
+              "type": "vec3",
+              "offset": 144,
+              "size": 12
+            }
+          ]
+        },
+        "attributes": [
+          {
+            "name": "position",
+            "location": 0,
+            "type": "vec3"
+          },
+          {
+            "name": "normal",
+            "location": 1,
+            "type": "vec3"
+          }
+        ],
+        "textures": [],
+        "wgsl": {
+          "group": 0,
+          "binding": 0
+        },
+        "metal": {
+          "buffer": 0
+        }
+      },
+      "shaders": [
+        {
+          "target": "wgsl",
+          "source": "struct Uniforms {\n  mvp : mat4x4<f32>,\n  normalMatrix : mat3x3<f32>,\n  baseColor : vec3<f32>,\n  light_ambient : f32,\n  light_dir : vec3<f32>,\n  tint : vec3<f32>,\n};\n@group(0) @binding(0) var<uniform> u : Uniforms;\n\nstruct VertexInput {\n  @location(0) position : vec3<f32>,\n  @location(1) normal : vec3<f32>,\n};\n\nstruct VertexOutput {\n  @builtin(position) position : vec4<f32>,\n  @location(0) vWorldNormal : vec3<f32>,\n};\n\n@vertex\nfn vertexMain(in : VertexInput) -> VertexOutput {\n  var out : VertexOutput;\n  out.vWorldNormal = normalize((u.normalMatrix * in.normal));\n  out.position = (u.mvp * vec4<f32>(in.position, 1.0));\n  return out;\n}\n\n@fragment\nfn fragmentMain(in : VertexOutput) -> @location(0) vec4<f32> {\n  return vec4<f32>(((u.baseColor * (u.light_ambient + max(dot(normalize(in.vWorldNormal), u.light_dir), 0.0))) * u.tint), 1.0);\n}\n"
+        },
+        {
+          "target": "glsl",
+          "vertex": "attribute vec3 position;\nattribute vec3 normal;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform vec3 baseColor;\nuniform float light_ambient;\nuniform vec3 light_dir;\nuniform vec3 tint;\nvarying vec3 vWorldNormal;\n\nvoid main() {\n  vWorldNormal = normalize((normalMatrix * normal));\n  gl_Position = (mvp * vec4(position, 1.0));\n}\n",
+          "fragment": "precision mediump float;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform vec3 baseColor;\nuniform float light_ambient;\nuniform vec3 light_dir;\nuniform vec3 tint;\nvarying vec3 vWorldNormal;\n\nvoid main() {\n  gl_FragColor = vec4(((baseColor * (light_ambient + max(dot(normalize(vWorldNormal), light_dir), 0.0))) * tint), 1.0);\n}\n"
+        },
+        {
+          "target": "metal",
+          "source": "#include <metal_stdlib>\nusing namespace metal;\n\nstruct Uniforms {\n  float4x4 mvp;\n  float3x3 normalMatrix;\n  float3 baseColor;\n  float light_ambient;\n  float3 light_dir;\n  float3 tint;\n};\n\nstruct VertexIn {\n  float3 position [[attribute(0)]];\n  float3 normal [[attribute(1)]];\n};\n\nstruct VertexOut {\n  float4 position [[position]];\n  float3 vWorldNormal;\n};\n\nvertex VertexOut vertexMain(VertexIn in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {\n  VertexOut out;\n  out.vWorldNormal = normalize((u.normalMatrix * in.normal));\n  out.position = (u.mvp * float4(in.position, 1.0));\n  return out;\n}\n\nfragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {\n  return float4(((u.baseColor * (u.light_ambient + max(dot(normalize(in.vWorldNormal), u.light_dir), 0.0))) * u.tint), 1.0);\n}\n"
+        },
+        {
+          "target": "gles",
+          "vertex": "#version 300 es\nin vec3 position;\nin vec3 normal;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform vec3 baseColor;\nuniform float light_ambient;\nuniform vec3 light_dir;\nuniform vec3 tint;\nout vec3 vWorldNormal;\n\nvoid main() {\n  vWorldNormal = normalize((normalMatrix * normal));\n  gl_Position = (mvp * vec4(position, 1.0));\n}\n",
+          "fragment": "#version 300 es\nprecision highp float;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform vec3 baseColor;\nuniform float light_ambient;\nuniform vec3 light_dir;\nuniform vec3 tint;\nin vec3 vWorldNormal;\nout vec4 fragColor;\n\nvoid main() {\n  fragColor = vec4(((baseColor * (light_ambient + max(dot(normalize(vWorldNormal), light_dir), 0.0))) * tint), 1.0);\n}\n"
+        }
+      ]
+    }
+  ]
+}
