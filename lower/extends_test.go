@@ -165,3 +165,39 @@ material Tinted extends Base {
 		t.Fatalf("varyings = %+v, want none", mod.Varyings)
 	}
 }
+
+// A child that calls super.surface(geo) inlines the parent's surface, so the
+// context fields that surface reads must reach the child. They used to be
+// dropped: the child failed with SEL2001 "unknown name" for every parent
+// context field.
+func TestResolveExtendsInheritsParentContext(t *testing.T) {
+	src := `material Lit {
+    context {
+        sunDir : vec3
+        tint   : vec3
+    }
+    surface(geo) -> color {
+        return tint * max(dot(normalize(geo.worldNormal), sunDir), 0.0)
+    }
+}
+material Warm extends Lit {
+    context {
+        tint : vec3
+        heat : float
+    }
+    surface(geo) -> color {
+        return super.surface(geo) * heat
+    }
+}`
+	p, err := parse.Program([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, layout, err := LowerProgram(p, 1)
+	if err != nil {
+		t.Fatalf("child of a context-reading parent failed to lower: %v", err)
+	}
+	if got := strings.Join(layout.Context, ","); got != "sunDir,tint,heat" {
+		t.Fatalf("context = %s, want parent fields first and the child's tint not duplicated", got)
+	}
+}
