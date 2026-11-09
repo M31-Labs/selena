@@ -82,3 +82,26 @@ func TestArtifactCommandStdoutAndErrors(t *testing.T) {
 		}
 	}
 }
+
+// A uniform array of float, int, uint or vec2 must build for every default
+// target, Metal included.
+func TestArtifactDefaultTargetsWithNarrowArrays(t *testing.T) {
+	src := "material Levels kind screen {\n param levels : array<float, 16>\n surface(screen) -> color { return vec3f(levels[3i], 0.0, 0.0) }\n}\n"
+	path := filepath.Join(t.TempDir(), "levels.sel")
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := artifactCommand([]string{"-o", "-", path}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "float4 levels[16]") {
+		t.Errorf("artifact lacks the widened Metal array")
+	}
+	if err := run([]string{"inspect", path}); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"emit", "metal", path}); err != nil {
+		t.Fatal(err)
+	}
+}

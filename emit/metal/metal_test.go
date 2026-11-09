@@ -60,9 +60,9 @@ func TestUniformStructPacksVec3AndPads(t *testing.T) {
 
 func TestUniformStructRejectsDisagreement(t *testing.T) {
 	for name, m := range map[string]ir.Module{
-		"float array": {ArrayUniforms: []ir.ArrayBinding{{Name: "xs", ElemType: ir.Float, Count: 4}}},
-		"pad prefix":  {Uniforms: []ir.Binding{{Name: "_selenaPad0", Type: ir.Float}}},
-		"bool":        {Uniforms: []ir.Binding{{Name: "on", Type: ir.Bool}}},
+		"mat4 array": {ArrayUniforms: []ir.ArrayBinding{{Name: "xs", ElemType: ir.Mat4, Count: 4}}},
+		"pad prefix": {Uniforms: []ir.Binding{{Name: "_selenaPad0", Type: ir.Float}}},
+		"bool":       {Uniforms: []ir.Binding{{Name: "on", Type: ir.Bool}}},
 	} {
 		if _, err := uniformStruct(t, m); err == nil {
 			t.Errorf("%s: want an error, got none", name)
@@ -77,5 +77,34 @@ func TestPackedVec3ReadKeepsFloat3Type(t *testing.T) {
 	}
 	if !strings.Contains(src, "packed_float3 lightDir;") {
 		t.Errorf("lightDir not declared packed_float3:\n%s", src)
+	}
+}
+
+func TestNarrowUniformArraysKeepStride16(t *testing.T) {
+	m := ir.Module{
+		Uniforms: []ir.Binding{{Name: "s", Type: ir.Float}},
+		ArrayUniforms: []ir.ArrayBinding{
+			{Name: "f", ElemType: ir.Float, Count: 2},
+			{Name: "i", ElemType: ir.Int, Count: 2},
+			{Name: "u", ElemType: ir.Uint, Count: 2},
+			{Name: "v", ElemType: ir.Vec2, Count: 2},
+		},
+	}
+	got, err := uniformStruct(t, m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"float4 f[2];", "int4 i[2];", "uint4 u[2];", "float4 v[2];"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+	r := qualified(m, true)
+	read := ir.Print(ir.Index{Arr: ir.Ref{Name: "v"}, Idx: ir.Ref{Name: "k"}}, r)
+	if read != "u.v[k].xy" {
+		t.Errorf("vec2 read = %q", read)
+	}
+	if read := ir.Print(ir.Index{Arr: ir.Ref{Name: "f"}, Idx: ir.Ref{Name: "k"}}, r); read != "u.f[k].x" {
+		t.Errorf("float read = %q", read)
 	}
 }

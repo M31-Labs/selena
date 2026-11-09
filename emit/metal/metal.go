@@ -63,6 +63,7 @@ func emitFeedback(m ir.Module) (string, error) {
 		Fragment:          true,
 		Qualified:         true,
 		PackedVec3:        packedVec3Uniforms(m),
+		WideArrays:        wideArrayUniforms(m),
 		StateSampleFn: func(dx, dy int64) string {
 			return fmt.Sprintf(
 				"inState[clamp(int(cellIndex) + (%d) + (%d) * int(_grid.gridWidth), 0, int(_grid.gridLen) - 1)]",
@@ -371,6 +372,7 @@ vertex PointsOut vertexMain(
 		Fragment:          true,
 		Qualified:         true,
 		PackedVec3:        packedVec3Uniforms(m),
+		WideArrays:        wideArrayUniforms(m),
 	}
 	fragSig := "fragment float4 fragmentMain(PointsOut in [[stage_in]]"
 	if len(m.Uniforms) > 0 {
@@ -426,6 +428,7 @@ vertex PostOut vertexMain(uint vid [[vertex_id]]) {
 		Fragment:          true,
 		Qualified:         true,
 		PackedVec3:        packedVec3Uniforms(m),
+		WideArrays:        wideArrayUniforms(m),
 		SceneSampleFn: func(name, uv string) string {
 			switch name {
 			case "sceneColor":

@@ -66,7 +66,58 @@ func metalCorpus(t *testing.T) []metalMaterial {
 			out = append(out, metalMaterial{name: name, result: res, source: artifact.Source})
 		}
 	}
+	for name, src := range metalExtraSources {
+		res, err := selena.Compile([]byte(src), selena.CompileOptions{Targets: []selena.Target{selena.TargetMetal}})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		artifact, _ := res.Artifact(selena.TargetMetal)
+		out = append(out, metalMaterial{name: name, result: res, source: artifact.Source})
+	}
 	return out
+}
+
+// metalExtraSources are test-local materials. The host uniform packer cannot
+// fill int and uint arrays yet, so they stay out of the conformance corpus,
+// but the Metal layout must still match the descriptor. The WGSL target
+// still declares float and vec2 uniform arrays with stride 4 or 8, which naga
+// rejects, so they stay out of the corpus that naga validates.
+var metalExtraSources = map[string]string{
+	"inline/IntUintArrays": `material IntUintArrays {
+    param gain : float
+    param steps : array<int, 4>
+    param masks : array<uint, 3>
+    param tail : array<vec2, 2>
+    surface(geo) -> color {
+        var acc = 0.0
+        for (var i = 0i; i < 3i; i = i + 1i) {
+            acc = acc + float(steps[i]) + float(masks[i]) + tail[0i].x
+        }
+        return vec3f(acc * gain, 0.0, 0.0)
+    }
+}`,
+	"inline/NarrowMesh": `material NarrowMesh {
+    param tint : vec3
+    param gain : float
+    param weights : array<float, 4>
+    param offsets : array<vec2, 4>
+    surface(geo) -> color {
+        var acc = tint * gain
+        for (var i = 0i; i < 4i; i = i + 1i) {
+            let o = offsets[i]
+            acc = acc + vec3f(weights[i], o.x, o.y)
+        }
+        return acc
+    }
+}`,
+	"inline/NarrowLevels": `material NarrowLevels kind screen {
+    param gain : float
+    param levels : array<float, 16>
+    surface(screen) -> color {
+        let i = int(min(floor(screen.uv.x * 16.0), 15.0))
+        return vec3f(levels[i] * gain, 0.0, 0.0)
+    }
+}`,
 }
 
 // TestMetalCompilesWithXcrun compiles the Metal output of every material in

@@ -39,6 +39,37 @@ func mslMember(t ir.Type, packed bool) (typ string, l mslLayout, err error) {
 	return "", mslLayout{}, fmt.Errorf("uniform type %q has no Metal buffer layout", t)
 }
 
+// wideElement returns the 16 byte Metal storage type and the accessor that
+// reads the value back, for an array element type whose own Metal stride is
+// smaller than the descriptor's 16 bytes. ok is false for other types.
+func wideElement(t ir.Type) (typ, accessor string, ok bool) {
+	switch t {
+	case ir.Float:
+		return "float4", ".x", true
+	case ir.Int:
+		return "int4", ".x", true
+	case ir.Uint:
+		return "uint4", ".x", true
+	case ir.Vec2:
+		return "float4", ".xy", true
+	}
+	return "", "", false
+}
+
+// wideArrayUniforms maps each widened uniform array to its read accessor.
+func wideArrayUniforms(m ir.Module) map[string]string {
+	var set map[string]string
+	for _, au := range m.ArrayUniforms {
+		if _, acc, ok := wideElement(au.ElemType); ok && au.Count > 1 {
+			if set == nil {
+				set = map[string]string{}
+			}
+			set[au.Name] = acc
+		}
+	}
+	return set
+}
+
 // uniformNamedTypes lists the module's uniforms in the order the lowering
 // gives bindings.ComputeUniformBlock: scalars, then arrays.
 func uniformNamedTypes(m ir.Module) []bindings.NamedType {
@@ -93,11 +124,14 @@ func writeUniformStruct(b *strings.Builder, name string, m ir.Module) error {
 	for _, f := range block.Fields {
 		t := types[f.Name]
 		typ, l, err := mslMember(t, f.Count <= 1)
+		if wide, _, ok := wideElement(t); ok && f.Count > 1 {
+			typ, l, err = wide, mslLayout{16, 16}, nil
+		}
 		if err != nil {
 			return fmt.Errorf("uniform %q: %w", f.Name, err)
 		}
 		if f.Count > 1 && l.size != f.Stride {
-			return fmt.Errorf("uniform %q: array of %s has Metal stride %d but the descriptor stride is %d; use vec4 elements", f.Name, t, l.size, f.Stride)
+			return fmt.Errorf("uniform %q: array of %s has Metal stride %d but the descriptor stride is %d; its elements cannot be widened to 16 bytes", f.Name, t, l.size, f.Stride)
 		}
 		if f.Offset%l.align != 0 {
 			return fmt.Errorf("uniform %q: descriptor offset %d is not a multiple of the Metal alignment %d", f.Name, f.Offset, l.align)
@@ -131,5 +165,6 @@ func writeUniformStruct(b *strings.Builder, name string, m ir.Module) error {
 func qualified(m ir.Module, fragment bool) internal.Resolver {
 	r := internal.NewQualified(prismDialect, m, fragment)
 	r.PackedVec3 = packedVec3Uniforms(m)
+	r.WideArrays = wideArrayUniforms(m)
 	return r
 }

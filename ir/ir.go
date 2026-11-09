@@ -548,6 +548,15 @@ func (CellUV) isExpr()        {}
 // builtins, literals, and the overall expression structure are shared — see
 // Print. The two backends differing only in Dialect (and stage scaffolding) is
 // the property this slice is meant to validate.
+// IndexReader is an optional Dialect extension. A backend whose array storage
+// element differs from the element type (a Metal float array widened to float4
+// to keep the 16 byte uniform stride) renders the read of element idx of the
+// array named name, given the already-rendered array and index. It returns
+// ok=false to use the plain arr[idx] form.
+type IndexReader interface {
+	IndexRead(name, arr, idx string) (string, bool)
+}
+
 type Dialect interface {
 	TypeName(Type) string
 	Ref(name string) string
@@ -710,7 +719,15 @@ func Print(e Expr, d Dialect) string {
 	case CellUV:
 		return d.CellUV()
 	case Index:
-		return Print(x.Arr, d) + "[" + Print(x.Idx, d) + "]"
+		arr, idx := Print(x.Arr, d), Print(x.Idx, d)
+		if r, ok := x.Arr.(Ref); ok {
+			if rd, ok := d.(IndexReader); ok {
+				if s, ok := rd.IndexRead(r.Name, arr, idx); ok {
+					return s
+				}
+			}
+		}
+		return arr + "[" + idx + "]"
 	default:
 		// Every Expr variant in this package has a case above. Reaching here
 		// means a new variant's Print case was never added — the emission

@@ -76,6 +76,10 @@ type Resolver struct {
 	// form (Metal packed_float3). A read converts them back to the unpacked
 	// vec3 type so every expression keeps its type.
 	PackedVec3 map[string]bool
+	// WideArrays maps a uniform array name to the accessor (".x", ".xy") that
+	// takes the element value out of its widened 16 byte storage element. A
+	// read of element i prints as u.name[i]<accessor>.
+	WideArrays map[string]string
 	// SceneSampleFn renders a SceneSample expression. When nil, SceneSample
 	// falls back to a dummy expression. Each post-emitter sets this.
 	SceneSampleFn func(name, uv string) string
@@ -122,6 +126,15 @@ type Resolver struct {
 	// TextureNames renames IR textures in sample expressions (surface hooks
 	// sample selenaSurfaceTex<i>, which the host binds). Nil keeps the names.
 	TextureNames map[string]string
+}
+
+// IndexRead implements ir.IndexReader for widened uniform arrays.
+func (r Resolver) IndexRead(name, arr, idx string) (string, bool) {
+	acc, ok := r.WideArrays[name]
+	if !ok || !r.Uniforms[name] {
+		return "", false
+	}
+	return arr + "[" + idx + "]" + acc, true
 }
 
 func (r Resolver) tex(name string) string {

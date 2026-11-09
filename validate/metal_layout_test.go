@@ -26,7 +26,7 @@ func uniformStructName(t *testing.T, m metalMaterial) string {
 // mslSizeAlign is the Metal Shading Language size and alignment of a member
 // type, as the Metal Shading Language Specification gives them.
 var mslSizeAlign = map[string][2]int{
-	"float": {4, 4}, "int": {4, 4}, "uint": {4, 4},
+	"float": {4, 4}, "int": {4, 4}, "uint": {4, 4}, "int4": {16, 16}, "uint4": {16, 16},
 	"float2": {8, 8}, "float3": {16, 16}, "packed_float3": {12, 4}, "float4": {16, 16},
 	"float3x3": {48, 16}, "float4x4": {64, 16},
 	"char": {1, 1},
