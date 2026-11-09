@@ -120,7 +120,24 @@ func lowerMeshWithVertex(m hir.Material) (ir.Module, bindings.Layout, error) {
 		}
 	}
 
-	reserved, err := interfaceNames(uniforms.uniforms, uniforms.textures, attributes, varyings)
+	// Instance attributes (`instance name : type`): instance-rate inputs read by
+	// bare name in vertex(). They claim interface names beside the attributes.
+	instances, err := planInstances(m)
+	if err != nil {
+		return ir.Module{}, bindings.Layout{}, err
+	}
+	claimed := attributes
+	instanceType := map[string]ir.Type{}
+	vertexOnly := map[string]bool{}
+	if len(instances) > 0 {
+		claimed = append(append([]ir.Binding(nil), attributes...), instances...)
+		for _, in := range instances {
+			instanceType[in.Name] = in.Type
+			vertexOnly[in.Name] = true
+		}
+	}
+
+	reserved, err := interfaceNames(uniforms.uniforms, uniforms.textures, claimed, varyings)
 	if err != nil {
 		return ir.Module{}, bindings.Layout{}, err
 	}
@@ -142,6 +159,8 @@ func lowerMeshWithVertex(m hir.Material) (ir.Module, bindings.Layout, error) {
 		allowVertexIndex: true,
 		allowStateAt:     hasState,
 		inVertexStage:    true,
+
+		allowInstanceIndex: true,
 	}
 	vtp := &typer{
 		paramKind:        vParamKind,
@@ -153,6 +172,9 @@ func lowerMeshWithVertex(m hir.Material) (ir.Module, bindings.Layout, error) {
 		allowStateAt:     hasState,
 		paramArrays:      uniforms.paramArrays,
 		inVertexStage:    true,
+
+		allowInstanceIndex: true,
+		instanceAttrs:      instanceType,
 	}
 	vrs.tp = vtp
 	vertexBody, err := lowerVertexStage(m.Vertex, reserved, vrs, vtp, varyingType)
@@ -189,6 +211,8 @@ func lowerMeshWithVertex(m hir.Material) (ir.Module, bindings.Layout, error) {
 		geoFields:     fragGeo,
 		allowStateAt:  hasState,
 		paramArrays:   uniforms.paramArrays,
+
+		vertexOnlyNames: vertexOnly,
 	}
 	frs.tp = ftp
 	fragBody, fragOut, err := lowerFragment(m.Surface, reserved, frs, ftp)
@@ -217,6 +241,9 @@ func lowerMeshWithVertex(m hir.Material) (ir.Module, bindings.Layout, error) {
 		StateField:      stateName,
 		VertexAuthored:  true,
 		UsesVertexIndex: ir.StageUsesVertexIndexBuiltin(vertexStage),
+
+		InstanceAttributes: instances,
+		UsesInstanceIndex:  ir.StageUsesInstanceIndexBuiltin(vertexStage),
 	}
 
 	ub := bindings.ComputeUniformBlock(uniforms.uniforms)
@@ -238,6 +265,7 @@ func lowerMeshWithVertex(m hir.Material) (ir.Module, bindings.Layout, error) {
 		layout.Textures = []bindings.Texture{}
 	}
 	layout.UniformBlock.Defaults = uniforms.defaults
+	layout.InstanceAttributes, layout.InstanceStride = instanceLayout(instances, len(attributes))
 	for _, name := range ir.VertexSampledTextures(mod) {
 		for i := range layout.Textures {
 			if layout.Textures[i].Name == name {

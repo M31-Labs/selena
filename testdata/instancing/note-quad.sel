@@ -1,0 +1,33 @@
+// note-quad.sel - instanced quads, one per note (piano roll style).
+//
+// Draw 4 vertices per instance as a triangle strip. The host streams one packed
+// record per instance (see the descriptor's instanceAttributes): rect at byte 0,
+// tone at byte 16, region at byte 32, stride 36. vertexIndex & 1 and
+// vertexIndex >> 1 pick the quad corner, so the material needs no vertex buffer.
+//
+// This material uses an int attribute, instanceIndex and bit operators, so it
+// has no GLSL ES 1.00 (WebGL 1) form. testdata/conformance/instance-quad.sel is
+// the float-only version that does.
+material NoteQuad {
+    instance rect   : vec4   // x, y, w, h
+    instance tone   : vec4   // r, g, b, selected
+    instance region : int    // atlas region index
+
+    varying vTone : vec4
+    varying vRegion : int
+
+    vertex(geo) -> vec4 {
+        let corner = vec2f(float(vertexIndex & 1u), float(vertexIndex >> 1u))
+        let p = rect.xy + corner * rect.zw
+        let stripe = 1.0 - 0.04 * float(instanceIndex & 3u)
+        vTone = vec4f(tone.rgb * stripe, tone.a)
+        vRegion = region
+        return mvp * vec4f(p, 0.0, 1.0)
+    }
+
+    surface(geo) -> color {
+        let column = float(geo.vRegion & 3i)
+        let lift = 0.25 * column
+        return rgb(geo.vTone.r + lift, geo.vTone.g, geo.vTone.b)
+    }
+}

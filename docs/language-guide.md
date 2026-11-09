@@ -407,6 +407,72 @@ to that rectangle; `screen.uv` and `screenSize()` then describe the rectangle,
 not the window. See [compatibility.md](compatibility.md#screen-materials) for the
 bindings and the draw call.
 
+## Instancing
+
+A mesh material that authors `vertex()` can draw many copies of one mesh in a
+single call, each with its own data. Declare the per-instance data with
+`instance name : type`, and read it by name in `vertex()`:
+
+```selena
+material NoteQuad {
+    instance rect   : vec4   // x, y, w, h
+    instance tone   : vec4   // r, g, b, selected
+    instance region : int    // atlas region index
+
+    varying vTone : vec4
+    varying vRegion : int
+
+    vertex(geo) -> vec4 {
+        let corner = vec2f(float(vertexIndex & 1u), float(vertexIndex >> 1u))
+        let p = rect.xy + corner * rect.zw
+        vTone = tone
+        vRegion = region
+        return mvp * vec4f(p, 0.0, 1.0)
+    }
+
+    surface(geo) -> color {
+        return rgb(geo.vTone.r, geo.vTone.g, geo.vTone.b)
+    }
+}
+```
+
+This draws a quad per instance from four vertices as a triangle strip, with no
+vertex buffer. The full material is `testdata/instancing/note-quad.sel`.
+
+**Instance attributes.** The allowed types are `float`, `vec2`, `vec3`, `vec4`,
+`int` and `uint`. The attribute is readable in `vertex()` only. To use it in
+`surface()`, write it to a `varying`, as `vRegion` does above. An `int` or
+`uint` varying is passed flat (without interpolation) on every target except
+GLSL ES 1.00, which cannot carry one. `instance` is a keyword, and it is only
+legal in a mesh material that has a `vertex()`. Points, post, feedback, screen
+and surface materials, and a mesh material with no `vertex()`, reject it with a
+diagnostic.
+
+**`instanceIndex`.** A `uint` builtin beside `vertexIndex`: the index of the
+instance being drawn, counted from 0. It works without any `instance`
+declaration, and it is not available on GLSL ES 1.00.
+
+**Record layout.** The descriptor lists the attributes in declaration order and
+packs them into one record with no padding. `rect`, `tone` and `region` above
+sit at byte offsets 0, 16 and 32, and the record is 36 bytes. Locations come
+after the vertex attributes the `vertex()` body reads, in the order
+`position`, `normal`, `uv`. See [compatibility.md](compatibility.md#instancing)
+for the descriptor fields and how each target binds the buffer.
+
+**Bit operators.** `&`, `|`, `^`, `<<` and `>>` work on `int` and `uint`.
+`&`, `|` and `^` take two operands of the same type. A shift takes an `int` or
+`uint` on the left and a `uint` on the right (write `1u`), and the result has
+the type of the left operand. Precedence follows Go: `&`, `<<` and `>>` bind
+like `*`, `|` and `^` bind like `+`, and all of them bind tighter than a
+comparison, so `x & 1u == 0u` means `(x & 1u) == 0u`. They are not allowed in a
+param default. They are not available on GLSL ES 1.00.
+
+A material that uses `instanceIndex`, an `int` or `uint` instance attribute, or
+a bit operator has no GLSL ES 1.00 form. Compiling it with no target list emits
+the other three targets and leaves `glsl` out; asking for `glsl` by name fails
+with a message that lists each feature in the way. An instance material that
+uses only float attributes and no bit operators builds for all four targets.
+
 ## Host Packing
 
 The descriptor is the source of truth for uniform packing. In Go, use

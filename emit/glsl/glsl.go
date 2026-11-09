@@ -20,6 +20,9 @@ var prismDialect = dialect.GLSL{}
 // emitter — see their doc comments) into this function's normal error return.
 func Emit(m ir.Module) (vertex, fragment string, err error) {
 	return internal.RecoverSplit(func() (string, string, error) {
+		if why := ir.GLSLInstancingUnsupported(m); len(why) > 0 {
+			return "", "", fmt.Errorf("material %q cannot target GLSL ES 1.00 (WebGL 1): %s", m.Name, strings.Join(why, "; "))
+		}
 		switch m.Kind {
 		case ir.KindPoints:
 			return emitPointsVertex(m), emitPointsFragment(m), nil
@@ -51,6 +54,11 @@ func Emit(m ir.Module) (vertex, fragment string, err error) {
 func emitVertexAuthored(m ir.Module) string {
 	var b strings.Builder
 	for _, a := range m.Attributes {
+		fmt.Fprintf(&b, "attribute %s %s;\n", typeName(a.Type), a.Name)
+	}
+	// Instance attributes: float types only (checked above). The host enables
+	// ANGLE_instanced_arrays and sets vertexAttribDivisorANGLE(location, 1).
+	for _, a := range m.InstanceAttributes {
 		fmt.Fprintf(&b, "attribute %s %s;\n", typeName(a.Type), a.Name)
 	}
 	if m.UsesVertexIndex {

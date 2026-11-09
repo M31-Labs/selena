@@ -188,6 +188,68 @@ func TestScreenPipelineRoundTrips(t *testing.T) {
 	}
 }
 
+// The instance record layout survives Decode, Result/FromResult and Encode, and
+// an artifact written before instancing decodes with none of it.
+func TestInstanceAttributesRoundTrip(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("builder", "testdata", "note-quad.sel.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := artifact.Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	layout := f.Materials[0].Layout
+	want := []bindings.InstanceAttribute{
+		{Name: "rect", Location: 0, Type: "vec4", Offset: 0},
+		{Name: "tone", Location: 1, Type: "vec4", Offset: 16},
+		{Name: "region", Location: 2, Type: "int", Offset: 32},
+	}
+	if !reflect.DeepEqual(layout.InstanceAttributes, want) || layout.InstanceStride != 36 {
+		t.Fatalf("instance attributes = %+v stride %d", layout.InstanceAttributes, layout.InstanceStride)
+	}
+	if !reflect.DeepEqual(layout.Requires.GLExtensions, []string{"ANGLE_instanced_arrays"}) {
+		t.Errorf("requires.glExtensions = %v", layout.Requires.GLExtensions)
+	}
+	back := artifact.FromResult(f.Materials[0].Result())
+	if !reflect.DeepEqual(back, f.Materials[0]) {
+		t.Fatal("the instance layout changed through Result/FromResult")
+	}
+	again, err := artifact.Encode(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(again) != string(data) {
+		t.Fatal("re-encoding the decoded file changed its bytes")
+	}
+
+	for _, name := range []string{"tinted", "post-tint", "data-texture", "brdf-specular", "screen-overlay"} {
+		old, err := os.ReadFile(filepath.Join("builder", "testdata", name+".sel.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(old), "instance") {
+			t.Errorf("%s: an older artifact mentions instancing", name)
+		}
+		file, err := artifact.Decode(old)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		for _, m := range file.Materials {
+			if m.Layout.InstanceAttributes != nil || m.Layout.InstanceStride != 0 {
+				t.Errorf("%s/%s: decoded an instance layout from an artifact without one", name, m.Name)
+			}
+		}
+		enc, err := artifact.Encode(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(enc) != string(old) {
+			t.Errorf("%s: re-encoding changed the bytes", name)
+		}
+	}
+}
+
 func TestMatchesUsesTheSourceHash(t *testing.T) {
 	src, err := os.ReadFile(filepath.Join("builder", "testdata", "tinted.sel"))
 	if err != nil {

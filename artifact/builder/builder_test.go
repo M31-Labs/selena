@@ -30,6 +30,8 @@ var goldenCases = []struct {
 	{"brdf-specular.sel", builder.Options{SpecularMRT: true, Modules: []materiallib.Module{materiallib.BRDF}}},
 	{"data-texture.sel", builder.Options{}},
 	{"screen-overlay.sel", builder.Options{}},
+	// NoteQuad has no GLSL ES 1.00 form (int attribute, instanceIndex, bit operators).
+	{"note-quad.sel", builder.Options{Targets: []result.Target{result.TargetWGSL, result.TargetMetal, result.TargetGLES}}},
 }
 
 func TestBuildMatchesGolden(t *testing.T) {

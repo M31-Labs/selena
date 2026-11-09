@@ -299,6 +299,12 @@ func printLayoutSummary(layout bindings.Layout) {
 	if p := layout.Pipeline; p != nil {
 		fmt.Printf("  pipeline: blend %s, depth test %t, depth write %t\n", p.Blend, p.DepthTest, p.DepthWrite)
 	}
+	if len(layout.InstanceAttributes) > 0 {
+		fmt.Printf("  instance record: %d bytes per instance\n", layout.InstanceStride)
+		for _, a := range layout.InstanceAttributes {
+			fmt.Printf("    %s: %s location=%d offset=%d\n", a.Name, a.Type, a.Location, a.Offset)
+		}
+	}
 	fmt.Printf("  uniform block: %d bytes\n", layout.UniformBlock.Size)
 	for _, f := range layout.UniformBlock.Fields {
 		fmt.Printf("    %s: %s offset=%d size=%d\n", f.Name, f.Type, f.Offset, f.Size)

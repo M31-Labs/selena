@@ -68,6 +68,9 @@ func lowerByKind(m hir.Material) (ir.Module, bindings.Layout, error) {
 	if err := checkRenderBlock(m); err != nil {
 		return ir.Module{}, bindings.Layout{}, err
 	}
+	if err := checkInstances(m); err != nil {
+		return ir.Module{}, bindings.Layout{}, err
+	}
 	switch m.Kind {
 	case hir.KindScreen:
 		return lowerScreen(m)
@@ -106,6 +109,10 @@ func hostRequirements(mod ir.Module) bindings.Requirements {
 	}
 	if ir.UsesSceneSize(mod) {
 		req.GLSceneSizeUniform = "_sceneSize"
+	}
+	if len(mod.InstanceAttributes) > 0 {
+		// Instance attributes need a divisor on a GLSL ES 1.00 attribute.
+		req.GLExtensions = append(req.GLExtensions, "ANGLE_instanced_arrays")
 	}
 	req.GLVertexTextureUnits = len(ir.VertexSampledTextures(mod))
 	for _, name := range ir.TexSizeTextures(mod) {

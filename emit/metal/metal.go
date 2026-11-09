@@ -185,16 +185,27 @@ func emitMeshAuthored(m ir.Module) (string, error) {
 		b.WriteString("struct StateGrid {\n  uint gridWidth;\n  uint gridHeight;\n};\n\n")
 	}
 
-	if len(m.Attributes) > 0 {
+	// Instance attributes take the attribute indices after the vertex
+	// attributes. The host's vertex descriptor gives their buffer layout the
+	// per-instance step function.
+	hasInput := len(m.Attributes) > 0 || len(m.InstanceAttributes) > 0
+	if hasInput {
 		b.WriteString("struct VertexIn {\n")
 		for i, a := range m.Attributes {
 			fmt.Fprintf(&b, "  %s %s [[attribute(%d)]];\n", typeName(a.Type), a.Name, i)
+		}
+		for i, a := range m.InstanceAttributes {
+			fmt.Fprintf(&b, "  %s %s [[attribute(%d)]];\n", typeName(a.Type), a.Name, len(m.Attributes)+i)
 		}
 		b.WriteString("};\n\n")
 	}
 
 	b.WriteString("struct VertexOut {\n  float4 position [[position]];\n")
 	for _, v := range m.Varyings {
+		if internal.IsIntegral(v.Type) {
+			fmt.Fprintf(&b, "  %s %s [[flat]];\n", typeName(v.Type), v.Name)
+			continue
+		}
 		fmt.Fprintf(&b, "  %s %s;\n", typeName(v.Type), v.Name)
 	}
 	b.WriteString("};\n\n")
@@ -202,11 +213,15 @@ func emitMeshAuthored(m ir.Module) (string, error) {
 	// Vertex stage.
 	vs := internal.NewQualified(prismDialect, m, false)
 	vs.StateSampleUVFn = metalStateSampleUV
+	vs.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	var vparams []string
 	if m.UsesVertexIndex {
 		vparams = append(vparams, "uint vertexIndex [[vertex_id]]")
 	}
-	if len(m.Attributes) > 0 {
+	if m.UsesInstanceIndex {
+		vparams = append(vparams, "uint instanceIndex [[instance_id]]")
+	}
+	if hasInput {
 		vparams = append(vparams, "VertexIn in [[stage_in]]")
 	}
 	vparams = append(vparams, "constant Uniforms& u [[buffer(0)]]")
@@ -231,6 +246,7 @@ func emitMeshAuthored(m ir.Module) (string, error) {
 	// Fragment stage.
 	fs := internal.NewQualified(prismDialect, m, true)
 	fs.StateSampleUVFn = metalStateSampleUV
+	fs.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	if m.SpecularMRT {
 		writeSpecularFragment(&b, m, fs)
 		return b.String(), nil

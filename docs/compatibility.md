@@ -39,6 +39,10 @@ Every compile result carries a `bindings.Layout` descriptor.
 - `textures` lists each sampled texture and its per-backend binding coordinates.
   A texture declared with a `format`, or read with `load`, also carries
   `format` and `sampleMode` (see [Data Textures](#data-textures)).
+- `instanceAttributes` and `instanceStride` are present only for mesh materials
+  that declare `instance` attributes. They give the location, type and byte
+  offset of each per-instance attribute, and the size of one packed record. See
+  [Instancing](#instancing).
 - `pipeline` is present only for `kind: "screen"` materials. It carries the
   blend and depth state the material declared. See [Screen
   Materials](#screen-materials).
@@ -169,6 +173,7 @@ whole pass is dropped.
 | `OES_standard_derivatives` | `fwidth`, `dpdx`, `dpdy` |
 | `EXT_shader_texture_lod` | `sceneColorLevel` (fragment-stage explicit LOD) |
 | `WEBGL_depth_texture` | a `textureDepth2d` or `textureDepth2dArray` engine texture such as `opaqueDepth` or `shadowMap0` |
+| `ANGLE_instanced_arrays` | any `instance` attribute: call `vertexAttribDivisorANGLE(location, 1)` and draw with `drawArraysInstancedANGLE` |
 
 The `gles` (GLSL ES 3.00), `wgsl` and `metal` artifacts have all of this in core
 and need nothing. A host running a WebGL 2 context should prefer the `gles`
@@ -360,6 +365,68 @@ Notes for the host:
   glslangValidator (ESSL 100 and 300). The Metal source is compiled only by the
   optional `xcrun metal` check. No browser or GPU has drawn a screen pass in
   this repository, so blend and depth behaviour is the host's to confirm.
+
+## Instancing
+
+A mesh material with an authored `vertex()` may declare `instance name : type`
+attributes and read `instanceIndex` (see the Instancing section of the
+[language guide](language-guide.md)). The descriptor carries the record layout:
+
+```json
+"instanceAttributes": [
+  { "name": "rect",   "location": 0, "type": "vec4", "offset": 0 },
+  { "name": "tone",   "location": 1, "type": "vec4", "offset": 16 },
+  { "name": "region", "location": 2, "type": "int",  "offset": 32 }
+],
+"instanceStride": 36
+```
+
+- `location` continues after `attributes[]`: with `position` and `uv` in
+  `attributes` (locations 0 and 1), the first instance attribute is 2. All
+  instance attributes are declared in the shader whether or not `vertex()`
+  reads them, so the record layout never depends on the body.
+- `offset` is the byte offset inside one record, and `instanceStride` is the
+  record size. Attributes are packed in declaration order with no padding;
+  every size is a multiple of 4 bytes (`float`, `int`, `uint` 4; `vec2` 8;
+  `vec3` 12; `vec4` 16), so every offset and the stride are 4-byte aligned.
+- The fields are absent for a material with no `instance` declaration, and
+  older descriptors and artifact files decode as before.
+- Hosts stream the record as little-endian 32-bit values. Write `int` as a
+  signed and `uint` as an unsigned 32-bit integer, not as a float.
+
+| Target | Instance index | Instance attributes | Host binding |
+|---|---|---|---|
+| `wgsl` | `@builtin(instance_index) instanceIndex : u32` | `@location(n)` members of `VertexInput`, after the vertex attributes | One vertex buffer with `stepMode: "instance"`, `arrayStride: instanceStride`, and an entry per attribute: `shaderLocation`, `offset`, and `format` `float32`, `float32x2`, `float32x3`, `float32x4`, `sint32` or `uint32` by `type`. `instance_index` includes `firstInstance`, so draw with `firstInstance` 0 for the same values as the other targets. |
+| `gles` | `gl_InstanceID` as `uint instanceIndex` | `in` attributes, after the vertex attributes | `getAttribLocation` by name, or `bindAttribLocation` with the descriptor `location` before linking. `vertexAttribDivisor(loc, 1)` on each. Bind `int` and `uint` attributes with `vertexAttribIPointer` (`gl.INT`, `gl.UNSIGNED_INT`); `vertexAttribPointer` converts them to float and the shader reads garbage. Draw with `drawArraysInstanced`. An attribute the body never reads is optimised out by the driver, so skip a location of -1. |
+| `glsl` | not available: rejected | `attribute` float types only; `int` and `uint` are rejected | Request `ANGLE_instanced_arrays` (listed in `requires.glExtensions`), then `vertexAttribDivisorANGLE(loc, 1)` and `drawArraysInstancedANGLE`. If the body reads `vertexIndex`, `a_vertexIndex` is a per-vertex attribute: leave its divisor at 0. |
+| `metal` | `[[instance_id]]` as `uint instanceIndex` | `[[attribute(n)]]` members of `VertexIn`, after the vertex attributes | In the `MTLVertexDescriptor`, give the instance buffer a layout with `stepFunction = .perInstance`, `stride = instanceStride`, and attribute formats `float`..`float4`, `int` or `uint`. Use a buffer index other than 0, which is the uniform buffer. `instance_id` does not include the base instance. |
+
+**GLSL ES 1.00 rules.** The target has no instance id, no integer vertex
+attributes and no bit operators. Selena rejects a material that needs one,
+naming each, and the message suggests the fix: pass an index as a float
+instance attribute and convert it with `int()` in `vertex()`. A float-only
+instance material builds for `glsl` and records `ANGLE_instanced_arrays`. The
+default target set leaves `glsl` out for a material that cannot build there;
+a request that names `glsl` gets the error.
+
+**Integer varyings.** An `int` or `uint` varying (such as a region index passed
+to `surface()`) is declared flat on `wgsl` (`@interpolate(flat)`), `gles`
+(`flat out` and `flat in`, with `precision highp int` in the fragment shader)
+and `metal` (`[[flat]]`). GLSL ES 3.00 and the WGSL specification
+require `flat` on an integer varying (glslangValidator rejects the `gles` form
+without it; naga does not enforce the WGSL rule, so a browser's WGSL compiler is
+the check). Earlier versions emitted no `flat`, so no earlier valid output
+changes. `glsl` has no integer varyings.
+
+**GLES and Metal uint literals.** A material that uses instancing features
+keeps the `u` suffix on `uint` literals in `gles` and `metal` output, since
+GLSL ES 3.00 has no implicit `int` to `uint` conversion. Other materials keep
+the older bare spelling so their output does not change.
+
+**Validation.** The conformance shaders compile under naga (WGSL) and
+glslangValidator (ESSL 100 and 300). The Metal source is compiled only by the
+optional `xcrun metal` check. No browser or GPU has drawn an instanced pass in
+this repository.
 
 ## Current Gaps
 
