@@ -3,6 +3,7 @@ using namespace metal;
 
 struct Uniforms {
   float strips;
+  char _selenaPad0[4];
   float2 screenSize;
   float4 levels[64];
   float4 holds[64];

@@ -5,10 +5,13 @@ struct Uniforms {
   float4x4 mvp;
   float3x3 normalMatrix;
   float poolHeight;
+  char _selenaPad0[12];
   float4 baseColor;
   float isTexturePass;
   float texturePassMode;
-  float3 lightDir;
+  char _selenaPad1[8];
+  packed_float3 lightDir;
+  char _selenaPad2[4];
 };
 
 struct StateGrid {
@@ -46,7 +49,7 @@ fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[b
   if ((((u.isTexturePass > 0.5) && (u.texturePassMode == 2.0)) && belowWater)) {
     discard_fragment();
   }
-  float3 lightN = normalize(u.lightDir);
+  float3 lightN = normalize(float3(u.lightDir));
   float3 refr = refract((-lightN), float3(0.0, 1.0, 0.0), (1.0 / 1.333));
   float3 n = normalize(in.vNormal);
   float3 albedo = (modelTexture.sample(modelTextureSampler, in.vUv).rgb * u.baseColor.rgb);

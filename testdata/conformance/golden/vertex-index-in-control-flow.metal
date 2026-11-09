@@ -5,6 +5,7 @@ struct Uniforms {
   float4x4 mvp;
   float3x3 normalMatrix;
   float gridSize;
+  char _selenaPad0[12];
 };
 
 struct VertexOut {

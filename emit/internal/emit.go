@@ -72,6 +72,10 @@ type Resolver struct {
 	Varyings   map[string]bool
 	Fragment   bool
 	Qualified  bool
+	// PackedVec3 names uniforms the backend declares in a packed 12 byte vec3
+	// form (Metal packed_float3). A read converts them back to the unpacked
+	// vec3 type so every expression keeps its type.
+	PackedVec3 map[string]bool
 	// SceneSampleFn renders a SceneSample expression. When nil, SceneSample
 	// falls back to a dummy expression. Each post-emitter sets this.
 	SceneSampleFn func(name, uv string) string
@@ -463,6 +467,9 @@ func (r Resolver) Ref(name string) string {
 	}
 	switch {
 	case r.Uniforms[name]:
+		if r.PackedVec3[name] {
+			return r.Dialect.TypeName(TypeToGPU(ir.Vec3)) + "(u." + name + ")"
+		}
 		return "u." + name
 	case !r.Fragment && r.Attributes[name]:
 		return "in." + name

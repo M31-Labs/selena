@@ -4,13 +4,19 @@ using namespace metal;
 struct Uniforms {
   float4x4 mvp;
   float3x3 normalMatrix;
-  float3 cameraPos;
-  float3 sunDir;
-  float3 sunColor;
-  float3 ambient;
+  packed_float3 cameraPos;
+  char _selenaPad0[4];
+  packed_float3 sunDir;
+  char _selenaPad1[4];
+  packed_float3 sunColor;
+  char _selenaPad2[4];
+  packed_float3 ambient;
+  char _selenaPad3[4];
   float4 fog;
   float exposure;
-  float3 tint;
+  char _selenaPad4[12];
+  packed_float3 tint;
+  char _selenaPad5[4];
 };
 
 struct VertexIn {
@@ -34,10 +40,10 @@ vertex VertexOut vertexMain(VertexIn in [[stage_in]], constant Uniforms& u [[buf
 
 fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {
   float3 n = normalize(in.vWorldNormal);
-  float3 v = normalize((u.cameraPos - in.vPosition));
-  float diffuse = max(dot(n, u.sunDir), 0.0);
-  float3 lit = (((u.ambient + (u.sunColor * diffuse)) * u.tint) * u.exposure);
-  float dist = length((u.cameraPos - in.vPosition));
+  float3 v = normalize((float3(u.cameraPos) - in.vPosition));
+  float diffuse = max(dot(n, float3(u.sunDir)), 0.0);
+  float3 lit = (((float3(u.ambient) + (float3(u.sunColor) * diffuse)) * float3(u.tint)) * u.exposure);
+  float dist = length((float3(u.cameraPos) - in.vPosition));
   float f = (1.0 - exp(((-u.fog.w) * dist)));
   return float4((mix(lit, u.fog.xyz, f) * (0.5 + (0.5 * dot(n, v)))), 1.0);
 }

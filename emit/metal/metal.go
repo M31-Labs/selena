@@ -47,14 +47,9 @@ func emitFeedback(m ir.Module) (string, error) {
 	b.WriteString("struct GridUniforms {\n  uint gridWidth;\n  uint gridLen;\n};\n\n")
 
 	if len(m.Uniforms) > 0 || len(m.ArrayUniforms) > 0 {
-		b.WriteString("struct UserUniforms {\n")
-		for _, u := range m.Uniforms {
-			fmt.Fprintf(&b, "  %s %s;\n", typeName(u.Type), u.Name)
+		if err := writeUniformStruct(&b, "UserUniforms", m); err != nil {
+			return "", err
 		}
-		for _, au := range m.ArrayUniforms {
-			fmt.Fprintf(&b, "  %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
-		}
-		b.WriteString("};\n\n")
 	}
 
 	allUniforms := internal.NameSet(m.Uniforms)
@@ -67,6 +62,7 @@ func emitFeedback(m ir.Module) (string, error) {
 		Uniforms:          allUniforms,
 		Fragment:          true,
 		Qualified:         true,
+		PackedVec3:        packedVec3Uniforms(m),
 		StateSampleFn: func(dx, dy int64) string {
 			return fmt.Sprintf(
 				"inState[clamp(int(cellIndex) + (%d) + (%d) * int(_grid.gridWidth), 0, int(_grid.gridLen) - 1)]",
@@ -111,14 +107,9 @@ func emitMesh(m ir.Module) (string, error) {
 	b.WriteString("#include <metal_stdlib>\nusing namespace metal;\n\n")
 
 	if len(m.Uniforms) > 0 || len(m.ArrayUniforms) > 0 {
-		b.WriteString("struct Uniforms {\n")
-		for _, u := range m.Uniforms {
-			fmt.Fprintf(&b, "  %s %s;\n", typeName(u.Type), u.Name)
+		if err := writeUniformStruct(&b, "Uniforms", m); err != nil {
+			return "", err
 		}
-		for _, au := range m.ArrayUniforms {
-			fmt.Fprintf(&b, "  %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
-		}
-		b.WriteString("};\n\n")
 	}
 
 	b.WriteString("struct VertexIn {\n")
@@ -133,7 +124,7 @@ func emitMesh(m ir.Module) (string, error) {
 	}
 	b.WriteString("};\n\n")
 
-	vs := internal.NewQualified(prismDialect, m, false)
+	vs := qualified(m, false)
 	vs.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	b.WriteString("vertex VertexOut vertexMain(VertexIn in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {\n  VertexOut out;\n")
 	for _, s := range m.Vertex.Body {
@@ -145,7 +136,7 @@ func emitMesh(m ir.Module) (string, error) {
 	}
 	fmt.Fprintf(&b, "  out.position = %s;\n  return out;\n}\n\n", ir.Print(m.Vertex.Output, vs))
 
-	fs := internal.NewQualified(prismDialect, m, true)
+	fs := qualified(m, true)
 	fs.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	if m.SpecularMRT {
 		writeSpecularFragment(&b, m, fs)
@@ -175,14 +166,9 @@ func emitMeshAuthored(m ir.Module) (string, error) {
 	b.WriteString("#include <metal_stdlib>\nusing namespace metal;\n\n")
 
 	// Mesh always has the mvp/normalMatrix transform uniforms, so Uniforms exists.
-	b.WriteString("struct Uniforms {\n")
-	for _, u := range m.Uniforms {
-		fmt.Fprintf(&b, "  %s %s;\n", typeName(u.Type), u.Name)
+	if err := writeUniformStruct(&b, "Uniforms", m); err != nil {
+		return "", err
 	}
-	for _, au := range m.ArrayUniforms {
-		fmt.Fprintf(&b, "  %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
-	}
-	b.WriteString("};\n\n")
 
 	if m.StateField != "" {
 		b.WriteString("struct StateGrid {\n  uint gridWidth;\n  uint gridHeight;\n};\n\n")
@@ -214,7 +200,7 @@ func emitMeshAuthored(m ir.Module) (string, error) {
 	b.WriteString("};\n\n")
 
 	// Vertex stage.
-	vs := internal.NewQualified(prismDialect, m, false)
+	vs := qualified(m, false)
 	vs.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	vs.StateSampleUVFn = metalStateSampleUV
 	var vparams []string
@@ -247,7 +233,7 @@ func emitMeshAuthored(m ir.Module) (string, error) {
 	fmt.Fprintf(&b, "  out.position = %s;\n  return out;\n}\n\n", ir.Print(m.Vertex.Output, vs))
 
 	// Fragment stage.
-	fs := internal.NewQualified(prismDialect, m, true)
+	fs := qualified(m, true)
 	fs.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	fs.StateSampleUVFn = metalStateSampleUV
 	if m.SpecularMRT {
@@ -307,11 +293,9 @@ struct ParticleInstance {
 `)
 
 	if len(m.Uniforms) > 0 {
-		b.WriteString("struct UserUniforms {\n")
-		for _, u := range m.Uniforms {
-			fmt.Fprintf(&b, "  %s %s;\n", typeName(u.Type), u.Name)
+		if err := writeUniformStruct(&b, "UserUniforms", m); err != nil {
+			return "", err
 		}
-		b.WriteString("};\n\n")
 	}
 
 	b.WriteString(`struct PointsOut {
@@ -386,6 +370,7 @@ vertex PointsOut vertexMain(
 		Varyings:          varyingSet,
 		Fragment:          true,
 		Qualified:         true,
+		PackedVec3:        packedVec3Uniforms(m),
 	}
 	fragSig := "fragment float4 fragmentMain(PointsOut in [[stage_in]]"
 	if len(m.Uniforms) > 0 {
@@ -405,14 +390,9 @@ func emitPost(m ir.Module) (string, error) {
 	b.WriteString("#include <metal_stdlib>\nusing namespace metal;\n\n")
 
 	if len(m.Uniforms) > 0 || len(m.ArrayUniforms) > 0 {
-		b.WriteString("struct UserUniforms {\n")
-		for _, u := range m.Uniforms {
-			fmt.Fprintf(&b, "  %s %s;\n", typeName(u.Type), u.Name)
+		if err := writeUniformStruct(&b, "UserUniforms", m); err != nil {
+			return "", err
 		}
-		for _, au := range m.ArrayUniforms {
-			fmt.Fprintf(&b, "  %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
-		}
-		b.WriteString("};\n\n")
 	}
 
 	b.WriteString(`struct PostOut {
@@ -445,6 +425,7 @@ vertex PostOut vertexMain(uint vid [[vertex_id]]) {
 		Varyings:          varyingSet,
 		Fragment:          true,
 		Qualified:         true,
+		PackedVec3:        packedVec3Uniforms(m),
 		SceneSampleFn: func(name, uv string) string {
 			switch name {
 			case "sceneColor":

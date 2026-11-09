@@ -4,6 +4,7 @@ using namespace metal;
 struct UserUniforms {
   float blurLevel;
   float mixAmount;
+  char _selenaPad0[8];
   float4 rects[4];
 };
 

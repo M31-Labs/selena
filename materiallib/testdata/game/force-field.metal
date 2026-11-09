@@ -4,11 +4,13 @@ using namespace metal;
 struct Uniforms {
   float4x4 mvp;
   float3x3 normalMatrix;
-  float3 tint;
-  float3 hitColor;
-  float3 hitPos;
+  packed_float3 tint;
+  char _selenaPad0[4];
+  packed_float3 hitColor;
+  char _selenaPad1[4];
+  packed_float3 hitPos;
   float hitAge;
-  float3 cameraPos;
+  packed_float3 cameraPos;
   float time;
 };
 
@@ -33,7 +35,7 @@ vertex VertexOut vertexMain(VertexIn in [[stage_in]], constant Uniforms& u [[buf
 
 fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {
   float3 n = normalize(in.vWorldNormal);
-  float3 v = normalize((u.cameraPos - in.vWorldPos));
+  float3 v = normalize((float3(u.cameraPos) - in.vWorldPos));
   float3 selenaLib0 = n;
   float3 selenaLib1 = v;
   float3 selenaLib2 = ((dot(selenaLib0, selenaLib1) < 0.0) ? (-selenaLib0) : selenaLib0);
@@ -57,7 +59,7 @@ fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[b
   float selenaLib20 = clamp((selenaLib11 + selenaLib19), 0.0, 2.0);
   float shell = selenaLib20;
   float3 selenaLib21 = in.vWorldPos;
-  float3 selenaLib22 = u.hitPos;
+  float3 selenaLib22 = float3(u.hitPos);
   float selenaLib23 = u.hitAge;
   float selenaLib24 = 3.0;
   float selenaLib25 = 0.25;
@@ -65,5 +67,5 @@ fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[b
   float selenaLib27 = ((selenaLib23 >= 0.0) ? clamp((1.0 - selenaLib23), 0.0, 1.0) : 0.0);
   float selenaLib28 = ((1.0 - smoothstep(0.0, max(selenaLib25, 0.0001), selenaLib26)) * selenaLib27);
   float hit = selenaLib28;
-  return float4(((u.tint * shell) + (u.hitColor * hit)), 1.0);
+  return float4(((float3(u.tint) * shell) + (float3(u.hitColor) * hit)), 1.0);
 }

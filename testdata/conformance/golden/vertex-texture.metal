@@ -6,6 +6,7 @@ struct Uniforms {
   float3x3 normalMatrix;
   float scale;
   float lod;
+  char _selenaPad0[8];
 };
 
 struct VertexIn {

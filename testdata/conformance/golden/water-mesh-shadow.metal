@@ -6,7 +6,9 @@ struct Uniforms {
   float3x3 normalMatrix;
   float poolHalfW;
   float poolHalfL;
-  float3 lightDir;
+  char _selenaPad0[8];
+  packed_float3 lightDir;
+  char _selenaPad1[4];
 };
 
 struct VertexIn {
@@ -20,7 +22,7 @@ struct VertexOut {
 vertex VertexOut vertexMain(VertexIn in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {
   VertexOut out;
   float3 pos = in.position;
-  float3 lnorm = normalize(u.lightDir);
+  float3 lnorm = normalize(float3(u.lightDir));
   float3 refr = refract((-lnorm), float3(0.0, 1.0, 0.0), (1.0 / 1.333));
   float fallY = ((refr.y >= 0.0) ? 0.0001 : (-0.0001));
   float refY = ((abs(refr.y) > 0.0001) ? refr.y : fallY);

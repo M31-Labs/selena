@@ -4,6 +4,7 @@ using namespace metal;
 struct Uniforms {
   float head;
   float gain;
+  char _selenaPad0[8];
 };
 
 struct ScreenOut {

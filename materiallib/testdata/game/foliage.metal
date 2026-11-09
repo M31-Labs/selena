@@ -4,14 +4,19 @@ using namespace metal;
 struct Uniforms {
   float4x4 mvp;
   float3x3 normalMatrix;
-  float3 leafColor;
-  float3 backColor;
+  packed_float3 leafColor;
+  char _selenaPad0[4];
+  packed_float3 backColor;
   float stiffness;
   float thickness;
-  float3 cameraPos;
-  float3 ambient;
+  char _selenaPad1[12];
+  packed_float3 cameraPos;
+  char _selenaPad2[4];
+  packed_float3 ambient;
+  char _selenaPad3[4];
   float4 fog;
   float lightCount;
+  char _selenaPad4[12];
   float4 wind;
   float4 windGust;
   float4 lights[32];
@@ -59,12 +64,12 @@ vertex VertexOut vertexMain(VertexIn in [[stage_in]], constant Uniforms& u [[buf
 }
 
 fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {
-  float3 v = normalize((u.cameraPos - in.worldPos));
+  float3 v = normalize((float3(u.cameraPos) - in.worldPos));
   float3 selenaLib0 = normalize(in.worldNormal);
   float3 selenaLib1 = v;
   float3 selenaLib2 = ((dot(selenaLib0, selenaLib1) < 0.0) ? (-selenaLib0) : selenaLib0);
   float3 n = selenaLib2;
-  float3 lit = ((u.ambient * u.leafColor) * (0.6 + (0.4 * in.leafUV.y)));
+  float3 lit = ((float3(u.ambient) * float3(u.leafColor)) * (0.6 + (0.4 * in.leafUV.y)));
   for (int i = 0; (i < 8); i = (i + 1)) {
     int selenaLib3 = i;
     float3 selenaLib4 = in.worldPos;
@@ -154,12 +159,12 @@ fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[b
     int selenaLib86 = selenaLib65;
     float selenaLib87 = ((float(selenaLib86) < u.lightCount) ? 1.0 : 0.0);
     float3 selenaLib88 = (((selenaLib85 * selenaLib75) * selenaLib84) * selenaLib87);
-    lit = ((lit + (u.leafColor * selenaLib64)) + ((u.backColor * selenaLib88) * back));
+    lit = ((lit + (float3(u.leafColor) * selenaLib64)) + ((float3(u.backColor) * selenaLib88) * back));
   }
   float3 selenaLib89 = lit;
   float3 selenaLib90 = in.worldPos;
   float3 selenaLib91 = selenaLib90;
-  float selenaLib92 = (length((selenaLib91 - u.cameraPos)) * u.fog.w);
+  float selenaLib92 = (length((selenaLib91 - float3(u.cameraPos))) * u.fog.w);
   float selenaLib93 = clamp(exp((-(selenaLib92 * selenaLib92))), 0.0, 1.0);
   float3 selenaLib94 = mix(u.fog.xyz, selenaLib89, selenaLib93);
   return float4(selenaLib94, 1.0);

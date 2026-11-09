@@ -4,14 +4,19 @@ using namespace metal;
 struct Uniforms {
   float4x4 mvp;
   float3x3 normalMatrix;
-  float3 baseColor;
-  float3 edgeColor;
+  packed_float3 baseColor;
+  char _selenaPad0[4];
+  packed_float3 edgeColor;
   float progress;
   float noiseScale;
   float edgeWidth;
-  float3 sunDir;
-  float3 sunColor;
-  float3 ambient;
+  char _selenaPad1[8];
+  packed_float3 sunDir;
+  char _selenaPad2[4];
+  packed_float3 sunColor;
+  char _selenaPad3[4];
+  packed_float3 ambient;
+  char _selenaPad4[4];
 };
 
 struct VertexIn {
@@ -78,9 +83,9 @@ fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[b
     discard_fragment();
   }
   float3 n = normalize(in.vWorldNormal);
-  float3 lit = (u.baseColor * (u.ambient + (u.sunColor * max(dot(n, normalize(u.sunDir)), 0.0))));
+  float3 lit = (float3(u.baseColor) * (float3(u.ambient) + (float3(u.sunColor) * max(dot(n, normalize(float3(u.sunDir))), 0.0))));
   float selenaLib39 = mask;
   float selenaLib40 = u.edgeWidth;
   float selenaLib41 = (1.0 - smoothstep(0.0, max(selenaLib40, 0.0001), selenaLib39));
-  return float4((lit + ((u.edgeColor * selenaLib41) * ((u.progress > 0.0) ? 1.0 : 0.0))), 1.0);
+  return float4((lit + ((float3(u.edgeColor) * selenaLib41) * ((u.progress > 0.0) ? 1.0 : 0.0))), 1.0);
 }
