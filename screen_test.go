@@ -64,8 +64,14 @@ func TestScreenDescriptorFields(t *testing.T) {
 // Descriptors of every other kind stay free of the new fields.
 func TestOtherKindsHaveNoPipelineField(t *testing.T) {
 	for name, src := range map[string]string{
-		"mesh": `material M { surface(geo) -> color { return rgb(1.0, 0.0, 0.0) } }`,
-		"post": `material M kind post { surface(p) -> color { return sceneColor(p.uv) } }`,
+		"mesh":   `material M { surface(geo) -> color { return rgb(1.0, 0.0, 0.0) } }`,
+		"post":   `material M kind post { surface(p) -> color { return sceneColor(p.uv) } }`,
+		"points": `material M kind points { surface(pt) -> color { return pt.color } }`,
+		"feedback": `material M kind feedback {
+    state s
+    feedback(cell) -> vec4 { return state(0, 0) }
+}`,
+		"surface": surfaceRockSource,
 	} {
 		r, err := Compile([]byte(src), CompileOptions{})
 		if err != nil {
@@ -210,14 +216,52 @@ func TestScreenMeterStripDescriptor(t *testing.T) {
 	}
 	var arrays int
 	for _, f := range l.UniformBlock.Fields {
-		if f.Count == 128 && f.Stride == 16 && f.Type == "vec4" {
+		if f.Count == 64 && f.Stride == 16 && f.Type == "vec4" {
 			arrays++
 		}
 	}
 	if arrays != 2 {
-		t.Errorf("got %d vec4[128] fields, want 2: %+v", arrays, l.UniformBlock.Fields)
+		t.Errorf("got %d vec4[64] fields, want 2: %+v", arrays, l.UniformBlock.Fields)
 	}
 	if l.WGSL.Group != 0 || l.WGSL.Binding != 0 || l.Metal.Buffer != 0 {
 		t.Errorf("uniform block binding = wgsl %+v metal %+v", l.WGSL, l.Metal)
+	}
+}
+
+// Names the screen emitters declare, and the screenSize uniform, are reserved
+// for screen materials only, as locals and as params.
+func TestScreenReservedNames(t *testing.T) {
+	names := []string{"screenSize", "ScreenInput", "ScreenOutput", "ScreenOut", "_screenPositions", "_screenUVs"}
+	for _, name := range names {
+		t.Run("local/"+name, func(t *testing.T) {
+			src := "material M kind screen {\n  surface(screen) -> color {\n    let " + name + " = 2.0\n    return rgb(" + name + " * screen.uv.x, 0.0, 0.0, 1.0)\n  }\n}"
+			if _, err := Compile([]byte(src), CompileOptions{}); err == nil {
+				t.Fatalf("local %q in a screen material compiled", name)
+			}
+		})
+		t.Run("param/"+name, func(t *testing.T) {
+			src := "material M kind screen {\n  param " + name + " : texture2d\n  surface(screen) -> color { return rgb(1.0, 0.0, 0.0, 1.0) }\n}"
+			if _, err := Compile([]byte(src), CompileOptions{}); err == nil {
+				t.Fatalf("param %q in a screen material compiled", name)
+			}
+		})
+		if name == "screenSize" {
+			continue // a mesh material may use these names, except the stdlib call screenSize is not a keyword
+		}
+		t.Run("mesh/"+name, func(t *testing.T) {
+			src := "material M {\n  surface(geo) -> color {\n    let " + name + " = 2.0\n    return rgb(" + name + ", 0.0, 0.0)\n  }\n}"
+			if _, err := Compile([]byte(src), CompileOptions{}); err != nil {
+				t.Fatalf("local %q in a mesh material: %v", name, err)
+			}
+			src = "material M {\n  param " + name + " : float\n  surface(geo) -> color { return rgb(" + name + ", 0.0, 0.0) }\n}"
+			if _, err := Compile([]byte(src), CompileOptions{}); err != nil {
+				t.Fatalf("param %q in a mesh material: %v", name, err)
+			}
+		})
+	}
+	// screenSize stays usable as a local in a mesh material too.
+	src := "material M {\n  surface(geo) -> color {\n    let screenSize = 2.0\n    return rgb(screenSize, 0.0, 0.0)\n  }\n}"
+	if _, err := Compile([]byte(src), CompileOptions{}); err != nil {
+		t.Fatalf("screenSize local in a mesh material: %v", err)
 	}
 }

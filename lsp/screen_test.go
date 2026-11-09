@@ -21,9 +21,15 @@ const screenSample = `material Meter kind screen {
 `
 
 func TestScreenKeywordsAndKind(t *testing.T) {
-	for _, kw := range []string{"render", "blend", "depth"} {
+	for _, kw := range []string{"render"} {
 		if !slices.Contains(keywordList, kw) {
 			t.Errorf("keywordList lacks %q", kw)
+		}
+	}
+	// blend and depth are render block keys, offered only inside the block.
+	for _, kw := range []string{"blend", "depth"} {
+		if slices.Contains(keywordList, kw) {
+			t.Errorf("keywordList offers %q outside a render block", kw)
 		}
 	}
 	if doc := kindDocs["screen"]; !strings.Contains(doc, "render block") {

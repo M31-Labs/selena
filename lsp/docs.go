@@ -95,7 +95,7 @@ var keywordList = []string{
 	"material", "extends", "kind", "param", "context", "varying", "state",
 	"surface", "vertex", "specular", "feedback", "fn", "let", "var", "if",
 	"else", "for", "return", "break", "discard", "format", "super",
-	"render", "blend", "depth", "instance",
+	"render", "instance",
 }
 
 // vertexBuiltinDocs documents the values only vertex() can read.

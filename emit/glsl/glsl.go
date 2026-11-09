@@ -259,6 +259,13 @@ func emitFragment(m ir.Module) string {
 // to resolve. bindings.Layout.Requires.GLExtensions carries that name so the
 // host can enable it (see docs/compatibility.md).
 func writeFragmentPrologue(b *strings.Builder, m ir.Module, precision string) {
+	writeFragmentExtensions(b, m)
+	b.WriteString("precision " + precision + " float;\n")
+}
+
+// writeFragmentExtensions writes the extension directives of
+// writeFragmentPrologue without the precision statement.
+func writeFragmentExtensions(b *strings.Builder, m ir.Module) {
 	if ir.UsesDerivatives(m) {
 		b.WriteString("#extension GL_OES_standard_derivatives : enable\n")
 	}
@@ -267,7 +274,6 @@ func writeFragmentPrologue(b *strings.Builder, m ir.Module, precision string) {
 		// GL_EXT_shader_texture_lod adds the fragment-stage texture2DLodEXT form.
 		b.WriteString("#extension GL_EXT_shader_texture_lod : enable\n")
 	}
-	b.WriteString("precision " + precision + " float;\n")
 }
 
 // emitPointsVertex emits the WebGL1 points vertex shader.

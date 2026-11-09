@@ -18,7 +18,7 @@ import (
 var geoDocs = map[string]string{
 	"position":    "Vertex position attribute. Scene3D bakes mesh positions to world space.",
 	"normal":      "Vertex normal attribute.",
-	"uv":          "Texture coordinate. In a screen or post material: 0..1 across the target, origin at the top left.",
+	"uv":          "Texture coordinate. In a screen material: 0..1 across the target, origin at the top left on every target. In a post material: 0..1 across the target; on WebGL 1 the origin is the bottom left, so flip y (see docs/compatibility.md).",
 	"worldNormal": "World-space normal (normalMatrix times normal, normalized); synthesized from the normal attribute.",
 	"worldPos":    "World-space surface position.",
 	"pointUV":     "Position across the point billboard, 0..1 on both axes.",

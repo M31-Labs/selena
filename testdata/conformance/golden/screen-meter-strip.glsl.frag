@@ -1,13 +1,19 @@
+#ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
+precision highp int;
+#else
+precision mediump float;
+precision mediump int;
+#endif
 uniform float strips;
 uniform vec2 screenSize;
-uniform vec4 levels[128];
-uniform vec4 holds[128];
+uniform vec4 levels[64];
+uniform vec4 holds[64];
 varying vec2 v_uv;
 
 void main() {
   float x = (v_uv.x * strips);
-  int i = int(min(floor(x), 127.0));
+  int i = int(min(floor(x), 63.0));
   float lane = fract(x);
   float gap = (strips / screenSize.x);
   float body = (step(gap, lane) * step(lane, (1.0 - gap)));
