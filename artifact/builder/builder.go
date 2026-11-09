@@ -105,7 +105,7 @@ func Build(source []byte, opts Options) (artifact.File, error) {
 		}
 	}
 	if len(program.Materials) == 0 {
-		return artifact.File{}, fmt.Errorf("selena artifact %s: no material declared", label(opts.Path))
+		return artifact.File{}, fmt.Errorf("selena artifact %s: %w", label(opts.Path), ErrNoMaterial)
 	}
 	names := opts.Materials
 	if names == nil {
@@ -146,6 +146,10 @@ func Build(source []byte, opts Options) (artifact.File, error) {
 	}
 	return file, nil
 }
+
+// ErrNoMaterial reports a source that declares no material, such as a file of
+// shared functions. It has no artifact of its own; Build wraps it.
+var ErrNoMaterial = errors.New("no material declared")
 
 // StaleError reports a shipped artifact file that no longer matches its
 // source or no longer matches what the linked compiler emits.

@@ -237,6 +237,13 @@ func assertStale(t *testing.T, err error, want string) {
 	}
 }
 
+func TestBuildReportsLibrarySources(t *testing.T) {
+	_, err := builder.Build([]byte("fn half(x: float) -> float {\n    return x * 0.5\n}\n"), builder.Options{Path: "lib.sel"})
+	if !errors.Is(err, builder.ErrNoMaterial) {
+		t.Fatalf("err = %v, want ErrNoMaterial", err)
+	}
+}
+
 func TestVersionIsNeverEmpty(t *testing.T) {
 	if builder.Version() == "" {
 		t.Fatal("Version is empty")
