@@ -1,0 +1,8 @@
+// A post material: the artifact keeps its fullscreen contract.
+material PostTint kind post {
+    param tint : color = rgb(1.0, 0.9, 0.8)
+
+    surface(post) -> color {
+        return sceneColor(post.uv).rgb * tint
+    }
+}

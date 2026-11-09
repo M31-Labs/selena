@@ -1,0 +1,39 @@
+// Physical daylight sky: Rayleigh and Mie single scattering after Preetham,
+// Shirley and Smits (1999), in the real-time form of Hoffman and Preetham
+// (2002), with a sun disk. This is GoSX's `gosxPhysicalSky` (GLSL and WGSL in
+// client/js/bootstrap-src/16c-scene-shared-pbr.ts) written once in Selena.
+//
+// The four parameter arguments are the engine inputs skyBetaR, skyBetaM, skySun
+// and skyG (see docs/engine-inputs.md):
+//   betaR.xyz Rayleigh coefficients, betaR.w sun intensity
+//   betaM.xyz Mie coefficients,      betaM.w sun fade
+//   sun.xyz   unit direction toward the sun, sun.w cosine of the disk radius
+//             (above 1 hides the disk)
+//   g         Mie directional factor
+// dir is a unit view direction in world space. The result is display-referred
+// linear radiance, meant for an ACES-style tone mapper at exposure 0.5 to 1.
+// The sky is mirrored below the horizon the way the engine's pass does: a
+// caller that wants the underside passes a direction with y folded to abs(y).
+// Use highp float precision: the extinction terms span many orders of
+// magnitude (the engine's own passes compile with highp).
+fn physicalSky(dir: vec3, betaR: vec4, betaM: vec4, sun: vec4, g: float) -> vec3 {
+    let zenith = acos(clamp(dir.y, 0.0, 1.0))
+    let inv = 1.0 / (cos(zenith) + 0.15 * pow(93.885 - zenith * 57.29577951, -1.253))
+    let fex = exp(-(betaR.xyz * (8400.0 * inv) + betaM.xyz * (1250.0 * inv)))
+    let ct = dot(dir, sun.xyz)
+    let rPhase = 0.0596831 * (1.0 + ct * ct)
+    let g2 = g * g
+    let mPhase = 0.0795775 * (1.0 - g2) / pow(max(1.0 - 2.0 * g * ct + g2, 0.000001), 1.5)
+    let tiny = vec3f(0.000000000000000000000000000001, 0.000000000000000000000000000001, 0.000000000000000000000000000001)
+    let zero = vec3f(0.0, 0.0, 0.0)
+    let scatter = (betaR.xyz * rPhase + betaM.xyz * mPhase) / max(betaR.xyz + betaM.xyz, tiny)
+    let inscatter = max(betaR.w * scatter * (1.0 - fex), zero)
+    let lin0 = pow(inscatter, vec3f(1.5, 1.5, 1.5))
+    let horizon = clamp(pow(max(1.0 - sun.y, 0.0), 5.0), 0.0, 1.0)
+    let lin = lin0 * mix(vec3f(1.0, 1.0, 1.0), pow(max(betaR.w * scatter * fex, zero), vec3f(0.5, 0.5, 0.5)), horizon)
+    let disk = sun.w <= 1.0 ? smoothstep(sun.w, sun.w + 0.00002, ct) : 0.0
+    let l0 = 0.1 * fex + betaR.w * 19000.0 * fex * disk
+    let c = (lin + l0) * 0.04 + vec3f(0.0, 0.0003, 0.00075)
+    let e = 1.0 / (1.2 + 1.2 * betaM.w)
+    return pow(max(c, zero), vec3f(e, e, e))
+}

@@ -12,80 +12,52 @@ import (
 	"m31labs.dev/selena/ir"
 	"m31labs.dev/selena/lower"
 	"m31labs.dev/selena/parse"
+	"m31labs.dev/selena/result"
 )
 
-// Target is one shader backend Selena can emit.
-type Target string
+// The compile-result types are defined in package result, which does not
+// import the compiler, so hosts that only read compile output can avoid
+// linking it. The names below are aliases, constants and a forwarding function:
+// existing code that uses them compiles unchanged, and values pass between
+// the two packages without conversion.
+
+// Target is one shader backend Selena can emit. It is an alias of
+// result.Target.
+type Target = result.Target
 
 const (
-	TargetWGSL  Target = "wgsl"
-	TargetGLSL  Target = "glsl"
-	TargetMetal Target = "metal"
-	TargetGLES  Target = "gles"
+	TargetWGSL  = result.TargetWGSL
+	TargetGLSL  = result.TargetGLSL
+	TargetMetal = result.TargetMetal
+	TargetGLES  = result.TargetGLES
 )
 
-var defaultTargets = []Target{TargetWGSL, TargetGLSL, TargetMetal, TargetGLES}
+// AllTargets returns Selena's default backend set in deterministic order. It
+// forwards to result.AllTargets.
+func AllTargets() []Target { return result.AllTargets() }
 
-// AllTargets returns Selena's default backend set in deterministic order.
-func AllTargets() []Target {
-	out := make([]Target, len(defaultTargets))
-	copy(out, defaultTargets)
-	return out
-}
-
-// CompileOptions controls material selection and shader emission.
-//
-// If Material is empty, Selena compiles the last material in the program. This
-// matches the file-authoring convention where a derived material follows its
-// base material. If Targets is nil, Compile emits every supported target. If
-// Targets is an empty non-nil slice, Compile parses and lowers without emitting
-// shader source.
-type CompileOptions struct {
-	// SpecularMRT emits an additional color0/specular1 mesh fragment variant.
-	// It does not replace normal artifacts. Without authored specular(), that
-	// variant writes zero RGB with the normal surface's coverage alpha.
-	// Non-mesh materials without a companion ignore this option.
-	SpecularMRT bool
-	Material    string
-	Targets     []Target
-}
+// CompileOptions controls material selection and shader emission: Material
+// names the material to compile (the last one when empty), Targets lists the
+// backends to emit (all of them when nil, none when empty), and SpecularMRT adds
+// the optional color/specular fragment variant. It is an alias of
+// result.CompileOptions, which documents each field.
+type CompileOptions = result.CompileOptions
 
 // FragmentArtifact is an additive fragment variant. WGSL/Metal carry the full
-// module in Source; GLSL/GLES carry Fragment and reuse Artifact.Vertex.
-type FragmentArtifact struct {
-	Source   string
-	Fragment string
-}
+// module in Source; GLSL/GLES carry Fragment and reuse Artifact.Vertex. It is an
+// alias of result.FragmentArtifact.
+type FragmentArtifact = result.FragmentArtifact
 
 // Artifact is the emitted shader source for one target. WGSL and Metal use
-// Source. GLSL and GLES use Vertex and Fragment.
-type Artifact struct {
-	SpecularMRT *FragmentArtifact `json:",omitempty"`
-	Target      Target
-	Source      string
-	Vertex      string
-	Fragment    string
-}
+// Source. GLSL and GLES use Vertex and Fragment. It is an alias of
+// result.Artifact.
+type Artifact = result.Artifact
 
 // Result contains the useful artifacts from a Selena compile: parsed HIR,
 // selected material, lowered IR, host binding layout, and emitted shader source.
-type Result struct {
-	Program   hir.Program
-	Material  hir.Material
-	Module    ir.Module
-	Layout    bindings.Layout
-	Artifacts []Artifact
-}
-
-// Artifact returns the emitted artifact for target.
-func (r Result) Artifact(target Target) (Artifact, bool) {
-	for _, a := range r.Artifacts {
-		if a.Target == target {
-			return a, true
-		}
-	}
-	return Artifact{}, false
-}
+// It is an alias of result.Result, which also defines the Artifact method that
+// finds the artifact for one target.
+type Result = result.Result
 
 // Compile parses source, selects a material, lowers it, and emits requested
 // shader targets.

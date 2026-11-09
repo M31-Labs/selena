@@ -6,6 +6,7 @@
 //	selena graph [--format json|dot] <file.sel> [material]
 //	selena shaders [--target wgsl|glsl|metal|gles] [--out dir] [--validate] <file.sel> [material]
 //	selena compile --bundle dir [--validate-shaders] <file.sel> [material]
+//	selena artifact [-o out] [-targets t,...] [-materials A,...] [-modules m,...] [-specular-mrt] [-check] <file.sel>
 //	selena demo  <out.html> [material]
 //
 // emit/check parse a .sel file through the full pipeline (parse -> HIR -> lower
@@ -33,6 +34,10 @@ usage:
   selena graph [--format json|dot] <file.sel> [material]
   selena shaders [--target wgsl|glsl|metal|gles] [--out dir] [--validate] <file.sel> [material]
   selena compile --bundle dir [--validate-shaders] <file.sel> [material]
+  selena artifact [-o out.sel.json] [-targets wgsl,gles] [-materials A,B]
+                  [-modules brdf,lighting] [-specular-mrt] [-check] <file.sel>
+                                    write (or -check) the deterministic build
+                                    artifact: layout + shaders + source hash
   selena doctor                     print local compiler/runtime facts
   selena demo <out.html> [material] render harness (material: directional-diffuse|textured|defaults)
   selena help                       show this help
@@ -103,6 +108,8 @@ func run(args []string) error {
 		return shaders(args[1:])
 	case "compile":
 		return compileBundle(args[1:])
+	case "artifact":
+		return artifactCommand(args[1:], os.Stdout)
 	case "doctor":
 		return doctor(args[1:])
 	case "demo":

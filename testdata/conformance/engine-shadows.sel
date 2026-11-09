@@ -1,0 +1,31 @@
+// engine-shadows.sel — a layered (cascaded) shadow map read on every target.
+//
+// shadowMap0 is a textureDepth2dArray engine input with one layer per shadow
+// cascade; sampleDepth(tex, uv, layer) reads one layer at its base level.
+// shadowMatrices0 is an array engine input (four columns per cascade). The
+// vertex stage reads the map too, so the vertex-stage sampler declarations are
+// covered. GLSL ES 1.00 has no array textures: its artifact binds layer 0 as a
+// sampler2D and ignores the layer.
+material EngineShadows {
+    context {
+        shadow0         : vec4
+        shadowMatrices0 : array<vec4, 16>
+        shadowMap0      : textureDepth2dArray
+    }
+
+    varying vLift : float
+    varying vPos  : vec3
+
+    vertex(geo) -> vec4 {
+        vLift = sampleDepth(shadowMap0, geo.uv, 0i)
+        vPos = geo.position
+        return mvp * vec4f(geo.position, 1.0)
+    }
+
+    surface(geo) -> color {
+        let c = int(shadow0.x) - 1i
+        let s = shadowMatrices0[c * 4i] * geo.vPos.x + shadowMatrices0[c * 4i + 3i]
+        let lit = s.z - shadow0.y <= sampleDepth(shadowMap0, s.xy, c) ? 1.0 : 0.0
+        return vec3f(lit, lit, geo.vLift)
+    }
+}

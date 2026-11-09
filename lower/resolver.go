@@ -190,6 +190,23 @@ func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
 			}
 			return ir.Sample{Texture: texRef.Name, UV: uv}, nil
 		}
+		if x.Func == "sampleDepth" {
+			texRef, _ := x.Args[0].(hir.Ref)
+			if err := checkSampleDepthArgs(x, r.paramKind); err != nil {
+				return nil, err
+			}
+			uv, err := r.expr(x.Args[1])
+			if err != nil {
+				return nil, err
+			}
+			out := ir.SampleDepth{Texture: texRef.Name, UV: uv}
+			if len(x.Args) == 3 {
+				if out.Layer, err = r.expr(x.Args[2]); err != nil {
+					return nil, err
+				}
+			}
+			return out, nil
+		}
 		if x.Func == "sampleLevel" {
 			if len(x.Args) != 3 {
 				return nil, diagnostic(CodeInvalidCall, x.Span, "sampleLevel(texture, uv, lod) takes 3 arguments")

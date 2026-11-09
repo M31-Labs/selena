@@ -9,7 +9,7 @@ import (
 )
 
 // resolveExtends flattens m's `extends` chain: it merges the parent's params
-// (child overrides by name), inherits the parent's vertex stage (with the
+// and context fields (child overrides by name), inherits the parent's vertex stage (with the
 // varyings and statefield it goes with) when the child declares none of its
 // own, and inlines super.surface(geo) into the child's surface using the
 // parent's (recursively flattened) surface. all is the set of materials
@@ -30,6 +30,11 @@ func resolveExtends(m hir.Material, all []hir.Material) (hir.Material, error) {
 	out := m
 	out.Extends = ""
 	out.Params = mergeParams(parent.Params, m.Params)
+	// The parent's surface is inlined into the child below, so every context
+	// field it reads must exist in the child. Without this merge a parent that
+	// declares context { sunDir : vec3 } fails with "unknown name" as soon as a
+	// child calls super.surface(geo).
+	out.Context = mergeContext(parent.Context, m.Context)
 	// An omitted companion inherits; an authored companion explicitly overrides.
 	if out.Specular == nil {
 		out.Specular = parent.Specular
@@ -99,6 +104,25 @@ func mergeParams(parent, child []hir.Param) []hir.Param {
 	for _, p := range parent {
 		if !childHas[p.Name] {
 			out = append(out, p)
+		}
+	}
+	return append(out, child...)
+}
+
+// mergeContext returns parent context fields followed by child fields, a child
+// field replacing a parent field of the same name in the child's position.
+func mergeContext(parent, child []hir.ContextField) []hir.ContextField {
+	if len(parent) == 0 {
+		return child
+	}
+	childHas := make(map[string]bool, len(child))
+	for _, f := range child {
+		childHas[f.Name] = true
+	}
+	out := make([]hir.ContextField, 0, len(parent)+len(child))
+	for _, f := range parent {
+		if !childHas[f.Name] {
+			out = append(out, f)
 		}
 	}
 	return append(out, child...)

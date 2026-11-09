@@ -6,6 +6,8 @@ Selena lowers the surface once, then emits WGSL, WebGL GLSL, Metal, and GLES.
 Selena materials are currently complete custom shaders. Standard/PBR material
 hooks are planned separately; see
 [standard-material-interop.md](standard-material-interop.md).
+A material can read renderer-owned values and textures by declaring them in a
+`context` block; see [engine-inputs.md](engine-inputs.md).
 A mesh or general material may also author a `vertex() -> vec4` stage — see
 [compatibility.md](compatibility.md) for the emitted shape on each backend. A
 separate composing vertex hook that mutates geometry while the default
@@ -140,6 +142,10 @@ Params currently support:
 - `Sun`, expanded into uniforms
 - `texture2d`, emitted as backend-specific texture/sampler bindings
 - `array<T, N>`, a fixed-size uniform array (see below)
+- `textureDepth2d` and `textureDepth2dArray`, engine depth textures declared
+  only in `context` (`opaqueDepth`, and the shadow maps `shadowMap0` and
+  `shadowMap1`); read them with `sampleDepth(tex, uv)` and
+  `sampleDepth(tex, uv, layer)`. See [engine-inputs.md](engine-inputs.md).
 
 Defaults currently support constant `float`, `vec2`, `vec3`, `vec4`, `mat3`,
 `mat4`, and `color` values. Matrix values are written in column-major order, the

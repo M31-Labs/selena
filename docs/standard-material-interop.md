@@ -19,6 +19,13 @@ Selena currently emits complete custom shaders.
 In other words, today's Selena material is a custom material that is fully
 served across shader backends. It is not yet a standard/PBR material override.
 
+A custom material can still light itself the way the standard material does:
+the [scene lighting block](engine-inputs.md#scene-lighting) gives it every scene
+light, the directional shadow cascades and fog, and the
+[lighting module](material-library/lighting.md) matches the standard
+material's falloff, cone and fog terms. That is an interim bridge, not the hook
+model below: the material still replaces the whole shader.
+
 ## Why The Boundary Matters
 
 The standard material path already handles production PBR concerns:

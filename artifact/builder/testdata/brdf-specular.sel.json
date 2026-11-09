@@ -1,0 +1,177 @@
+{
+  "schema": "selena.artifact.v1",
+  "compiler": "golden",
+  "languageVersion": "selena.lang.v1",
+  "source": {
+    "path": "brdf-specular.sel",
+    "sha256": "e1c2237d6826b86849e9d1764519c7349b8f8d7e865cac8a86b8cf7e48a92b91"
+  },
+  "options": {
+    "targets": [
+      "wgsl",
+      "glsl",
+      "metal",
+      "gles"
+    ],
+    "specularMRT": true,
+    "modules": [
+      "brdf"
+    ]
+  },
+  "default": "Glossy",
+  "materials": [
+    {
+      "name": "Glossy",
+      "layout": {
+        "specularOutput": {
+          "semantic": "specular",
+          "location": 1,
+          "type": "vec4",
+          "colorSpace": "linear",
+          "authored": true,
+          "glExtensions": [
+            "WEBGL_draw_buffers"
+          ]
+        },
+        "schemaVersion": "selena.descriptor.v1",
+        "languageVersion": "selena.lang.v1",
+        "material": "Glossy",
+        "kind": "mesh",
+        "entryPoints": {
+          "fragmentSpecular": "fragmentMainSpecular",
+          "vertex": "vertexMain",
+          "fragment": "fragmentMain"
+        },
+        "uniformBlock": {
+          "size": 176,
+          "fields": [
+            {
+              "name": "mvp",
+              "type": "mat4",
+              "offset": 0,
+              "size": 64
+            },
+            {
+              "name": "normalMatrix",
+              "type": "mat3",
+              "offset": 64,
+              "size": 48
+            },
+            {
+              "name": "baseColor",
+              "type": "vec3",
+              "offset": 112,
+              "size": 12
+            },
+            {
+              "name": "roughness",
+              "type": "float",
+              "offset": 124,
+              "size": 4
+            },
+            {
+              "name": "cameraPos",
+              "type": "vec3",
+              "offset": 128,
+              "size": 12,
+              "class": "context",
+              "source": "engine"
+            },
+            {
+              "name": "sunDir",
+              "type": "vec3",
+              "offset": 144,
+              "size": 12,
+              "class": "context",
+              "source": "engine"
+            },
+            {
+              "name": "sunColor",
+              "type": "vec3",
+              "offset": 160,
+              "size": 12,
+              "class": "context",
+              "source": "engine"
+            }
+          ],
+          "defaults": [
+            {
+              "name": "baseColor",
+              "type": "vec3",
+              "values": [
+                0.6,
+                0.5,
+                0.4
+              ]
+            },
+            {
+              "name": "roughness",
+              "type": "float",
+              "values": [
+                0.4
+              ]
+            }
+          ]
+        },
+        "attributes": [
+          {
+            "name": "position",
+            "location": 0,
+            "type": "vec3"
+          },
+          {
+            "name": "normal",
+            "location": 1,
+            "type": "vec3"
+          }
+        ],
+        "textures": [],
+        "wgsl": {
+          "group": 0,
+          "binding": 0
+        },
+        "metal": {
+          "buffer": 0
+        },
+        "context": [
+          "cameraPos",
+          "sunDir",
+          "sunColor"
+        ],
+        "engineVersion": "selena.engine.v1"
+      },
+      "shaders": [
+        {
+          "target": "wgsl",
+          "source": "struct Uniforms {\n  mvp : mat4x4<f32>,\n  normalMatrix : mat3x3<f32>,\n  baseColor : vec3<f32>,\n  roughness : f32,\n  cameraPos : vec3<f32>,\n  sunDir : vec3<f32>,\n  sunColor : vec3<f32>,\n};\n@group(0) @binding(0) var<uniform> u : Uniforms;\n\nstruct VertexInput {\n  @location(0) position : vec3<f32>,\n  @location(1) normal : vec3<f32>,\n};\n\nstruct VertexOutput {\n  @builtin(position) position : vec4<f32>,\n  @location(0) vWorldNormal : vec3<f32>,\n  @location(1) vWorldPos : vec3<f32>,\n};\n\n@vertex\nfn vertexMain(in : VertexInput) -> VertexOutput {\n  var out : VertexOutput;\n  out.vWorldNormal = normalize((u.normalMatrix * in.normal));\n  out.vWorldPos = in.position;\n  out.position = (u.mvp * vec4<f32>(in.position, 1.0));\n  return out;\n}\n\n@fragment\nfn fragmentMain(in : VertexOutput) -> @location(0) vec4<f32> {\n  let n = normalize(in.vWorldNormal);\n  return vec4<f32>(((u.baseColor * u.sunColor) * max(dot(n, u.sunDir), 0.0)), 1.0);\n}\n",
+          "specularMRT": {
+            "source": "struct Uniforms {\n  mvp : mat4x4<f32>,\n  normalMatrix : mat3x3<f32>,\n  baseColor : vec3<f32>,\n  roughness : f32,\n  cameraPos : vec3<f32>,\n  sunDir : vec3<f32>,\n  sunColor : vec3<f32>,\n};\n@group(0) @binding(0) var<uniform> u : Uniforms;\n\nstruct VertexInput {\n  @location(0) position : vec3<f32>,\n  @location(1) normal : vec3<f32>,\n};\n\nstruct VertexOutput {\n  @builtin(position) position : vec4<f32>,\n  @location(0) vWorldNormal : vec3<f32>,\n  @location(1) vWorldPos : vec3<f32>,\n};\n\n@vertex\nfn vertexMain(in : VertexInput) -> VertexOutput {\n  var out : VertexOutput;\n  out.vWorldNormal = normalize((u.normalMatrix * in.normal));\n  out.vWorldPos = in.position;\n  out.position = (u.mvp * vec4<f32>(in.position, 1.0));\n  return out;\n}\n\nstruct SelenaFragmentOutput {\n  @location(0) color : vec4<f32>,\n  @location(1) specular : vec4<f32>,\n};\n\n@fragment\nfn fragmentMainSpecular(in : VertexOutput) -> SelenaFragmentOutput {\n  let n = normalize(in.vWorldNormal);\n  let selenaMRTLocal0 = normalize((u.cameraPos - in.vWorldPos));\n  let selenaMRTLocal1 = normalize((selenaMRTLocal0 + u.sunDir));\n  let selenaMRTLocal2 = max(dot(selenaMRTLocal0, selenaMRTLocal1), 0.0);\n  let selenaMRTLocal3 = vec3<f32>(0.04, 0.04, 0.04);\n  let selenaMRTLocal4 = (1.0 - clamp(selenaMRTLocal2, 0.0, 1.0));\n  let selenaMRTLocal5 = (selenaMRTLocal4 * selenaMRTLocal4);\n  let selenaMRTLocal6 = ((selenaMRTLocal5 * selenaMRTLocal5) * selenaMRTLocal4);\n  let selenaMRTLocal7 = (selenaMRTLocal3 + ((vec3<f32>(1.0, 1.0, 1.0) - selenaMRTLocal3) * selenaMRTLocal6));\n  let selenaMRTLocal8 = selenaMRTLocal7;\n  let selenaMRTColor = vec4<f32>(((u.baseColor * u.sunColor) * max(dot(n, u.sunDir), 0.0)), 1.0);\n  let selenaMRTSpecular = (vec4<f32>(((selenaMRTLocal8 * u.sunColor) * pow(max(dot(n, selenaMRTLocal1), 0.0), (2.0 / max((u.roughness * u.roughness), 0.001)))), 1.0)).rgb;\n  return SelenaFragmentOutput(selenaMRTColor, vec4<f32>(selenaMRTSpecular, selenaMRTColor.a));\n}\n"
+          }
+        },
+        {
+          "target": "glsl",
+          "vertex": "attribute vec3 position;\nattribute vec3 normal;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform vec3 baseColor;\nuniform float roughness;\nuniform vec3 cameraPos;\nuniform vec3 sunDir;\nuniform vec3 sunColor;\nvarying vec3 vWorldNormal;\nvarying vec3 vWorldPos;\n\nvoid main() {\n  vWorldNormal = normalize((normalMatrix * normal));\n  vWorldPos = position;\n  gl_Position = (mvp * vec4(position, 1.0));\n}\n",
+          "fragment": "precision mediump float;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform vec3 baseColor;\nuniform float roughness;\nuniform vec3 cameraPos;\nuniform vec3 sunDir;\nuniform vec3 sunColor;\nvarying vec3 vWorldNormal;\nvarying vec3 vWorldPos;\n\nvoid main() {\n  vec3 n = normalize(vWorldNormal);\n  gl_FragColor = vec4(((baseColor * sunColor) * max(dot(n, sunDir), 0.0)), 1.0);\n}\n",
+          "specularMRT": {
+            "fragment": "#extension GL_EXT_draw_buffers : require\nprecision mediump float;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform vec3 baseColor;\nuniform float roughness;\nuniform vec3 cameraPos;\nuniform vec3 sunDir;\nuniform vec3 sunColor;\nvarying vec3 vWorldNormal;\nvarying vec3 vWorldPos;\n\nvoid main() {\n  vec3 n = normalize(vWorldNormal);\n  vec3 selenaMRTLocal0 = normalize((cameraPos - vWorldPos));\n  vec3 selenaMRTLocal1 = normalize((selenaMRTLocal0 + sunDir));\n  float selenaMRTLocal2 = max(dot(selenaMRTLocal0, selenaMRTLocal1), 0.0);\n  vec3 selenaMRTLocal3 = vec3(0.04, 0.04, 0.04);\n  float selenaMRTLocal4 = (1.0 - clamp(selenaMRTLocal2, 0.0, 1.0));\n  float selenaMRTLocal5 = (selenaMRTLocal4 * selenaMRTLocal4);\n  float selenaMRTLocal6 = ((selenaMRTLocal5 * selenaMRTLocal5) * selenaMRTLocal4);\n  vec3 selenaMRTLocal7 = (selenaMRTLocal3 + ((vec3(1.0, 1.0, 1.0) - selenaMRTLocal3) * selenaMRTLocal6));\n  vec3 selenaMRTLocal8 = selenaMRTLocal7;\n  vec4 selenaMRTColor = vec4(((baseColor * sunColor) * max(dot(n, sunDir), 0.0)), 1.0);\n  vec3 selenaMRTSpecular = (vec4(((selenaMRTLocal8 * sunColor) * pow(max(dot(n, selenaMRTLocal1), 0.0), (2.0 / max((roughness * roughness), 0.001)))), 1.0)).rgb;\n  gl_FragData[0] = selenaMRTColor;\n  gl_FragData[1] = vec4(selenaMRTSpecular, selenaMRTColor.a);\n}\n"
+          }
+        },
+        {
+          "target": "metal",
+          "source": "#include <metal_stdlib>\nusing namespace metal;\n\nstruct Uniforms {\n  float4x4 mvp;\n  float3x3 normalMatrix;\n  float3 baseColor;\n  float roughness;\n  float3 cameraPos;\n  float3 sunDir;\n  float3 sunColor;\n};\n\nstruct VertexIn {\n  float3 position [[attribute(0)]];\n  float3 normal [[attribute(1)]];\n};\n\nstruct VertexOut {\n  float4 position [[position]];\n  float3 vWorldNormal;\n  float3 vWorldPos;\n};\n\nvertex VertexOut vertexMain(VertexIn in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {\n  VertexOut out;\n  out.vWorldNormal = normalize((u.normalMatrix * in.normal));\n  out.vWorldPos = in.position;\n  out.position = (u.mvp * float4(in.position, 1.0));\n  return out;\n}\n\nfragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {\n  float3 n = normalize(in.vWorldNormal);\n  return float4(((u.baseColor * u.sunColor) * max(dot(n, u.sunDir), 0.0)), 1.0);\n}\n",
+          "specularMRT": {
+            "source": "#include <metal_stdlib>\nusing namespace metal;\n\nstruct Uniforms {\n  float4x4 mvp;\n  float3x3 normalMatrix;\n  float3 baseColor;\n  float roughness;\n  float3 cameraPos;\n  float3 sunDir;\n  float3 sunColor;\n};\n\nstruct VertexIn {\n  float3 position [[attribute(0)]];\n  float3 normal [[attribute(1)]];\n};\n\nstruct VertexOut {\n  float4 position [[position]];\n  float3 vWorldNormal;\n  float3 vWorldPos;\n};\n\nvertex VertexOut vertexMain(VertexIn in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {\n  VertexOut out;\n  out.vWorldNormal = normalize((u.normalMatrix * in.normal));\n  out.vWorldPos = in.position;\n  out.position = (u.mvp * float4(in.position, 1.0));\n  return out;\n}\n\nstruct SelenaFragmentOutput {\n  float4 color [[color(0)]];\n  float4 specular [[color(1)]];\n};\n\nfragment SelenaFragmentOutput fragmentMainSpecular(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {\n  float3 n = normalize(in.vWorldNormal);\n  float3 selenaMRTLocal0 = normalize((u.cameraPos - in.vWorldPos));\n  float3 selenaMRTLocal1 = normalize((selenaMRTLocal0 + u.sunDir));\n  float selenaMRTLocal2 = max(dot(selenaMRTLocal0, selenaMRTLocal1), 0.0);\n  float3 selenaMRTLocal3 = float3(0.04, 0.04, 0.04);\n  float selenaMRTLocal4 = (1.0 - clamp(selenaMRTLocal2, 0.0, 1.0));\n  float selenaMRTLocal5 = (selenaMRTLocal4 * selenaMRTLocal4);\n  float selenaMRTLocal6 = ((selenaMRTLocal5 * selenaMRTLocal5) * selenaMRTLocal4);\n  float3 selenaMRTLocal7 = (selenaMRTLocal3 + ((float3(1.0, 1.0, 1.0) - selenaMRTLocal3) * selenaMRTLocal6));\n  float3 selenaMRTLocal8 = selenaMRTLocal7;\n  float4 selenaMRTColor = float4(((u.baseColor * u.sunColor) * max(dot(n, u.sunDir), 0.0)), 1.0);\n  float3 selenaMRTSpecular = (float4(((selenaMRTLocal8 * u.sunColor) * pow(max(dot(n, selenaMRTLocal1), 0.0), (2.0 / max((u.roughness * u.roughness), 0.001)))), 1.0)).rgb;\n  return SelenaFragmentOutput{selenaMRTColor, float4(selenaMRTSpecular, selenaMRTColor.a)};\n}\n"
+          }
+        },
+        {
+          "target": "gles",
+          "vertex": "#version 300 es\nin vec3 position;\nin vec3 normal;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform vec3 baseColor;\nuniform float roughness;\nuniform vec3 cameraPos;\nuniform vec3 sunDir;\nuniform vec3 sunColor;\nout vec3 vWorldNormal;\nout vec3 vWorldPos;\n\nvoid main() {\n  vWorldNormal = normalize((normalMatrix * normal));\n  vWorldPos = position;\n  gl_Position = (mvp * vec4(position, 1.0));\n}\n",
+          "fragment": "#version 300 es\nprecision highp float;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform vec3 baseColor;\nuniform float roughness;\nuniform vec3 cameraPos;\nuniform vec3 sunDir;\nuniform vec3 sunColor;\nin vec3 vWorldNormal;\nin vec3 vWorldPos;\nout vec4 fragColor;\n\nvoid main() {\n  vec3 n = normalize(vWorldNormal);\n  fragColor = vec4(((baseColor * sunColor) * max(dot(n, sunDir), 0.0)), 1.0);\n}\n",
+          "specularMRT": {
+            "fragment": "#version 300 es\nprecision highp float;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform vec3 baseColor;\nuniform float roughness;\nuniform vec3 cameraPos;\nuniform vec3 sunDir;\nuniform vec3 sunColor;\nin vec3 vWorldNormal;\nin vec3 vWorldPos;\nlayout(location = 0) out vec4 fragColor;\nlayout(location = 1) out vec4 specularColor;\n\nvoid main() {\n  vec3 n = normalize(vWorldNormal);\n  vec3 selenaMRTLocal0 = normalize((cameraPos - vWorldPos));\n  vec3 selenaMRTLocal1 = normalize((selenaMRTLocal0 + sunDir));\n  float selenaMRTLocal2 = max(dot(selenaMRTLocal0, selenaMRTLocal1), 0.0);\n  vec3 selenaMRTLocal3 = vec3(0.04, 0.04, 0.04);\n  float selenaMRTLocal4 = (1.0 - clamp(selenaMRTLocal2, 0.0, 1.0));\n  float selenaMRTLocal5 = (selenaMRTLocal4 * selenaMRTLocal4);\n  float selenaMRTLocal6 = ((selenaMRTLocal5 * selenaMRTLocal5) * selenaMRTLocal4);\n  vec3 selenaMRTLocal7 = (selenaMRTLocal3 + ((vec3(1.0, 1.0, 1.0) - selenaMRTLocal3) * selenaMRTLocal6));\n  vec3 selenaMRTLocal8 = selenaMRTLocal7;\n  vec4 selenaMRTColor = vec4(((baseColor * sunColor) * max(dot(n, sunDir), 0.0)), 1.0);\n  vec3 selenaMRTSpecular = (vec4(((selenaMRTLocal8 * sunColor) * pow(max(dot(n, selenaMRTLocal1), 0.0), (2.0 / max((roughness * roughness), 0.001)))), 1.0)).rgb;\n  fragColor = selenaMRTColor;\n  specularColor = vec4(selenaMRTSpecular, selenaMRTColor.a);\n}\n"
+          }
+        }
+      ]
+    }
+  ]
+}
