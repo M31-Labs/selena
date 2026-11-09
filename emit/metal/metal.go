@@ -62,10 +62,11 @@ func emitFeedback(m ir.Module) (string, error) {
 		allUniforms[au.Name] = true
 	}
 	fs := internal.Resolver{
-		Dialect:   prismDialect,
-		Uniforms:  allUniforms,
-		Fragment:  true,
-		Qualified: true,
+		TypedUintLiterals: ir.NeedsTypedUintLiterals(m),
+		Dialect:           prismDialect,
+		Uniforms:          allUniforms,
+		Fragment:          true,
+		Qualified:         true,
 		StateSampleFn: func(dx, dy int64) string {
 			return fmt.Sprintf(
 				"inState[clamp(int(cellIndex) + (%d) + (%d) * int(_grid.gridWidth), 0, int(_grid.gridLen) - 1)]",
@@ -133,6 +134,7 @@ func emitMesh(m ir.Module) (string, error) {
 	b.WriteString("};\n\n")
 
 	vs := internal.NewQualified(prismDialect, m, false)
+	vs.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	b.WriteString("vertex VertexOut vertexMain(VertexIn in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {\n  VertexOut out;\n")
 	for _, s := range m.Vertex.Body {
 		if vs.Varyings[s.Target] {
@@ -144,6 +146,7 @@ func emitMesh(m ir.Module) (string, error) {
 	fmt.Fprintf(&b, "  out.position = %s;\n  return out;\n}\n\n", ir.Print(m.Vertex.Output, vs))
 
 	fs := internal.NewQualified(prismDialect, m, true)
+	fs.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	if m.SpecularMRT {
 		writeSpecularFragment(&b, m, fs)
 		return b.String(), nil
@@ -212,8 +215,8 @@ func emitMeshAuthored(m ir.Module) (string, error) {
 
 	// Vertex stage.
 	vs := internal.NewQualified(prismDialect, m, false)
-	vs.StateSampleUVFn = metalStateSampleUV
 	vs.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
+	vs.StateSampleUVFn = metalStateSampleUV
 	var vparams []string
 	if m.UsesVertexIndex {
 		vparams = append(vparams, "uint vertexIndex [[vertex_id]]")
@@ -245,8 +248,8 @@ func emitMeshAuthored(m ir.Module) (string, error) {
 
 	// Fragment stage.
 	fs := internal.NewQualified(prismDialect, m, true)
-	fs.StateSampleUVFn = metalStateSampleUV
 	fs.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
+	fs.StateSampleUVFn = metalStateSampleUV
 	if m.SpecularMRT {
 		writeSpecularFragment(&b, m, fs)
 		return b.String(), nil
@@ -377,11 +380,12 @@ vertex PointsOut vertexMain(
 		"v_pointCoord": true, "v_pointSize": true,
 	}
 	fs := internal.Resolver{
-		Dialect:   prismDialect,
-		Uniforms:  internal.NameSet(m.Uniforms),
-		Varyings:  varyingSet,
-		Fragment:  true,
-		Qualified: true,
+		TypedUintLiterals: ir.NeedsTypedUintLiterals(m),
+		Dialect:           prismDialect,
+		Uniforms:          internal.NameSet(m.Uniforms),
+		Varyings:          varyingSet,
+		Fragment:          true,
+		Qualified:         true,
 	}
 	fragSig := "fragment float4 fragmentMain(PointsOut in [[stage_in]]"
 	if len(m.Uniforms) > 0 {
@@ -435,11 +439,12 @@ vertex PostOut vertexMain(uint vid [[vertex_id]]) {
 		uniformSet[au.Name] = true
 	}
 	fs := internal.Resolver{
-		Dialect:   prismDialect,
-		Uniforms:  uniformSet,
-		Varyings:  varyingSet,
-		Fragment:  true,
-		Qualified: true,
+		TypedUintLiterals: ir.NeedsTypedUintLiterals(m),
+		Dialect:           prismDialect,
+		Uniforms:          uniformSet,
+		Varyings:          varyingSet,
+		Fragment:          true,
+		Qualified:         true,
 		SceneSampleFn: func(name, uv string) string {
 			switch name {
 			case "sceneColor":

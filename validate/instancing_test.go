@@ -2,6 +2,7 @@ package validate
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	prismvalidate "m31labs.dev/prism/validate"
@@ -71,4 +72,51 @@ func TestUintInstanceAttributeValidates(t *testing.T) {
 	e, _ := r.Artifact(selena.TargetGLES)
 	t.Run("essl300-vert", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", e.Vertex, ".vert", nil) })
 	t.Run("essl300-frag", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", e.Fragment, ".frag", nil) })
+}
+
+// A bit operator on uint must emit typed uint literals on every GLES resolver,
+// not only in a mesh material with an authored vertex(): glslang rejects
+// `uint k = (uint(x) & 7)` because GLSL ES 3.00 has no implicit int to uint.
+func TestBitOperatorsValidateWithoutAuthoredVertex(t *testing.T) {
+	cases := map[string]string{
+		"mesh": `material M {
+    surface(geo) -> color {
+        let k = uint(geo.uv.x * 8.0) & 7u
+        return rgb(float(k) / 8.0, 0.0, 0.0)
+    }
+}`,
+		"post": `material M kind post {
+    surface(p) -> color {
+        let k = uint(p.uv.x * 8.0) & 7u
+        let c = sceneColor(p.uv)
+        return c * (float(k) / 8.0)
+    }
+}`,
+		"screen": `material M kind screen {
+    surface(screen) -> color {
+        let k = uint(screen.uv.x * 8.0) & 7u
+        return rgb(float(k) / 8.0, 0.0, 0.0, 1.0)
+    }
+}`,
+	}
+	for name, src := range cases {
+		t.Run(name, func(t *testing.T) {
+			r, err := selena.Compile([]byte(src), selena.CompileOptions{Targets: []selena.Target{selena.TargetWGSL, selena.TargetGLES, selena.TargetMetal}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			e, _ := r.Artifact(selena.TargetGLES)
+			if strings.Contains(e.Fragment, "& 7)") {
+				t.Errorf("untyped uint literal in GLES fragment:\n%s", e.Fragment)
+			}
+			m, _ := r.Artifact(selena.TargetMetal)
+			if strings.Contains(m.Source, "& 7)") {
+				t.Errorf("untyped uint literal in Metal source:\n%s", m.Source)
+			}
+			w, _ := r.Artifact(selena.TargetWGSL)
+			t.Run("wgsl", func(t *testing.T) { prismvalidate.Shader(t, "naga", w.Source, ".wgsl", nil) })
+			t.Run("essl300-vert", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", e.Vertex, ".vert", nil) })
+			t.Run("essl300-frag", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", e.Fragment, ".frag", nil) })
+		})
+	}
 }

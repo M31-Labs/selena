@@ -44,6 +44,7 @@ func emitScreenFragment(m ir.Module) string {
 		fmt.Fprintf(&b, "uniform %s %s;\n", samplerType(t, false), t.Name)
 	}
 	res := internal.NewBare(prismDialect)
+	res.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	res.ReturnFn = glesReturnFn
 	b.WriteString("out vec4 fragColor;\n\nvoid main() {\n")
 	internal.EmitStmtList(&b, m.Fragment.Body, res, "  ", false)

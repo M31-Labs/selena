@@ -62,8 +62,10 @@ func TestInstanceAttributesLower(t *testing.T) {
 	if layout.InstanceStride != 48 || layout.InstanceStride%4 != 0 {
 		t.Errorf("stride = %d, want 48", layout.InstanceStride)
 	}
-	if got := layout.Requires.GLExtensions; len(got) != 1 || got[0] != "ANGLE_instanced_arrays" {
-		t.Errorf("requires.glExtensions = %v", got)
+	// uint and int instance attributes have no GLSL ES 1.00 form, so the
+	// descriptor does not ask for the extension that form needs.
+	if got := layout.Requires.GLExtensions; len(got) != 0 {
+		t.Errorf("requires.glExtensions = %v, want none", got)
 	}
 }
 
@@ -252,5 +254,23 @@ func TestBitOperatorsRejectedInDefaults(t *testing.T) {
 }`)
 	if err == nil {
 		t.Fatal("a bit operator in a default value lowered")
+	}
+}
+
+// A literal shift count of 32 or more is an error; 31 and a non-literal count
+// stay legal.
+func TestShiftCountOutOfRange(t *testing.T) {
+	for _, expr := range []string{"1u << 32u", "vertexIndex >> 40u", "1i << 32u"} {
+		_, _, err := lowerTexelSrc(t, instMaterial("vertex() -> vec4 { return vec4f(float("+expr+"), 0.0, 0.0, 1.0) }"))
+		if err == nil {
+			t.Errorf("%s: lowered", expr)
+			continue
+		}
+		wantDiagnostic(t, err, CodeTypeMismatch, "out of range")
+	}
+	for _, expr := range []string{"1u << 31u", "vertexIndex >> 0u", "1u << (vertexIndex & 31u)"} {
+		if _, _, err := lowerTexelSrc(t, instMaterial("vertex() -> vec4 { return vec4f(float("+expr+"), 0.0, 0.0, 1.0) }")); err != nil {
+			t.Errorf("%s: %v", expr, err)
+		}
 	}
 }

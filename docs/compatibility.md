@@ -173,7 +173,7 @@ whole pass is dropped.
 | `OES_standard_derivatives` | `fwidth`, `dpdx`, `dpdy` |
 | `EXT_shader_texture_lod` | `sceneColorLevel` (fragment-stage explicit LOD) |
 | `WEBGL_depth_texture` | a `textureDepth2d` or `textureDepth2dArray` engine texture such as `opaqueDepth` or `shadowMap0` |
-| `ANGLE_instanced_arrays` | any `instance` attribute: call `vertexAttribDivisorANGLE(location, 1)` and draw with `drawArraysInstancedANGLE` |
+| `ANGLE_instanced_arrays` | any `instance` attribute of a material that has a GLSL ES 1.00 form (float attributes only, no bit operators, no `instanceIndex`): call `vertexAttribDivisorANGLE(location, 1)` and draw with `drawArraysInstancedANGLE` |
 
 The `gles` (GLSL ES 3.00), `wgsl` and `metal` artifacts have all of this in core
 and need nothing. A host running a WebGL 2 context should prefer the `gles`
@@ -413,7 +413,7 @@ attributes and read `instanceIndex` (see the Instancing section of the
 | `wgsl` | `@builtin(instance_index) instanceIndex : u32` | `@location(n)` members of `VertexInput`, after the vertex attributes | One vertex buffer with `stepMode: "instance"`, `arrayStride: instanceStride`, and an entry per attribute: `shaderLocation`, `offset`, and `format` `float32`, `float32x2`, `float32x3`, `float32x4`, `sint32` or `uint32` by `type`. `instance_index` includes `firstInstance`, so draw with `firstInstance` 0 for the same values as the other targets. |
 | `gles` | `gl_InstanceID` as `uint instanceIndex` | `in` attributes, after the vertex attributes | `getAttribLocation` by name, or `bindAttribLocation` with the descriptor `location` before linking. `vertexAttribDivisor(loc, 1)` on each. Bind `int` and `uint` attributes with `vertexAttribIPointer` (`gl.INT`, `gl.UNSIGNED_INT`); `vertexAttribPointer` converts them to float and the shader reads garbage. Draw with `drawArraysInstanced`. An attribute the body never reads is optimised out by the driver, so skip a location of -1. |
 | `glsl` | not available: rejected | `attribute` float types only; `int` and `uint` are rejected | Request `ANGLE_instanced_arrays` (listed in `requires.glExtensions`), then `vertexAttribDivisorANGLE(loc, 1)` and `drawArraysInstancedANGLE`. If the body reads `vertexIndex`, `a_vertexIndex` is a per-vertex attribute: leave its divisor at 0. |
-| `metal` | `[[instance_id]]` as `uint instanceIndex` | `[[attribute(n)]]` members of `VertexIn`, after the vertex attributes | In the `MTLVertexDescriptor`, give the instance buffer a layout with `stepFunction = .perInstance`, `stride = instanceStride`, and attribute formats `float`..`float4`, `int` or `uint`. Use a buffer index other than 0, which is the uniform buffer. `instance_id` does not include the base instance. |
+| `metal` | `[[instance_id]]` as `uint instanceIndex` | `[[attribute(n)]]` members of `VertexIn`, after the vertex attributes | In the `MTLVertexDescriptor`, give the instance buffer a layout with `stepFunction = .perInstance`, `stride = instanceStride`, and attribute formats `float`..`float4`, `int` or `uint`. Use a buffer index other than 0, which is the uniform buffer. `instance_id` runs from the base instance to `baseInstance + instanceCount - 1`, like WGSL's `instance_index`, so draw with base instance 0 for the same values as the other targets. Only GLSL's `gl_InstanceID` excludes the base instance. |
 
 **Choosing the first location.** By default the first instance attribute sits
 directly after the vertex attributes. A host that already binds its own

@@ -110,8 +110,9 @@ func hostRequirements(mod ir.Module) bindings.Requirements {
 	if ir.UsesSceneSize(mod) {
 		req.GLSceneSizeUniform = "_sceneSize"
 	}
-	if len(mod.InstanceAttributes) > 0 {
-		// Instance attributes need a divisor on a GLSL ES 1.00 attribute.
+	if len(mod.InstanceAttributes) > 0 && len(ir.GLSLInstancingUnsupported(mod)) == 0 {
+		// Instance attributes need a divisor on a GLSL ES 1.00 attribute. A
+		// material with no GLSL ES 1.00 form never needs the extension.
 		req.GLExtensions = append(req.GLExtensions, "ANGLE_instanced_arrays")
 	}
 	req.GLVertexTextureUnits = len(ir.VertexSampledTextures(mod))

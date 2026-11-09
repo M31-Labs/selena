@@ -1,6 +1,7 @@
 package selena
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -143,8 +144,9 @@ func TestNoteQuadDescriptorGolden(t *testing.T) {
 			t.Errorf("%s offset = %d, want %d", a.Name, a.Offset, wantOffsets[a.Name])
 		}
 	}
-	if got := r.Layout.Requires.GLExtensions; len(got) != 1 || got[0] != "ANGLE_instanced_arrays" {
-		t.Errorf("requires.glExtensions = %v", got)
+	// NoteQuad has no GLSL ES 1.00 form, so it must not require the extension.
+	if got := r.Layout.Requires.GLExtensions; len(got) != 0 {
+		t.Errorf("requires.glExtensions = %v, want none", got)
 	}
 }
 
@@ -376,5 +378,33 @@ func TestFirstInstanceLocationRules(t *testing.T) {
 	wb, _ := b.Artifact(TargetWGSL)
 	if wa.Source != wb.Source {
 		t.Error("the option changed a material without instance attributes")
+	}
+}
+
+// The 16-location limit applies to the default placement too: a material whose
+// instance attributes would land at location 16 or above is an error.
+func TestDefaultInstancePlacementRespectsLocationLimit(t *testing.T) {
+	build := func(n int) string {
+		var decls, sum strings.Builder
+		for i := 0; i < n; i++ {
+			fmt.Fprintf(&decls, "    instance a%d : float\n", i)
+			fmt.Fprintf(&sum, " + a%d", i)
+		}
+		return "material M {\n" + decls.String() +
+			"    vertex(geo) -> vec4 { return mvp * vec4f(geo.position + geo.normal, 1.0) + vec4f(0.0, 0.0, 0.0, 0.0)" + sum.String() + " }\n" +
+			"    surface(geo) -> color { return rgb(1.0, 1.0, 1.0) }\n}"
+	}
+	// geo.position and geo.normal take locations 0 and 1: 14 instance attributes
+	// end at location 15, the last legal one.
+	if _, err := Compile([]byte(build(14)), CompileOptions{}); err != nil {
+		t.Errorf("14 instance attributes end at location 15 and are legal: %v", err)
+	}
+	_, err := Compile([]byte(build(15)), CompileOptions{})
+	if err == nil || !strings.Contains(err.Error(), "location 16") || !strings.Contains(err.Error(), "below 16") {
+		t.Errorf("15 instance attributes reach location 16: %v", err)
+	}
+	_, err = Compile([]byte(build(17)), CompileOptions{})
+	if err == nil {
+		t.Error("17 instance attributes compiled")
 	}
 }

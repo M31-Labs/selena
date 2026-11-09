@@ -13,10 +13,16 @@ const maxVertexAttributes = 16
 
 // placeInstanceAttributes moves the instance attributes of mod and layout to
 // start at first. Zero keeps them directly after the vertex attributes and
-// changes nothing. A material with no instance attributes ignores first.
+// changes nothing but the limit check, which applies to both placements. A material with no instance attributes ignores first.
 func placeInstanceAttributes(mod *ir.Module, layout *bindings.Layout, first int) error {
 	n := len(mod.InstanceAttributes)
-	if first == 0 || n == 0 {
+	if n == 0 {
+		return nil
+	}
+	if first == 0 {
+		if last := len(mod.Attributes) + n - 1; last >= maxVertexAttributes {
+			return fmt.Errorf("the %d vertex attributes and %d instance attributes need location %d; locations must stay below %d", len(mod.Attributes), n, last, maxVertexAttributes)
+		}
 		return nil
 	}
 	if first < len(mod.Attributes) {

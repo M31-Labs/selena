@@ -208,8 +208,9 @@ func TestInstanceAttributesRoundTrip(t *testing.T) {
 	if !reflect.DeepEqual(layout.InstanceAttributes, want) || layout.InstanceStride != 36 {
 		t.Fatalf("instance attributes = %+v stride %d", layout.InstanceAttributes, layout.InstanceStride)
 	}
-	if !reflect.DeepEqual(layout.Requires.GLExtensions, []string{"ANGLE_instanced_arrays"}) {
-		t.Errorf("requires.glExtensions = %v", layout.Requires.GLExtensions)
+	// NoteQuad has no GLSL ES 1.00 form, so the extension is not required.
+	if len(layout.Requires.GLExtensions) != 0 {
+		t.Errorf("requires.glExtensions = %v, want none", layout.Requires.GLExtensions)
 	}
 	back := artifact.FromResult(f.Materials[0].Result())
 	if !reflect.DeepEqual(back, f.Materials[0]) {

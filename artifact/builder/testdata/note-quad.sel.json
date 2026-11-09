@@ -52,11 +52,6 @@
         "metal": {
           "buffer": 0
         },
-        "requires": {
-          "glExtensions": [
-            "ANGLE_instanced_arrays"
-          ]
-        },
         "instanceAttributes": [
           {
             "name": "rect",

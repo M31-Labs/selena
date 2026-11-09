@@ -95,6 +95,12 @@ func (t *typer) bitOperatorType(b hir.Binary) (ir.Type, error) {
 			return "", diagnostic(CodeTypeMismatch, b.Span,
 				"shift %s needs an int or uint value on the left and a uint count on the right (write 1u), got %s and %s", b.Op, lt, rt)
 		}
+		// Both types are 32 bits wide. WGSL rejects a constant count of 32 or
+		// more, and C-like targets leave it undefined, so reject it here.
+		if c, ok := b.R.(hir.UintLit); ok && c.Value >= 32 {
+			return "", diagnostic(CodeTypeMismatch, b.Span,
+				"shift %s by %d is out of range: a 32-bit value shifts by 0 to 31", b.Op, c.Value)
+		}
 		return lt, nil
 	}
 	if !isInt(lt) || lt != rt {

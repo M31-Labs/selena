@@ -77,9 +77,9 @@ func emitVertexAuthored(m ir.Module) string {
 		fmt.Fprintf(&b, "out %s %s;\n", typeName(v.Type), v.Name)
 	}
 	res := internal.NewBare(prismDialect)
+	res.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	res.Varyings = internal.NameSet(m.Varyings)
 	res.StateSampleUVFn = func(uv string) string { return fmt.Sprintf("textureLod(stateTex, %s, 0.0)", uv) }
-	res.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	b.WriteString("\nvoid main() {\n")
 	if m.UsesVertexIndex {
 		b.WriteString("  uint vertexIndex = uint(gl_VertexID);\n")
@@ -124,8 +124,8 @@ func emitFragmentAuthored(m ir.Module) string {
 		fmt.Fprintf(&b, "uniform %s %s;\n", samplerType(t, false), t.Name)
 	}
 	res := internal.NewBare(prismDialect)
-	res.StateSampleUVFn = func(uv string) string { return fmt.Sprintf("texture(stateTex, %s)", uv) }
 	res.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
+	res.StateSampleUVFn = func(uv string) string { return fmt.Sprintf("texture(stateTex, %s)", uv) }
 	writeMeshFragment(&b, m, res)
 	return b.String()
 }
@@ -164,7 +164,8 @@ func emitFeedbackFragment(m ir.Module) string {
 	}
 	b.WriteString("out vec4 fragColor;\n\n")
 	res := internal.Resolver{
-		Dialect: prismDialect,
+		TypedUintLiterals: ir.NeedsTypedUintLiterals(m),
+		Dialect:           prismDialect,
 		StateSampleFn: func(dx, dy int64) string {
 			if dx == 0 && dy == 0 {
 				return "texture(stateTex, vUV)"
@@ -210,6 +211,7 @@ func emitVertex(m ir.Module) string {
 	}
 	vary := internal.NameSet(m.Varyings)
 	res := internal.NewBare(prismDialect)
+	res.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	b.WriteString("\nvoid main() {\n")
 	for _, s := range m.Vertex.Body {
 		if vary[s.Target] {
@@ -238,6 +240,7 @@ func emitFragment(m ir.Module) string {
 		fmt.Fprintf(&b, "uniform %s %s;\n", samplerType(t, false), t.Name)
 	}
 	res := internal.NewBare(prismDialect)
+	res.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	writeMeshFragment(&b, m, res)
 	return b.String()
 }
@@ -334,6 +337,7 @@ func emitPointsFragment(m ir.Module) string {
 	}
 	b.WriteString("out vec4 fragColor;\n\n")
 	res := internal.NewBare(prismDialect)
+	res.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	res.ReturnFn = glesReturnFn
 	b.WriteString("void main() {\n")
 	// pt.pointUV → v_pointCoord in the IR; alias to gl_PointCoord (no dead varying).
@@ -376,8 +380,9 @@ func emitPostFragment(m ir.Module) string {
 	}
 	b.WriteString("out vec4 fragColor;\n\n")
 	res := internal.Resolver{
-		Dialect:  prismDialect,
-		Uniforms: internal.NameSet(m.Uniforms),
+		TypedUintLiterals: ir.NeedsTypedUintLiterals(m),
+		Dialect:           prismDialect,
+		Uniforms:          internal.NameSet(m.Uniforms),
 		SceneSampleFn: func(name, uv string) string {
 			switch name {
 			case "sceneColor":

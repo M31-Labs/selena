@@ -33,7 +33,7 @@ const usage = `selena - shader authoring for the GoSX ecosystem
 
 usage:
   selena emit <target> <file.sel> [material]  emit a shader (target: wgsl|glsl|metal|gles)
-  (emit and inspect accept --first-instance-location N: where the first instance attribute sits)
+  (emit, inspect and artifact accept --first-instance-location N: where the first instance attribute sits)
   selena check <file.sel> [material]          parse + lower a material
   selena inspect <file.sel> [material]        print material interface + descriptor
   selena graph [--format json|dot] <file.sel> [material]
@@ -77,9 +77,22 @@ func run(args []string) error {
 		fmt.Print(usage)
 		return nil
 	}
-	args, firstInstance, err := takeFirstInstanceLocation(args)
-	if err != nil {
-		return err
+	// emit and inspect take --first-instance-location from here; artifact
+	// parses it with its own flags; every other subcommand rejects it rather
+	// than silently ignoring a value that would change nothing.
+	firstInstance := 0
+	switch args[0] {
+	case "emit", "inspect":
+		var err error
+		args, firstInstance, err = takeFirstInstanceLocation(args)
+		if err != nil {
+			return err
+		}
+	case "artifact":
+	default:
+		if hasFirstInstanceLocation(args[1:]) {
+			return fmt.Errorf("selena %s does not support --first-instance-location (only emit, inspect and artifact do)", args[0])
+		}
 	}
 	switch args[0] {
 	case "emit":
@@ -351,7 +364,8 @@ func printTargetSummary(artifacts []selena.Artifact) {
 }
 
 // takeFirstInstanceLocation removes a --first-instance-location N (or =N) flag
-// from args and returns the value. It applies to emit and inspect.
+// from args and returns the value. The single-dash form works too. It applies to
+// emit and inspect; artifact parses the flag itself.
 func takeFirstInstanceLocation(args []string) ([]string, int, error) {
 	const name = "--first-instance-location"
 	var rest []string
@@ -360,14 +374,14 @@ func takeFirstInstanceLocation(args []string) ([]string, int, error) {
 		a := args[i]
 		var text string
 		switch {
-		case a == name:
+		case a == name || a == name[1:]:
 			if i+1 >= len(args) {
 				return nil, 0, fmt.Errorf("%s needs a number", name)
 			}
 			i++
 			text = args[i]
-		case strings.HasPrefix(a, name+"="):
-			text = strings.TrimPrefix(a, name+"=")
+		case strings.HasPrefix(a, name+"=") || strings.HasPrefix(a, name[1:]+"="):
+			text = a[strings.Index(a, "=")+1:]
 		default:
 			rest = append(rest, a)
 			continue
@@ -379,4 +393,15 @@ func takeFirstInstanceLocation(args []string) ([]string, int, error) {
 		value = n
 	}
 	return rest, value, nil
+}
+
+// hasFirstInstanceLocation reports whether args carry the flag in any form.
+func hasFirstInstanceLocation(args []string) bool {
+	for _, a := range args {
+		a = strings.TrimLeft(a, "-")
+		if a == "first-instance-location" || strings.HasPrefix(a, "first-instance-location=") {
+			return true
+		}
+	}
+	return false
 }
