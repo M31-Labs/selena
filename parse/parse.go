@@ -203,7 +203,7 @@ func expectedFromContext(w *walker, n *gts.Node) string {
 		case "material":
 			return "`param`, `surface`, or `}`"
 		case "member":
-			return "`param`, `surface`, `specular`, `vertex`, `varying`, `feedback`, `state`, or `}`"
+			return "`param`, `surface`, `specular`, `vertex`, `varying`, `feedback`, `state`, `render`, or `}`"
 		case "vertex":
 			return "`->`, a return type, and a vertex body"
 		case "varying_decl":
@@ -355,8 +355,10 @@ func (w *walker) material(n *gts.Node) (hir.Material, error) {
 			m.Kind = hir.KindMesh
 		case "surface":
 			m.Kind = hir.KindSurface
+		case "screen":
+			m.Kind = hir.KindScreen
 		default:
-			return m, fmt.Errorf("material %q: unknown kind %q (expected mesh, surface, points, post, or feedback)", m.Name, kindVal)
+			return m, fmt.Errorf("material %q: unknown kind %q (expected mesh, surface, points, post, screen, or feedback)", m.Name, kindVal)
 		}
 	}
 	if err := w.checkDroppedTokens(n); err != nil {
@@ -438,6 +440,15 @@ func (w *walker) material(n *gts.Node) (hir.Material, error) {
 				Type: hir.Type(w.Text(w.Field(inner, "type"))),
 				Span: w.span(inner),
 			})
+		case "render_block":
+			rb, err := w.renderBlock(inner)
+			if err != nil {
+				return m, err
+			}
+			if m.Render != nil {
+				return m, &Error{Message: fmt.Sprintf("material %q has more than one render block", m.Name), Span: rb.Span}
+			}
+			m.Render = &rb
 		case "context_block":
 			cfs, err := w.contextBlock(inner)
 			if err != nil {

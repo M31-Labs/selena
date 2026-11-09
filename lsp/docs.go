@@ -56,6 +56,7 @@ var builtinDocs = map[string]builtinDoc{
 	"sceneColorLevel": {"sceneColorLevel(uv: vec2, lod: float) -> vec4", "Backdrop color at a mip level, one pre-filtered tap instead of a blur kernel. Post materials only; sets requires.sceneColorMips."},
 	"sceneDepth":      {"sceneDepth(uv: vec2) -> float", "Backdrop depth at a screen uv. Post materials only."},
 	"sceneSize":       {"sceneSize() -> vec2", "Backdrop size in pixels. Post materials only."},
+	"screenSize":      {"screenSize() -> vec2", "Size in pixels of the target rectangle a screen pass draws into. Screen materials only; the host writes it every draw (class context in the descriptor)."},
 	"sign":            unary("sign", "-1, 0 or 1 by the sign of x"),
 	"sin":             unary("sin", "Sine of an angle in radians"),
 	"size":            {"size(tex: texture2d) -> vec2", "Width and height of the base level in texels."},
@@ -94,12 +95,14 @@ var keywordList = []string{
 	"material", "extends", "kind", "param", "context", "varying", "state",
 	"surface", "vertex", "specular", "feedback", "fn", "let", "var", "if",
 	"else", "for", "return", "break", "discard", "format", "super",
+	"render",
 }
 
 var kindDocs = map[string]string{
 	"mesh":     "Triangle mesh material: vertex and fragment stages. The default kind.",
 	"points":   "Billboard point and particle surface.",
 	"post":     "Fullscreen post pass over the rendered scene; reads sceneColor and sceneDepth.",
+	"screen":   "Fullscreen pass that draws a color with alpha into a rectangle the host chooses. Takes texture2d and array params, reads screen.uv and screenSize(), and declares blend and depth state in a render block.",
 	"feedback": "Per-cell simulation step over a statefield grid; reads state(dx, dy).",
 }
 

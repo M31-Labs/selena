@@ -21,6 +21,8 @@ func Emit(m ir.Module) (string, error) {
 		switch m.Kind {
 		case ir.KindPoints:
 			return emitPoints(m)
+		case ir.KindScreen:
+			return emitScreen(m)
 		case ir.KindPost:
 			return emitPost(m)
 		case ir.KindFeedback:

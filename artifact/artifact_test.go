@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"m31labs.dev/selena/artifact"
+	"m31labs.dev/selena/bindings"
 	"m31labs.dev/selena/result"
 )
 
@@ -121,6 +122,68 @@ func TestDataTextureFieldsRoundTrip(t *testing.T) {
 		}
 		if len(m.Layout.Requires.GLTexSizeUniforms) != 0 {
 			t.Errorf("%s: unexpected GLTexSizeUniforms", m.Name)
+		}
+	}
+}
+
+// The screen pipeline fields survive Decode, Result/FromResult and Encode, and
+// an artifact written before they existed decodes with none of them and
+// encodes back to the same bytes.
+func TestScreenPipelineRoundTrips(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("builder", "testdata", "screen-overlay.sel.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := artifact.Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	layout := f.Materials[0].Layout
+	if layout.Kind != "screen" {
+		t.Fatalf("kind = %q", layout.Kind)
+	}
+	want := bindings.PipelineState{Blend: "premultiplied", DepthTest: true}
+	if layout.Pipeline == nil || *layout.Pipeline != want {
+		t.Fatalf("pipeline = %+v, want %+v", layout.Pipeline, want)
+	}
+	if len(layout.Context) != 1 || layout.Context[0] != "screenSize" {
+		t.Errorf("context = %v", layout.Context)
+	}
+	back := artifact.FromResult(f.Materials[0].Result())
+	if !reflect.DeepEqual(back, f.Materials[0]) {
+		t.Fatal("the pipeline changed through Result/FromResult")
+	}
+	again, err := artifact.Encode(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(again) != string(data) {
+		t.Fatal("re-encoding the decoded file changed its bytes")
+	}
+
+	for _, name := range []string{"tinted", "post-tint", "data-texture", "brdf-specular"} {
+		old, err := os.ReadFile(filepath.Join("builder", "testdata", name+".sel.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(old), `"pipeline"`) {
+			t.Errorf("%s: an older artifact mentions a pipeline", name)
+		}
+		file, err := artifact.Decode(old)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		for _, m := range file.Materials {
+			if m.Layout.Pipeline != nil {
+				t.Errorf("%s/%s: decoded a pipeline from an artifact without one", name, m.Name)
+			}
+		}
+		enc, err := artifact.Encode(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(enc) != string(old) {
+			t.Errorf("%s: re-encoding changed the bytes", name)
 		}
 	}
 }

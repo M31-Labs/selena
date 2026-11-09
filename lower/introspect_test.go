@@ -13,13 +13,13 @@ func TestBuiltinsListsTheTableAndStateReads(t *testing.T) {
 	if !slices.IsSorted(names) {
 		t.Fatalf("Builtins is not sorted: %v", names)
 	}
-	for _, want := range []string{"dot", "sample", "sceneColor", "state", "stateAt", "vec4f"} {
+	for _, want := range []string{"dot", "sample", "sceneColor", "state", "stateAt", "screenSize", "vec4f"} {
 		if !slices.Contains(names, want) {
 			t.Errorf("Builtins lacks %q", want)
 		}
 	}
-	if len(names) != len(stdlib.builtins)+2 {
-		t.Fatalf("Builtins has %d names, want %d", len(names), len(stdlib.builtins)+2)
+	if len(names) != len(stdlib.builtins)+3 {
+		t.Fatalf("Builtins has %d names, want %d", len(names), len(stdlib.builtins)+3)
 	}
 }
 

@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "selena.descriptor.v1",
+  "languageVersion": "selena.lang.v1",
+  "material": "Overlay",
+  "kind": "screen",
+  "entryPoints": {
+    "vertex": "vertexMain",
+    "fragment": "fragmentMain"
+  },
+  "uniformBlock": {
+    "size": 32,
+    "fields": [
+      {
+        "name": "tint",
+        "type": "vec3",
+        "offset": 0,
+        "size": 12
+      },
+      {
+        "name": "screenSize",
+        "type": "vec2",
+        "offset": 16,
+        "size": 8,
+        "class": "context"
+      }
+    ],
+    "defaults": [
+      {
+        "name": "tint",
+        "type": "vec3",
+        "values": [
+          0.2,
+          0.8,
+          0.4
+        ]
+      }
+    ]
+  },
+  "attributes": [],
+  "textures": [],
+  "wgsl": {
+    "group": 0,
+    "binding": 0
+  },
+  "metal": {
+    "buffer": 0
+  },
+  "context": [
+    "screenSize"
+  ],
+  "pipeline": {
+    "blend": "premultiplied",
+    "depthTest": true,
+    "depthWrite": true
+  }
+}

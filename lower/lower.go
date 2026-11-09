@@ -65,7 +65,12 @@ func lowerByKind(m hir.Material) (ir.Module, bindings.Layout, error) {
 	if m.Specular != nil && m.Kind != "" && m.Kind != hir.KindMesh {
 		return ir.Module{}, bindings.Layout{}, diagnostic(CodeUnsupportedFeat, m.Specular.Span, "specular is supported only by mesh materials")
 	}
+	if err := checkRenderBlock(m); err != nil {
+		return ir.Module{}, bindings.Layout{}, err
+	}
 	switch m.Kind {
+	case hir.KindScreen:
+		return lowerScreen(m)
 	case hir.KindPoints:
 		return lowerPoints(m)
 	case hir.KindPost:

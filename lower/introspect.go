@@ -16,7 +16,7 @@ func Builtins() []string {
 	for name := range stdlib.builtins {
 		names = append(names, name)
 	}
-	names = append(names, "state", "stateAt")
+	names = append(names, "state", "stateAt", "screenSize")
 	sort.Strings(names)
 	return names
 }
@@ -34,6 +34,8 @@ func GeometryFields(kind hir.Kind, vertexStage bool) map[string]ir.Type {
 		src = pointGeometry
 	case kind == hir.KindPost:
 		src = postGeometry
+	case kind == hir.KindScreen:
+		src = screenGeometry
 	case kind == hir.KindFeedback:
 		src = map[string]geometrySpec{"uv": {typ: ir.Vec2}}
 	default:

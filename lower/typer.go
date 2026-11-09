@@ -26,6 +26,8 @@ type typer struct {
 	allowSceneSample bool
 	// allowState enables state(dx, dy) (feedback kind only).
 	allowState bool
+	// allowScreenSize enables screenSize() (screen kind only).
+	allowScreenSize bool
 	// allowVertexIndex enables the vertexIndex builtin (authored vertex stage only). B4.
 	allowVertexIndex bool
 	// allowStateAt enables stateAt(uv) reads (mesh/general materials that declare
@@ -267,6 +269,11 @@ func (t *typer) callType(c hir.Call) (ir.Type, error) {
 			return "", diagnostic(CodeInvalidCall, c.Span, "sceneSize() takes no arguments")
 		}
 		return ir.Vec2, nil
+	}
+
+	// Screen target size: screenSize() -> vec2.
+	if c.Func == "screenSize" {
+		return t.typeScreenSize(c)
 	}
 
 	// Feedback-kind previous-state read: state(dx, dy) -> vec4.
