@@ -24,10 +24,15 @@ type geometrySpec struct {
 type builtinKind string
 
 const (
-	builtinDot          builtinKind = "dot"
-	builtinLength       builtinKind = "length"
-	builtinDistance     builtinKind = "distance"
-	builtinSample       builtinKind = "sample"
+	builtinDot      builtinKind = "dot"
+	builtinLength   builtinKind = "length"
+	builtinDistance builtinKind = "distance"
+	builtinSample   builtinKind = "sample"
+	// builtinLoad / builtinTextureSize: load(tex, ix, iy) -> vec4 and
+	// size(tex) -> vec2 on a texture2d param (data textures, spec G1). Typed in
+	// lower/texture_load.go.
+	builtinLoad         builtinKind = "load"
+	builtinTextureSize  builtinKind = "texture_size"
 	builtinRGB          builtinKind = "rgb"
 	builtinUnarySame    builtinKind = "unary_same"
 	builtinSameOrScalar builtinKind = "same_or_scalar"
@@ -198,6 +203,8 @@ var stdlib = stdlibRegistry{
 		"sample":          {kind: builtinSample, arity: 2},
 		"sampleLevel":     {kind: builtinSampleLevel, arity: 3},
 		"sampleDepth":     {kind: builtinSampleDepth, arity: 2},
+		"load":            {kind: builtinLoad, arity: 3},
+		"size":            {kind: builtinTextureSize, arity: 1},
 		"sampleCube":      {kind: builtinSampleCube, arity: 2},
 		"sampleCubeLevel": {kind: builtinSampleCubeLevel, arity: 3},
 		"rgb":             {kind: builtinRGB},

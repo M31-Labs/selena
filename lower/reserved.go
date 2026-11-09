@@ -16,7 +16,10 @@ func reservedBackendName(name string) (string, bool) {
 	if reason, ok := shaderReservedNames[name]; ok {
 		return reason, true
 	}
-	if _, ok := stdlib.builtin(name); ok {
+	// load and size are builtins, but existing materials (the material library
+	// among them) name locals `size`, and a local never shadows a call, so they
+	// stay legal author names.
+	if _, ok := stdlib.builtin(name); ok && name != "load" && name != "size" {
 		return "Selena stdlib builtin", true
 	}
 	switch name {

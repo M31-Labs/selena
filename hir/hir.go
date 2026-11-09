@@ -155,6 +155,10 @@ type Param struct {
 	Span      Span
 	IsArray   bool // true: this is a fixed-size array param (B3.2)
 	ArraySize int  // element count when IsArray == true
+	// Format is the declared storage format of a texture2d param
+	// (`param t : texture2d format r16float`), or "" when none was declared.
+	// "" means the host default, rgba8unorm.
+	Format string
 }
 
 // ContextField is one field declared inside a material's `context { ... }`

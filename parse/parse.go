@@ -375,6 +375,12 @@ func (w *walker) material(n *gts.Node) (hir.Material, error) {
 				return m, err
 			}
 			m.Params = append(m.Params, p)
+		case "param_format":
+			p, err := w.param(inner)
+			if err != nil {
+				return m, err
+			}
+			m.Params = append(m.Params, p)
 		case "param_array":
 			p, err := w.paramArray(inner)
 			if err != nil {
@@ -590,6 +596,9 @@ func (w *walker) param(n *gts.Node) (hir.Param, error) {
 		Name: w.Text(w.Field(n, "name")),
 		Type: hir.Type(w.Text(w.Field(n, "type"))),
 		Span: w.span(n),
+	}
+	if f := w.Field(n, "format"); f != nil {
+		p.Format = w.Text(f)
 	}
 	if d := w.Field(n, "default"); d != nil {
 		e, err := w.expr(d)

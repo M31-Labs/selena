@@ -285,6 +285,10 @@ func VertexSampledTextures(m Module) []string {
 			used[s.Texture] = true
 		case SampleDepth:
 			used[s.Texture] = true
+		case Load:
+			used[s.Texture] = true
+		case TextureSize:
+			used[s.Texture] = true
 		}
 		return false // keep walking: collect every use
 	})

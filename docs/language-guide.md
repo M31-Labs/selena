@@ -205,6 +205,61 @@ material Panels kind post {
 }
 ```
 
+## Data Textures
+
+A `texture2d` param can hold data instead of an image: one spectrum row per
+audio frame, a scope trace, a lookup table. Three additions read it exactly.
+
+- `param spectrum : texture2d format r16float` declares the storage format. The
+  formats are `rgba8unorm` (the default when you write no `format`),
+  `rgba16float`, `rgba32float`, `r16float` and `r32float`. `format` is allowed
+  only on `texture2d` params. It tells the host which GPU texture to create and
+  appears in the descriptor as `textures[].format`; it does not change the
+  emitted shader.
+- `load(tex, ix, iy)` returns the `vec4` stored at integer texel `(ix, iy)` of
+  the base level. There is no filtering and no UV math. `ix` and `iy` are `int`:
+  convert with `int(x)` or write a literal such as `3i`. A one-channel format
+  returns `(r, 0, 0, 1)`. It works in `surface()` and in an authored `vertex()`.
+- `size(tex)` returns the width and height in texels as a `vec2`.
+
+```selena
+material SpectrogramBand {
+    param spectrum : texture2d format r16float
+    param head : float
+
+    surface(geo) -> color {
+        let sz = size(spectrum)
+        let col = int(mod(geo.uv.x * sz.x + head, sz.x))
+        let row = int(geo.uv.y * sz.y)
+        let mag = load(spectrum, col, row).r
+        return rgb(mag, mag * 0.6, 1.0 - mag)
+    }
+}
+```
+
+A complete material that also uses `load` in `vertex()` is
+`testdata/conformance/data-texture.sel`.
+
+Use `load` when the texture is a table of values. A texel then reaches the
+shader unchanged, whatever the viewport or UV scale. Use `sample` when you want
+a filtered image. Two cases leave no choice:
+
+- `r32float` and `rgba32float` cannot be filtered on WebGPU without the
+  `float32-filterable` feature, so `sample` and `sampleLevel` on them are a
+  compile error that points you to `load`.
+- `cube` and depth textures have no `load`; use `sampleCube` and `sampleDepth`.
+
+Clamp your coordinates. A coordinate outside the texture is not defined to give
+the same value on every target: WebGPU and Metal define the result, GLSL ES 3.00
+leaves it undefined, and GLSL ES 1.00 returns the edge texel. `load` and `size` are ordinary
+names to the language otherwise, so a local called `size` still compiles.
+
+The descriptor says how each texture is read: `textures[].sampleMode` is
+`"load"` when only `load` reads it and `"both"` when the material also samples
+it. A texture that is only sampled has no `sampleMode`. See
+[compatibility.md](compatibility.md) for the per-target spelling and host
+requirements.
+
 ## Numeric Literals
 
 Selena has three numeric literal forms, and the suffix chooses the type:

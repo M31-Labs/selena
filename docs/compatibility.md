@@ -37,6 +37,8 @@ Every compile result carries a `bindings.Layout` descriptor.
   `.sel` defaults.
 - `attributes` lists the vertex inputs the emitted shader expects.
 - `textures` lists each sampled texture and its per-backend binding coordinates.
+  A texture declared with a `format`, or read with `load`, also carries
+  `format` and `sampleMode` (see [Data Textures](#data-textures)).
 - `requires` lists what the host must arrange beyond uniforms, attributes and
   textures. It is absent for a material that needs nothing extra. See
   [Host Requirements](#host-requirements).
@@ -196,7 +198,8 @@ depth texture. See [engine-inputs.md](engine-inputs.md).
 
 ### textures[].vertexStage
 
-True for a texture the authored `vertex()` samples. Binding coordinates are the
+True for a texture the authored `vertex()` samples (`sampleLevel`) or reads
+with `load` or `size`. Binding coordinates are the
 same in both stages. The host must also make the binding visible to the vertex
 stage:
 
@@ -205,11 +208,71 @@ stage:
 - Metal: `setVertexTexture` and `setVertexSamplerState` at `textures[].metal`.
 - WebGL: bind the texture to `textures[].gl.unit` as usual.
 
-Only `sampleLevel` (2D, explicit LOD) is available in `vertex()`. `sample` and
+Only `sampleLevel` (2D, explicit LOD), `load` and `size` are available in
+`vertex()`. `sample` and
 `sampleCube` need implicit derivatives, which a vertex shader lacks.
 `sampleCubeLevel` is not wired into the vertex stage yet. A vertex-stage
 sampler2D is declared `highp` on the GLSL targets, because the vertex-stage
 default is `lowp`.
+
+## Data Textures
+
+`load(tex, ix, iy)` and `size(tex)` read a `texture2d` param at integer texel
+positions (see the Data Textures section of the
+[language guide](language-guide.md)). Per target:
+
+| Target | `load(t, ix, iy)` | `size(t)` | Host note |
+|---|---|---|---|
+| `wgsl` | `textureLoad(t, vec2<i32>(ix, iy), 0)` | `vec2<f32>(textureDimensions(t))` | The texture is `texture_2d<f32>` for every format. The `float32-filterable` feature is not needed to load. |
+| `gles` | `texelFetch(t, ivec2(ix, iy), 0)` | `vec2(textureSize(t, 0))` | Needs nothing beyond the texture. |
+| `glsl` | `texture2D(t, (vec2(ix, iy) + 0.5) / _texSize_t)` | `_texSize_t` | WebGL 1 has no `texelFetch`. See `requires.glTexSizeUniforms`. |
+| `metal` | `t.read(uint2(ix, iy), 0)` | `float2(t.get_width(), t.get_height())` | Needs nothing beyond the texture. |
+
+Details a host should know:
+
+- **Samplers stay.** The WGSL and Metal artifacts still declare the texture's
+  sampler, so binding numbers do not depend on how a texture is read. A texture
+  used only through `load` can bind any sampler. For `textures[].sampleMode:
+  "load"`, bind a non-filtering one.
+- **Float formats.** `textures[].format` is `rgba8unorm`, `rgba16float`,
+  `rgba32float`, `r16float` or `r32float`; the field is absent when the author
+  wrote no `format`. Create the texture in that format. For `rgba32float` and
+  `r32float` the WebGPU bind-group entry must be `unfilterable-float` with a
+  `non-filtering` sampler, and the compiler rejects `sample` and `sampleLevel`
+  on them. Uploading `r16float` to WebGL 2 needs no extension; rendering to it
+  needs `EXT_color_buffer_half_float`.
+- **Out-of-range coordinates** give a defined value on WGSL and Metal, an
+  undefined one on GLES, and the edge texel on GLSL ES 1.00. The targets do not
+  agree, so clamp in the shader. Selena's tests do not exercise this.
+- **Vertex stage.** `load` and `size` in an authored `vertex()` mark the
+  texture `vertexStage: true` and count toward `requires.glVertexTextureUnits`,
+  like `sampleLevel`.
+
+### requires.glTexSizeUniforms
+
+A list of `_texSize_<texture>` names, present when the `glsl` (WebGL 1 / GLSL ES
+1.00) artifact reads a texture with `load` or `size`. GLSL ES 1.00 has neither
+`texelFetch` nor `textureSize`, so the artifact declares `uniform highp vec2
+_texSize_<texture>` and `load` becomes a `texture2D` read at the texel centre
+divided by that size. The host must:
+
+1. Set each listed uniform to the texture's size in texels, and set it again
+   after a resize.
+2. Bind the texture with `NEAREST` min and mag filters and `CLAMP_TO_EDGE`
+   wrapping, with no mipmaps, so the read returns the stored texel.
+
+`wgsl`, `gles` and `metal` read the size off the bound texture and need nothing.
+The uniform is `highp` in the vertex and fragment stage alike, because a uniform
+shared by both stages must have the same precision to link.
+
+### textures[].format and textures[].sampleMode
+
+Both are optional and absent from descriptors of materials that do not use data
+textures; an older host that ignores them keeps working. `format` is the
+declared storage format. `sampleMode` is `"load"` (only `load` reads the
+texture) or `"both"` (`load` and a sampling call); absent means `"sample"`. A
+texture that is only passed to `size()` has no `sampleMode`. Both fields appear
+in the artifact files without a schema change.
 
 ## Current Gaps
 

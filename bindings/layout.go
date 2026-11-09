@@ -178,13 +178,21 @@ type Requirements struct {
 	// and Metal artifacts have no such limit below their per-stage texture
 	// caps (WebGPU default 16, Metal 31), so they need nothing.
 	GLVertexTextureUnits int `json:"glVertexTextureUnits,omitempty"`
+	// GLTexSizeUniforms lists the vec2 uniforms the GLSL ES 1.00 (WebGL 1)
+	// artifact declares for textures read with load() or queried with size():
+	// GLSL ES 1.00 has no texelFetch or textureSize, so load() becomes a
+	// texture2D read at the texel centre divided by this size. The host must set
+	// each uniform to its texture's size in texels (and again after a resize) and
+	// bind a NEAREST sampler. Names are "_texSize_<texture>". WGSL, GLES and
+	// Metal read the size off the bound texture and need nothing.
+	GLTexSizeUniforms []string `json:"glTexSizeUniforms,omitempty"`
 }
 
 // IsZero reports whether r carries no host requirement. It also drives
 // `json:"omitzero"` on Layout.Requires so that descriptors for materials with
 // no extra host contract are byte-identical to the pre-Requirements form.
 func (r Requirements) IsZero() bool {
-	return len(r.GLExtensions) == 0 && !r.SceneColorMips && r.GLSceneSizeUniform == "" && r.GLVertexTextureUnits == 0
+	return len(r.GLExtensions) == 0 && !r.SceneColorMips && r.GLSceneSizeUniform == "" && r.GLVertexTextureUnits == 0 && len(r.GLTexSizeUniforms) == 0
 }
 
 // StateField is one feedback-kind vec4-per-cell statefield with its per-backend
@@ -312,6 +320,20 @@ type Texture struct {
 	// EngineInputs), for a texture declared in `context { ... }`. Empty for an
 	// author texture param, which the host binds from the material's own values.
 	Engine string `json:"engine,omitempty"`
+	// Format is the storage format the author declared for a 2D texture
+	// (`format r16float`): rgba8unorm, rgba16float, rgba32float, r16float or
+	// r32float. Absent means the author declared none, and the host default
+	// (rgba8unorm) applies, as in every descriptor before this field. The host
+	// creates the GPU texture in this format. WebGPU cannot filter rgba32float
+	// or r32float without the float32-filterable feature, so the bind-group
+	// entry for those is unfilterable-float with a non-filtering sampler.
+	Format string `json:"format,omitempty"`
+	// SampleMode says how the material reads the texture: "load" (only load(),
+	// so the host should bind a nearest, non-filtering sampler), or "both"
+	// (load() and a sampling call). Absent means "sample", the only mode before
+	// this field, and also covers a texture the material only queries with
+	// size().
+	SampleMode string `json:"sampleMode,omitempty"`
 }
 
 // WGSLTexBinding gives the bind-group slots for the texture and its sampler.
