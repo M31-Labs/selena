@@ -353,8 +353,10 @@ func (w *walker) material(n *gts.Node) (hir.Material, error) {
 			m.Kind = hir.KindFeedback
 		case "mesh":
 			m.Kind = hir.KindMesh
+		case "surface":
+			m.Kind = hir.KindSurface
 		default:
-			return m, fmt.Errorf("material %q: unknown kind %q (expected mesh, points, post, or feedback)", m.Name, kindVal)
+			return m, fmt.Errorf("material %q: unknown kind %q (expected mesh, surface, points, post, or feedback)", m.Name, kindVal)
 		}
 	}
 	if err := w.checkDroppedTokens(n); err != nil {
@@ -397,6 +399,16 @@ func (w *walker) material(n *gts.Node) (hir.Material, error) {
 				return m, err
 			}
 			m.Surface = sf
+			if w.Text(w.Field(inner, "returns")) == string(hir.SurfaceT) {
+				switch m.Kind {
+				case "", hir.KindMesh, hir.KindSurface:
+					m.Kind = hir.KindSurface
+				default:
+					return m, fmt.Errorf("material %q: kind %s cannot return Surface; only mesh materials can", m.Name, m.Kind)
+				}
+			} else if m.Kind == hir.KindSurface {
+				return m, fmt.Errorf("material %q: a surface-kind material must declare surface(geo) -> Surface", m.Name)
+			}
 		case "feedback":
 			sf, err := w.feedbackFn(inner)
 			if err != nil {

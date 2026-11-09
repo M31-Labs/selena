@@ -25,6 +25,8 @@ func Emit(m ir.Module) (string, error) {
 			return emitPost(m)
 		case ir.KindFeedback:
 			return emitFeedback(m)
+		case ir.KindSurface:
+			return "", fmt.Errorf("surface material %q: the metal target has no surface hook; emit wgsl or gles", m.Name)
 		default:
 			return emitMesh(m)
 		}

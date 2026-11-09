@@ -104,6 +104,21 @@ type Resolver struct {
 	// GLSL/GLES fragment main, which writes gl_FragColor/fragColor instead of
 	// returning a value) set ReturnFn to write the output and then `return;`.
 	ReturnFn func(val string) string
+	// RefFn, when set, spells a reference before the qualified/bare rules
+	// below; it returns ok=false to fall through. Surface hooks use it to read
+	// params from their own uniform binding and geometry from the hook's
+	// selenaGeo parameter.
+	RefFn func(name string) (string, bool)
+	// TextureNames renames IR textures in sample expressions (surface hooks
+	// sample selenaSurfaceTex<i>, which the host binds). Nil keeps the names.
+	TextureNames map[string]string
+}
+
+func (r Resolver) tex(name string) string {
+	if n, ok := r.TextureNames[name]; ok {
+		return n
+	}
+	return name
 }
 
 // NewQualified builds a struct-qualified resolver (WGSL/Metal) for one stage.
@@ -208,7 +223,7 @@ func (r Resolver) CallTyped(name string, args []string, argTypes []ir.Type) stri
 }
 
 // Sample renders a 2D texture sample.
-func (r Resolver) Sample(tex, uv string) string { return r.Dialect.Sample(tex, uv) }
+func (r Resolver) Sample(tex, uv string) string { return r.Dialect.Sample(r.tex(tex), uv) }
 
 // SampleLevel renders a 2D texture sample at an explicit LOD (mip level),
 // bypassing the dialect's implicit-LOD Sample. This is a selena-only
@@ -232,6 +247,7 @@ func (r Resolver) Sample(tex, uv string) string { return r.Dialect.Sample(tex, u
 // GLSL ES 3.00 (GLES): textureLod(tex, uv, lod) — valid in any stage.
 // Metal:        tex.sample(texSampler, uv, level(lod)).
 func (r Resolver) SampleLevel(tex, uv, lod string) string {
+	tex = r.tex(tex)
 	switch r.Dialect.(type) {
 	case dialect.WGSL:
 		return "textureSampleLevel(" + tex + ", " + tex + "Sampler, " + uv + ", " + lod + ")"
@@ -424,6 +440,11 @@ func (r Resolver) UintLit(v uint64) string {
 
 // Ref resolves a reference in the current stage scope.
 func (r Resolver) Ref(name string) string {
+	if r.RefFn != nil {
+		if s, ok := r.RefFn(name); ok {
+			return s
+		}
+	}
 	if !r.Qualified {
 		return name
 	}

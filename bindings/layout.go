@@ -26,7 +26,39 @@ const (
 	SurfaceKindPoints   SurfaceKind = "points"
 	SurfaceKindPost     SurfaceKind = "post"
 	SurfaceKindFeedback SurfaceKind = "feedback"
+	// SurfaceKindSurface is a typed-surface fragment hook shaded by the
+	// host's standard lighting. Layout.Surface describes the hook.
+	SurfaceKindSurface SurfaceKind = "surface"
 )
+
+// SurfaceABI versions the surface hook contract: the SelenaSurfaceGeo and
+// SelenaSurface records, the selenaSurface entry function, and the texture
+// and uniform naming below. A change to a record field, its type or its order
+// bumps it.
+const SurfaceABI = "selena.surface.v1"
+
+// SurfaceMaxTextures is the number of 2D textures a surface hook may sample.
+// Hosts bind them in their standard material texture slots.
+const SurfaceMaxTextures = 6
+
+// SurfaceHook describes a surface-kind material's fragment hook. The hook
+// source declares the SelenaSurfaceGeo and SelenaSurface records, the param
+// uniforms, and fn selenaSurface(geo) -> SelenaSurface; it does not declare
+// its textures, which the host binds.
+type SurfaceHook struct {
+	ABI string `json:"abi"`
+	// Function is the hook entry name, "selenaSurface".
+	Function string `json:"function"`
+	// TextureNames is the identifier the hook uses for each texture, in
+	// Layout.Textures order: selenaSurfaceTex0, selenaSurfaceTex1, ... WGSL
+	// samples texture i with the sampler named TextureNames[i] + "Sampler".
+	// The host declares or renames them to its own bindings.
+	TextureNames []string `json:"textureNames,omitempty"`
+	// GLUniformPrefix is prepended to every uniform-block field name in the
+	// GLES hook, so params cannot collide with host shader globals. WGSL reads
+	// the same fields from the struct at Layout.WGSL.
+	GLUniformPrefix string `json:"glUniformPrefix"`
+}
 
 // EntryPoints names the shader entry functions in the emitted source.
 // For WGSL the vertex+fragment entries are in the same source file; for GLSL/GLES
@@ -94,6 +126,9 @@ type Layout struct {
 	// engine input (a field with Source "engine" or a texture with Engine set).
 	// Empty otherwise, so descriptors for other materials are unchanged.
 	EngineVersion string `json:"engineVersion,omitempty"`
+	// Surface describes the fragment hook of a surface-kind material. Nil for
+	// every other kind.
+	Surface *SurfaceHook `json:"surface,omitempty"`
 }
 
 // Requirements is the host-side contract a compiled material needs beyond

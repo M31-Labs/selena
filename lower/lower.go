@@ -66,6 +66,8 @@ func lowerByKind(m hir.Material) (ir.Module, bindings.Layout, error) {
 		return lowerPost(m)
 	case hir.KindFeedback:
 		return lowerFeedback(m)
+	case hir.KindSurface:
+		return lowerSurface(m)
 	default:
 		return lowerMesh(m)
 	}
