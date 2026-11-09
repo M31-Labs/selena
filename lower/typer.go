@@ -33,6 +33,13 @@ type typer struct {
 	// allowStateAt enables stateAt(uv) reads (mesh/general materials that declare
 	// a statefield; valid in both the authored vertex stage and the surface). B4.
 	allowStateAt bool
+	// allowInstanceIndex enables the instanceIndex builtin (authored vertex stage).
+	allowInstanceIndex bool
+	// instanceAttrs maps each `instance` attribute name to its type; set for the
+	// authored vertex stage only. vertexOnlyNames holds the same names in the
+	// fragment typer, to explain why they are not readable there.
+	instanceAttrs   map[string]ir.Type
+	vertexOnlyNames map[string]bool
 	// inVertexStage marks this typer as type-checking an authored vertex() body.
 	// See the identical field on resolver for why dpdx/dpdy/fwidth and the
 	// implicit-LOD and cube sampling calls are rejected here rather than typed
@@ -67,6 +74,18 @@ func (t *typer) typeOf(e hir.Expr) (ir.Type, error) {
 				return "", diagnostic(CodeUnknownName, x.Span, "vertexIndex is only available in a vertex() stage")
 			}
 			return ir.Uint, nil
+		}
+		if x.Name == "instanceIndex" {
+			if !t.allowInstanceIndex {
+				return "", diagnostic(CodeUnknownName, x.Span, "instanceIndex is only available in a vertex() stage")
+			}
+			return ir.Uint, nil
+		}
+		if it, ok := t.instanceAttrs[x.Name]; ok {
+			return it, nil
+		}
+		if t.vertexOnlyNames[x.Name] {
+			return "", diagnostic(CodeUnknownName, x.Span, "instance attribute %q is only readable in vertex(); write it to a varying and read geo.%s in surface()", x.Name, x.Name)
 		}
 		if pk, ok := t.paramKind[x.Name]; ok {
 			if it, ok := hirToIRType(pk); ok {
@@ -666,6 +685,9 @@ func (t *typer) binaryType(b hir.Binary) (ir.Type, error) {
 			return "", diagnostic(CodeTypeMismatch, b.Span, "operator %s requires bool operands, got %s and %s", b.Op, lt, rt)
 		}
 		return ir.Bool, nil
+	}
+	if ir.BitOperators[b.Op] {
+		return t.bitOperatorType(b)
 	}
 	// Arithmetic operators.
 	if b.Op != "+" && b.Op != "-" && b.Op != "*" && b.Op != "/" {

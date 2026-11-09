@@ -50,6 +50,11 @@ func emitVertexAuthored(m ir.Module) string {
 	for _, a := range m.Attributes {
 		fmt.Fprintf(&b, "in %s %s;\n", typeName(a.Type), a.Name)
 	}
+	// Instance attributes: the host sets vertexAttribDivisor(1) on them, and
+	// binds int and uint ones with vertexAttribIPointer.
+	for _, a := range m.InstanceAttributes {
+		fmt.Fprintf(&b, "in %s %s;\n", typeName(a.Type), a.Name)
+	}
 	for _, u := range m.Uniforms {
 		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
 	}
@@ -65,14 +70,22 @@ func emitVertexAuthored(m ir.Module) string {
 		fmt.Fprintf(&b, "uniform %s %s;\n", samplerType(textureNamed(m, name), true), name)
 	}
 	for _, v := range m.Varyings {
+		if internal.IsIntegral(v.Type) {
+			fmt.Fprintf(&b, "flat out %s %s;\n", typeName(v.Type), v.Name)
+			continue
+		}
 		fmt.Fprintf(&b, "out %s %s;\n", typeName(v.Type), v.Name)
 	}
 	res := internal.NewBare(prismDialect)
+	res.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	res.Varyings = internal.NameSet(m.Varyings)
 	res.StateSampleUVFn = func(uv string) string { return fmt.Sprintf("textureLod(stateTex, %s, 0.0)", uv) }
 	b.WriteString("\nvoid main() {\n")
 	if m.UsesVertexIndex {
 		b.WriteString("  uint vertexIndex = uint(gl_VertexID);\n")
+	}
+	if m.UsesInstanceIndex {
+		b.WriteString("  uint instanceIndex = uint(gl_InstanceID);\n")
 	}
 	internal.EmitStmtList(&b, m.Vertex.Body, res, "  ", false)
 	fmt.Fprintf(&b, "  gl_Position = %s;\n}\n", ir.Print(m.Vertex.Output, res))
@@ -85,6 +98,12 @@ func emitVertexAuthored(m ir.Module) string {
 func emitFragmentAuthored(m ir.Module) string {
 	var b strings.Builder
 	b.WriteString("#version 300 es\nprecision highp float;\n")
+	for _, v := range m.Varyings {
+		if internal.IsIntegral(v.Type) {
+			b.WriteString("precision highp int;\n") // fragment int defaults to mediump
+			break
+		}
+	}
 	for _, u := range m.Uniforms {
 		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
 	}
@@ -95,12 +114,17 @@ func emitFragmentAuthored(m ir.Module) string {
 		b.WriteString("uniform highp sampler2D stateTex;\n")
 	}
 	for _, v := range m.Varyings {
+		if internal.IsIntegral(v.Type) {
+			fmt.Fprintf(&b, "flat in %s %s;\n", typeName(v.Type), v.Name)
+			continue
+		}
 		fmt.Fprintf(&b, "in %s %s;\n", typeName(v.Type), v.Name)
 	}
 	for _, t := range m.Textures {
 		fmt.Fprintf(&b, "uniform %s %s;\n", samplerType(t, false), t.Name)
 	}
 	res := internal.NewBare(prismDialect)
+	res.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	res.StateSampleUVFn = func(uv string) string { return fmt.Sprintf("texture(stateTex, %s)", uv) }
 	writeMeshFragment(&b, m, res)
 	return b.String()
@@ -140,7 +164,8 @@ func emitFeedbackFragment(m ir.Module) string {
 	}
 	b.WriteString("out vec4 fragColor;\n\n")
 	res := internal.Resolver{
-		Dialect: prismDialect,
+		TypedUintLiterals: ir.NeedsTypedUintLiterals(m),
+		Dialect:           prismDialect,
 		StateSampleFn: func(dx, dy int64) string {
 			if dx == 0 && dy == 0 {
 				return "texture(stateTex, vUV)"
@@ -186,6 +211,7 @@ func emitVertex(m ir.Module) string {
 	}
 	vary := internal.NameSet(m.Varyings)
 	res := internal.NewBare(prismDialect)
+	res.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	b.WriteString("\nvoid main() {\n")
 	for _, s := range m.Vertex.Body {
 		if vary[s.Target] {
@@ -214,6 +240,7 @@ func emitFragment(m ir.Module) string {
 		fmt.Fprintf(&b, "uniform %s %s;\n", samplerType(t, false), t.Name)
 	}
 	res := internal.NewBare(prismDialect)
+	res.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	writeMeshFragment(&b, m, res)
 	return b.String()
 }
@@ -310,6 +337,7 @@ func emitPointsFragment(m ir.Module) string {
 	}
 	b.WriteString("out vec4 fragColor;\n\n")
 	res := internal.NewBare(prismDialect)
+	res.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	res.ReturnFn = glesReturnFn
 	b.WriteString("void main() {\n")
 	// pt.pointUV → v_pointCoord in the IR; alias to gl_PointCoord (no dead varying).
@@ -352,8 +380,9 @@ func emitPostFragment(m ir.Module) string {
 	}
 	b.WriteString("out vec4 fragColor;\n\n")
 	res := internal.Resolver{
-		Dialect:  prismDialect,
-		Uniforms: internal.NameSet(m.Uniforms),
+		TypedUintLiterals: ir.NeedsTypedUintLiterals(m),
+		Dialect:           prismDialect,
+		Uniforms:          internal.NameSet(m.Uniforms),
 		SceneSampleFn: func(name, uv string) string {
 			switch name {
 			case "sceneColor":

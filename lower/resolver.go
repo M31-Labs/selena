@@ -31,6 +31,8 @@ type resolver struct {
 	allowVertexIndex bool
 	// allowStateAt enables stateAt(uv) reads (mesh/general statefield). B4.
 	allowStateAt bool
+	// allowInstanceIndex enables the instanceIndex builtin (authored vertex stage).
+	allowInstanceIndex bool
 	// allowDiscard enables the fragment-only `discard` statement. Set for the
 	// fragment stage of mesh and post kinds; left false for vertex stages and for
 	// kinds (points, feedback) that do not support discard.
@@ -63,6 +65,10 @@ func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
 	case hir.UintLit:
 		return ir.UintLit{Value: x.Value}, nil
 	case hir.Ref:
+		if x.Name == "instanceIndex" && r.allowInstanceIndex {
+			// Like vertexIndex, the builtin keeps its name; each backend binds it.
+			return ir.Ref{Name: "instanceIndex"}, nil
+		}
 		if x.Name == "vertexIndex" && r.allowVertexIndex {
 			// The vertexIndex builtin keeps its name in the IR; each backend's
 			// authored-vertex emitter binds `vertexIndex` to its index source.

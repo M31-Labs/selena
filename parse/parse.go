@@ -208,6 +208,8 @@ func expectedFromContext(w *walker, n *gts.Node) string {
 			return "`->`, a return type, and a vertex body"
 		case "varying_decl":
 			return "`:` after the varying name, then a type"
+		case "instance_decl":
+			return "`:` after the instance attribute name, then a type"
 		case "feedback":
 			return "`->`, a return type, and a feedback body"
 		case "statefield":
@@ -436,6 +438,12 @@ func (w *walker) material(n *gts.Node) (hir.Material, error) {
 			m.Vertex = &vf
 		case "varying_decl":
 			m.Varyings = append(m.Varyings, hir.Varying{
+				Name: w.Text(w.Field(inner, "name")),
+				Type: hir.Type(w.Text(w.Field(inner, "type"))),
+				Span: w.span(inner),
+			})
+		case "instance_decl":
+			m.Instances = append(m.Instances, hir.InstanceAttr{
 				Name: w.Text(w.Field(inner, "name")),
 				Type: hir.Type(w.Text(w.Field(inner, "type"))),
 				Span: w.span(inner),

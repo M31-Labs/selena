@@ -1,0 +1,94 @@
+{
+  "schema": "selena.artifact.v1",
+  "compiler": "golden",
+  "languageVersion": "selena.lang.v1",
+  "source": {
+    "path": "note-quad.sel",
+    "sha256": "4243d4c60d98c9c45ae1294ea2256f9fc8d3b2d5ffc15c603d973eb53ee9f90f"
+  },
+  "options": {
+    "targets": [
+      "wgsl",
+      "metal",
+      "gles"
+    ]
+  },
+  "default": "NoteQuad",
+  "materials": [
+    {
+      "name": "NoteQuad",
+      "layout": {
+        "schemaVersion": "selena.descriptor.v1",
+        "languageVersion": "selena.lang.v1",
+        "material": "NoteQuad",
+        "kind": "mesh",
+        "entryPoints": {
+          "vertex": "vertexMain",
+          "fragment": "fragmentMain"
+        },
+        "uniformBlock": {
+          "size": 112,
+          "fields": [
+            {
+              "name": "mvp",
+              "type": "mat4",
+              "offset": 0,
+              "size": 64
+            },
+            {
+              "name": "normalMatrix",
+              "type": "mat3",
+              "offset": 64,
+              "size": 48
+            }
+          ]
+        },
+        "attributes": [],
+        "textures": [],
+        "wgsl": {
+          "group": 0,
+          "binding": 0
+        },
+        "metal": {
+          "buffer": 0
+        },
+        "instanceAttributes": [
+          {
+            "name": "rect",
+            "location": 0,
+            "type": "vec4",
+            "offset": 0
+          },
+          {
+            "name": "tone",
+            "location": 1,
+            "type": "vec4",
+            "offset": 16
+          },
+          {
+            "name": "region",
+            "location": 2,
+            "type": "int",
+            "offset": 32
+          }
+        ],
+        "instanceStride": 36
+      },
+      "shaders": [
+        {
+          "target": "wgsl",
+          "source": "struct Uniforms {\n  mvp : mat4x4<f32>,\n  normalMatrix : mat3x3<f32>,\n};\n@group(0) @binding(0) var<uniform> u : Uniforms;\n\nstruct VertexInput {\n  @location(0) rect : vec4<f32>,\n  @location(1) tone : vec4<f32>,\n  @location(2) region : i32,\n};\n\nstruct VertexOutput {\n  @builtin(position) position : vec4<f32>,\n  @location(0) vTone : vec4<f32>,\n  @location(1) @interpolate(flat) vRegion : i32,\n};\n\n@vertex\nfn vertexMain(@builtin(vertex_index) vertexIndex : u32, @builtin(instance_index) instanceIndex : u32, in : VertexInput) -> VertexOutput {\n  var out : VertexOutput;\n  let corner = vec2<f32>(f32((vertexIndex & 1u)), f32((vertexIndex >> 1u)));\n  let p = (in.rect.xy + (corner * in.rect.zw));\n  let stripe = (1.0 - (0.04 * f32((instanceIndex & 3u))));\n  out.vTone = vec4<f32>((in.tone.rgb * stripe), in.tone.a);\n  out.vRegion = in.region;\n  out.position = (u.mvp * vec4<f32>(p, 0.0, 1.0));\n  return out;\n}\n\n@fragment\nfn fragmentMain(in : VertexOutput) -> @location(0) vec4<f32> {\n  let column = f32((in.vRegion & 3i));\n  let lift = (0.25 * column);\n  return vec4<f32>(vec3<f32>((in.vTone.r + lift), in.vTone.g, in.vTone.b), 1.0);\n}\n"
+        },
+        {
+          "target": "metal",
+          "source": "#include <metal_stdlib>\nusing namespace metal;\n\nstruct Uniforms {\n  float4x4 mvp;\n  float3x3 normalMatrix;\n};\n\nstruct VertexIn {\n  float4 rect [[attribute(0)]];\n  float4 tone [[attribute(1)]];\n  int region [[attribute(2)]];\n};\n\nstruct VertexOut {\n  float4 position [[position]];\n  float4 vTone;\n  int vRegion [[flat]];\n};\n\nvertex VertexOut vertexMain(uint vertexIndex [[vertex_id]], uint instanceIndex [[instance_id]], VertexIn in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {\n  VertexOut out;\n  float2 corner = float2(float((vertexIndex & 1u)), float((vertexIndex >> 1u)));\n  float2 p = (in.rect.xy + (corner * in.rect.zw));\n  float stripe = (1.0 - (0.04 * float((instanceIndex & 3u))));\n  out.vTone = float4((in.tone.rgb * stripe), in.tone.a);\n  out.vRegion = in.region;\n  out.position = (u.mvp * float4(p, 0.0, 1.0));\n  return out;\n}\n\nfragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {\n  float column = float((in.vRegion & 3));\n  float lift = (0.25 * column);\n  return float4(float3((in.vTone.r + lift), in.vTone.g, in.vTone.b), 1.0);\n}\n"
+        },
+        {
+          "target": "gles",
+          "vertex": "#version 300 es\nin vec4 rect;\nin vec4 tone;\nin int region;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nout vec4 vTone;\nflat out int vRegion;\n\nvoid main() {\n  uint vertexIndex = uint(gl_VertexID);\n  uint instanceIndex = uint(gl_InstanceID);\n  vec2 corner = vec2(float((vertexIndex & 1u)), float((vertexIndex >> 1u)));\n  vec2 p = (rect.xy + (corner * rect.zw));\n  float stripe = (1.0 - (0.04 * float((instanceIndex & 3u))));\n  vTone = vec4((tone.rgb * stripe), tone.a);\n  vRegion = region;\n  gl_Position = (mvp * vec4(p, 0.0, 1.0));\n}\n",
+          "fragment": "#version 300 es\nprecision highp float;\nprecision highp int;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nin vec4 vTone;\nflat in int vRegion;\nout vec4 fragColor;\n\nvoid main() {\n  float column = float((vRegion & 3));\n  float lift = (0.25 * column);\n  fragColor = vec4(vec3((vTone.r + lift), vTone.g, vTone.b), 1.0);\n}\n"
+        }
+      ]
+    }
+  ]
+}

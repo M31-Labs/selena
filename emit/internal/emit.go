@@ -109,6 +109,12 @@ type Resolver struct {
 	// params from their own uniform binding and geometry from the hook's
 	// selenaGeo parameter.
 	RefFn func(name string) (string, bool)
+	// TypedUintLiterals makes a uint literal keep its "u" suffix on a backend
+	// that otherwise prints bare digits. GLSL ES 3.00 has no implicit int to
+	// uint conversion, so `vertexIndex & 1u` needs the suffix. Only materials
+	// that use instancing set it (see ir.NeedsTypedUintLiterals); every other
+	// material keeps its emitted source byte for byte.
+	TypedUintLiterals bool
 	// TextureNames renames IR textures in sample expressions (surface hooks
 	// sample selenaSurfaceTex<i>, which the host binds). Nil keeps the names.
 	TextureNames map[string]string
@@ -130,10 +136,14 @@ func NewQualified(d dialect.Dialect, m ir.Module, fragment bool) Resolver {
 	for _, au := range m.ArrayUniforms {
 		uniforms[au.Name] = true
 	}
+	attrs := NameSet(m.Attributes)
+	for _, a := range m.InstanceAttributes {
+		attrs[a.Name] = true // instance attributes read as in.<name>, like vertex attributes
+	}
 	return Resolver{
 		Dialect:    d,
 		Uniforms:   uniforms,
-		Attributes: NameSet(m.Attributes),
+		Attributes: attrs,
 		Varyings:   NameSet(m.Varyings),
 		Fragment:   fragment,
 		Qualified:  true,
@@ -435,6 +445,9 @@ func (r Resolver) UintLit(v uint64) string {
 	if _, ok := r.Dialect.(dialect.WGSL); ok {
 		return s + "u"
 	}
+	if r.TypedUintLiterals {
+		return s + "u"
+	}
 	return s
 }
 
@@ -610,3 +623,7 @@ func RecoverSplit(fn func() (string, string, error)) (vertex, fragment string, e
 	}()
 	return fn()
 }
+
+// IsIntegral reports whether t is int or uint. An integer value passed between
+// stages must be declared flat: the rasterizer cannot interpolate it.
+func IsIntegral(t ir.Type) bool { return t == ir.Int || t == ir.Uint }

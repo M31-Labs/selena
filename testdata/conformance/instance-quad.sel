@@ -1,0 +1,28 @@
+// instance-quad.sel - instanced quads with float instance attributes only.
+//
+// Draw 4 vertices per instance as a triangle strip. Float-only instancing works
+// on every target, including GLSL ES 1.00 with ANGLE_instanced_arrays: the
+// corner comes from float arithmetic on vertexIndex, not from bit operators.
+material InstanceQuad {
+    instance rect : vec4    // x, y, w, h
+    instance tone : vec4    // r, g, b, a
+    instance spin : float
+
+    varying vTone : vec4
+
+    vertex(geo) -> vec4 {
+        let fi = float(vertexIndex)
+        let corner = vec2f(fract(fi * 0.5) * 2.0, floor(fi * 0.5))
+        let c = cos(spin)
+        let s = sin(spin)
+        let centered = corner - vec2f(0.5, 0.5)
+        let turned = vec2f(centered.x * c - centered.y * s, centered.x * s + centered.y * c)
+        let p = rect.xy + (turned + vec2f(0.5, 0.5)) * rect.zw
+        vTone = tone
+        return mvp * vec4f(p, 0.0, 1.0)
+    }
+
+    surface(geo) -> color {
+        return rgb(geo.vTone.r, geo.vTone.g, geo.vTone.b)
+    }
+}

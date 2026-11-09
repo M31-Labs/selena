@@ -117,6 +117,17 @@ type Module struct {
 	// vertex-index source: WGSL @builtin(vertex_index), GLES gl_VertexID, Metal
 	// [[vertex_id]], GLSL (WebGL1) a host-supplied a_vertexIndex attribute. B4.
 	UsesVertexIndex bool
+	// InstanceAttributes are the per-instance inputs an authored vertex() reads
+	// by name, in declaration order. Their locations follow Attributes. Empty
+	// for every material that declares no `instance`.
+	InstanceAttributes []Binding
+	// InstanceBase is the location of the first instance attribute when the
+	// compile options set one; zero means directly after Attributes.
+	InstanceBase int
+	// UsesInstanceIndex is true when the authored vertex stage references the
+	// instanceIndex builtin: WGSL @builtin(instance_index), GLES gl_InstanceID,
+	// Metal [[instance_id]]. GLSL ES 1.00 has none and rejects it.
+	UsesInstanceIndex bool
 	// SurfaceOutputs names, for a KindSurface module, the fragment local that
 	// holds each SurfaceFields entry, in the same order. Empty otherwise.
 	SurfaceOutputs []string

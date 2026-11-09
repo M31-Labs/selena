@@ -74,6 +74,8 @@ var generatedNames = map[string]string{
 	"gridHeight":    "generated grid uniform",
 	"a_vertexIndex": "generated GLSL vertex-index attribute",
 	"vertexIndex":   "generated vertex-index builtin",
+	// Instancing.
+	"instanceIndex": "generated instance-index builtin",
 	// Surface-kind hook names (bindings.SurfaceABI).
 	"selenaGeo":           "generated surface hook geometry parameter",
 	"selenaParams":        "generated surface hook uniform binding",

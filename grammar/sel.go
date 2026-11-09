@@ -65,7 +65,7 @@ func SelenaGrammar() *grammargen.Grammar {
 	// design). It MUST stay last in this Choice and be Define-d at the very END
 	// of the function, after every other rule, to preserve the LALR symbol-ID
 	// order of everything above.
-	g.Define("member", grammargen.Choice(sym("param"), sym("surface"), sym("feedback"), sym("statefield"), sym("param_array"), sym("vertex"), sym("varying_decl"), sym("context_block"), sym("specular"), sym("param_format"), sym("render_block")))
+	g.Define("member", grammargen.Choice(sym("param"), sym("surface"), sym("feedback"), sym("statefield"), sym("param_array"), sym("vertex"), sym("varying_decl"), sym("context_block"), sym("specular"), sym("param_format"), sym("render_block"), sym("instance_decl")))
 
 	g.Define("param", seq(
 		s("param"),
@@ -170,6 +170,20 @@ func SelenaGrammar() *grammargen.Grammar {
 		grammargen.PrecLeft(-2, seq(
 			field("left", sym("expression")),
 			field("operator", s("||")),
+			field("right", sym("expression")),
+		)),
+		// Bit operators on int and uint, with Go's precedence: & << >> bind like
+		// * and /, and | ^ bind like + and -. Both groups sit above the
+		// comparisons, so `x & 1u == 1u` reads (x & 1u) == 1u. Appended after
+		// || so the alternatives above keep their order.
+		grammargen.PrecLeft(2, seq(
+			field("left", sym("expression")),
+			field("operator", grammargen.Choice(s("&"), s("<<"), s(">>"))),
+			field("right", sym("expression")),
+		)),
+		grammargen.PrecLeft(1, seq(
+			field("left", sym("expression")),
+			field("operator", grammargen.Choice(s("|"), s("^"))),
 			field("right", sym("expression")),
 		)),
 	))
@@ -580,6 +594,16 @@ func SelenaGrammar() *grammargen.Grammar {
 	g.Define("render_setting", seq(
 		field("key", sym("identifier")),
 		field("value", sym("identifier")),
+	))
+
+	// instance_decl: `instance rect : vec4`, a per-instance vertex attribute that
+	// vertex() reads by name. Appended LAST to the member Choice and Defined at
+	// the very end, like render_block, to keep every earlier LALR symbol ID.
+	g.Define("instance_decl", seq(
+		s("instance"),
+		field("name", sym("identifier")),
+		s(":"),
+		field("type", sym("identifier")),
 	))
 
 	g.SetWord("identifier")

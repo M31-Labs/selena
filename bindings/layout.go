@@ -133,6 +133,15 @@ type Layout struct {
 	// its render block. Nil for every other kind, so their descriptors are
 	// unchanged. Selena only declares it; the host applies it.
 	Pipeline *PipelineState `json:"pipeline,omitempty"`
+	// InstanceAttributes lists the per-instance vertex attributes of a mesh
+	// material that declares `instance` attributes, with the byte offset of each
+	// in one packed instance record. Nil for every other material, so their
+	// descriptors are unchanged. See InstanceAttribute.
+	InstanceAttributes []InstanceAttribute `json:"instanceAttributes,omitempty"`
+	// InstanceStride is the size in bytes of one packed instance record: the
+	// array stride a host sets for the instance-rate vertex buffer. Zero when
+	// the material declares no instance attributes.
+	InstanceStride int `json:"instanceStride,omitempty"`
 }
 
 // Requirements is the host-side contract a compiled material needs beyond

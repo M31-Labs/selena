@@ -83,6 +83,9 @@ type Options struct {
 	// Modules lists the materiallib modules linked into the program before
 	// compiling, in the order given.
 	Modules []string `json:"modules,omitempty"`
+	// FirstInstanceLocation is the location of the first instance attribute
+	// when the build set one (see selena.CompileOptions); omitted when zero.
+	FirstInstanceLocation int `json:"firstInstanceLocation,omitempty"`
 }
 
 // Material is one compiled material.

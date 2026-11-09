@@ -221,16 +221,26 @@ func emitMeshAuthored(m ir.Module) (string, error) {
 	}
 
 	// VertexInput only when attributes are actually read (procedural geometry has none).
-	if len(m.Attributes) > 0 {
+	// Instance attributes take the locations after the vertex attributes; the
+	// host binds their buffer with stepMode "instance".
+	hasInput := len(m.Attributes) > 0 || len(m.InstanceAttributes) > 0
+	if hasInput {
 		b.WriteString("struct VertexInput {\n")
 		for i, a := range m.Attributes {
 			fmt.Fprintf(&b, "  @location(%d) %s : %s,\n", i, a.Name, typeName(a.Type))
+		}
+		for i, a := range m.InstanceAttributes {
+			fmt.Fprintf(&b, "  @location(%d) %s : %s,\n", m.InstanceLocation(i), a.Name, typeName(a.Type))
 		}
 		b.WriteString("};\n\n")
 	}
 
 	b.WriteString("struct VertexOutput {\n  @builtin(position) position : vec4<f32>,\n")
 	for i, v := range m.Varyings {
+		if internal.IsIntegral(v.Type) {
+			fmt.Fprintf(&b, "  @location(%d) @interpolate(flat) %s : %s,\n", i, v.Name, typeName(v.Type))
+			continue
+		}
 		fmt.Fprintf(&b, "  @location(%d) %s : %s,\n", i, v.Name, typeName(v.Type))
 	}
 	b.WriteString("};\n\n")
@@ -242,7 +252,10 @@ func emitMeshAuthored(m ir.Module) (string, error) {
 	if m.UsesVertexIndex {
 		vparams = append(vparams, "@builtin(vertex_index) vertexIndex : u32")
 	}
-	if len(m.Attributes) > 0 {
+	if m.UsesInstanceIndex {
+		vparams = append(vparams, "@builtin(instance_index) instanceIndex : u32")
+	}
+	if hasInput {
 		vparams = append(vparams, "in : VertexInput")
 	}
 	fmt.Fprintf(&b, "@vertex\nfn vertexMain(%s) -> VertexOutput {\n  var out : VertexOutput;\n", strings.Join(vparams, ", "))

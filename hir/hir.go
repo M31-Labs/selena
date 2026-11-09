@@ -120,6 +120,16 @@ type Varying struct {
 	Span Span
 }
 
+// InstanceAttr declares a per-instance vertex attribute
+// (`instance <name> : <type>`). vertex() reads it by its bare name; the host
+// streams one record of all instance attributes per instance. Only mesh
+// materials that author a vertex() hook may declare them.
+type InstanceAttr struct {
+	Name string
+	Type Type
+	Span Span
+}
+
 // Material is one authored material.
 type Material struct {
 	Name     string
@@ -137,6 +147,9 @@ type Material struct {
 	// Varyings lists the author-declared vertex->fragment interpolants written by
 	// Vertex and read by Surface as geo.<name>. Empty unless a vertex() is authored. B4.
 	Varyings []Varying
+	// Instances lists the `instance name : type` declarations, in declaration
+	// order. They become instance-rate vertex attributes read by vertex().
+	Instances []InstanceAttr
 	// Context lists the declared engine-injected uniforms (`context { ... }`).
 	// Unlike Params, a context field's value is supplied by the host every frame;
 	// it lowers into the SAME uniform block as params (appended after them) but

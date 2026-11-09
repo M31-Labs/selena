@@ -48,6 +48,7 @@ vertex ScreenOut vertexMain(uint vid [[vertex_id]]) {
 `)
 
 	fs := internal.NewQualified(prismDialect, m, true)
+	fs.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	fragSig := "fragment float4 fragmentMain(ScreenOut in [[stage_in]]"
 	if hasUniforms {
 		fragSig += ", constant Uniforms& u [[buffer(0)]]"

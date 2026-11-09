@@ -22,7 +22,7 @@ func TestMetalCompilesWithXcrun(t *testing.T) {
 		t.Skip("no Metal compiler (xcrun metal) on this host")
 	}
 	var files []string
-	for _, pattern := range []string{"../testdata/conformance/*.sel", "../testdata/conformance/material-library/*.sel", "../examples/*.sel", "../examples/material-library/*.sel"} {
+	for _, pattern := range []string{"../testdata/conformance/*.sel", "../testdata/conformance/material-library/*.sel", "../testdata/instancing/*.sel", "../examples/*.sel", "../examples/material-library/*.sel"} {
 		matches, err := filepath.Glob(pattern)
 		if err != nil {
 			t.Fatal(err)

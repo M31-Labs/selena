@@ -88,6 +88,9 @@ func CompileProgram(p hir.Program, opts CompileOptions) (Result, error) {
 	if err != nil {
 		return Result{}, compileError(fmt.Errorf("lower %s: %w", p.Materials[idx].Name, err))
 	}
+	if err := placeInstanceAttributes(&mod, &layout, opts.FirstInstanceLocation); err != nil {
+		return Result{}, compileError(err)
+	}
 	meshMRT := opts.SpecularMRT && (mod.Kind == "" || mod.Kind == ir.KindMesh)
 	if meshMRT {
 		layout.EntryPoints.FragmentSpecular = "fragmentMainSpecular"
@@ -97,6 +100,12 @@ func CompileProgram(p hir.Program, opts CompileOptions) (Result, error) {
 	if targets == nil && mod.Kind == ir.KindSurface {
 		// Surface hooks exist for the WebGPU and WebGL 2 hosts only.
 		targets = []Target{TargetWGSL, TargetGLES}
+	}
+	if targets == nil && len(ir.GLSLInstancingUnsupported(mod)) > 0 {
+		// A material that needs gl_InstanceID, integer vertex attributes or bit
+		// operators has no GLSL ES 1.00 form. Leave that target out of the
+		// default set; asking for it by name still reports why it cannot be built.
+		targets = withoutTarget(AllTargets(), TargetGLSL)
 	}
 	artifacts, err := emitArtifacts(mod, targets)
 	if err != nil {
@@ -199,4 +208,14 @@ func emitArtifact(mod ir.Module, target Target) (Artifact, error) {
 	default:
 		return Artifact{}, fmt.Errorf("unknown target %q", target)
 	}
+}
+
+func withoutTarget(targets []Target, drop Target) []Target {
+	out := make([]Target, 0, len(targets))
+	for _, t := range targets {
+		if t != drop {
+			out = append(out, t)
+		}
+	}
+	return out
 }

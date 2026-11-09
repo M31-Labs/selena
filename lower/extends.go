@@ -62,6 +62,11 @@ func resolveExtends(m hir.Material, all []hir.Material) (hir.Material, error) {
 	// side would just move the silent drop, and super.vertex() composition
 	// (like control-flow parents in super.surface, see inline.go) is not
 	// supported yet.
+	// Instance attributes are inherited like params: parent first, so the
+	// record layout of a derived material starts with its parent's.
+	if len(parent.Instances) > 0 {
+		out.Instances = append(append([]hir.InstanceAttr(nil), parent.Instances...), m.Instances...)
+	}
 	if parent.Vertex != nil {
 		if m.Vertex != nil {
 			return m, diagnostic(CodeUnsupportedFeat, m.Span,

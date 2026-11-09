@@ -45,6 +45,7 @@ func emitSurface(m ir.Module) string {
 		fmt.Fprintf(&b, "uniform %s %s%s[%d];\n", typeName(au.ElemType), SurfaceUniformPrefix, au.Name, au.Count)
 	}
 	fs := internal.SurfaceResolver(internal.NewBare(prismDialect), m, SurfaceUniformPrefix)
+	fs.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	b.WriteString("SelenaSurface selenaSurface(SelenaSurfaceGeo selenaGeo) {\n")
 	internal.EmitStmtList(&b, m.Fragment.Body, fs, "  ", false)
 	fmt.Fprintf(&b, "  return SelenaSurface(%s);\n}\n", strings.Join(m.SurfaceOutputs, ", "))

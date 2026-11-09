@@ -152,6 +152,9 @@ func (a *analysis) materialName(m hir.Material, word string, offset int) (symbol
 		if word == body.Geo {
 			return a.declared(word, "(geometry) "+word+" — the geometry record; read fields with `"+word+".`", hir.Span{}), true
 		}
+		if doc, ok := vertexBuiltinDocs[word]; ok && vertex {
+			return symbol{Name: word, DeclStart: -1, DeclEnd: -1, Hover: "```selena\n(builtin) " + word + " : uint\n```\n" + doc}, true
+		}
 		for _, l := range locals(body.Body) {
 			if l.Name != word {
 				continue
@@ -192,6 +195,11 @@ func (a *analysis) materialName(m hir.Material, word string, offset int) (symbol
 		for _, v := range owner.Varyings {
 			if v.Name == word {
 				return a.declared(word, "```selena\n(varying) "+word+" : "+string(v.Type)+"\n```"+inherited, v.Span), true
+			}
+		}
+		for _, in := range owner.Instances {
+			if in.Name == word {
+				return a.declared(word, "```selena\n(instance) "+word+" : "+string(in.Type)+"\n```\nPer-instance vertex attribute; read it in vertex(), pass it to surface() through a varying."+inherited, in.Span), true
 			}
 		}
 		for _, s := range owner.States {
@@ -513,6 +521,14 @@ func (a *analysis) scopeCompletions(m hir.Material, inMaterial bool, offset int,
 			}
 			for _, c := range owner.Context {
 				add(CompletionItem{Label: c.Name, Kind: CompletionVariable, Detail: "context " + paramType(c.Type, c.IsArray, c.ArraySize)})
+			}
+			for _, in := range owner.Instances {
+				add(CompletionItem{Label: in.Name, Kind: CompletionVariable, Detail: "instance " + string(in.Type)})
+			}
+		}
+		if _, vertex := stageAt(m, offset); vertex {
+			for _, name := range sortedKeys(vertexBuiltinDocs) {
+				add(CompletionItem{Label: name, Kind: CompletionVariable, Detail: "uint (builtin)", Documentation: ptr(markdown(vertexBuiltinDocs[name]))})
 			}
 		}
 	}

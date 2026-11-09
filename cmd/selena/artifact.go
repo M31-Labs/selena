@@ -15,7 +15,7 @@ import (
 	"m31labs.dev/selena/result"
 )
 
-const artifactUsage = "selena artifact [-o out.sel.json] [-targets wgsl,gles] [-materials A,B] [-modules brdf,lighting] [-specular-mrt] [-path label] [-check] <file.sel>"
+const artifactUsage = "selena artifact [-o out.sel.json] [-targets wgsl,gles] [-materials A,B] [-modules brdf,lighting] [-specular-mrt] [-first-instance-location N] [-path label] [-check] <file.sel>"
 
 // artifactCommand writes or checks a deterministic artifact file for one .sel
 // source. Without -o it writes <file.sel>.json next to the source; "-o -"
@@ -28,6 +28,7 @@ func artifactCommand(args []string, stdout io.Writer) error {
 	materialList := fs.String("materials", "", "comma-separated material names (default every material)")
 	moduleList := fs.String("modules", "", "comma-separated materiallib modules to link")
 	specular := fs.Bool("specular-mrt", false, "add the color/specular fragment variant to mesh materials")
+	firstInstance := fs.Int("first-instance-location", 0, "location of the first instance attribute (default: after the vertex attributes)")
 	pathLabel := fs.String("path", "", "source path recorded in the file (default the file's base name)")
 	checkOnly := fs.Bool("check", false, "check the existing artifact instead of writing it")
 	if err := fs.Parse(args); err != nil {
@@ -77,6 +78,8 @@ func artifactCommand(args []string, stdout io.Writer) error {
 		Targets:     targets,
 		SpecularMRT: *specular,
 		Modules:     artifactModules(*moduleList),
+
+		FirstInstanceLocation: *firstInstance,
 	})
 	if err != nil {
 		return attachSource(file, source, err)

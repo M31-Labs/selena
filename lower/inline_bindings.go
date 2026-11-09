@@ -28,6 +28,9 @@ func materialNames(m hir.Material) map[string]bool {
 	for _, v := range m.Varyings {
 		names[v.Name] = true
 	}
+	for _, a := range m.Instances {
+		names[a.Name] = true
+	}
 	var visit func([]hir.Stmt)
 	visit = func(ss []hir.Stmt) {
 		for _, st := range ss {

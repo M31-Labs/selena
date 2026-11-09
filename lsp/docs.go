@@ -95,7 +95,13 @@ var keywordList = []string{
 	"material", "extends", "kind", "param", "context", "varying", "state",
 	"surface", "vertex", "specular", "feedback", "fn", "let", "var", "if",
 	"else", "for", "return", "break", "discard", "format", "super",
-	"render",
+	"render", "instance",
+}
+
+// vertexBuiltinDocs documents the values only vertex() can read.
+var vertexBuiltinDocs = map[string]string{
+	"vertexIndex":   "uint. Index of the vertex being shaded; use it for procedural geometry. GLSL ES 1.00 reads a host-supplied `a_vertexIndex` float attribute.",
+	"instanceIndex": "uint. Index of the instance being drawn. Not available on GLSL ES 1.00: pass an index as an instance attribute instead.",
 }
 
 var kindDocs = map[string]string{

@@ -139,6 +139,9 @@ Mesh and general materials may author a full `vertex() -> vec4` stage — the
 author computes the clip-space position and writes any declared varyings, and
 `vertex(geo) -> vec4` reads the raw `position`/`normal`/`uv` attributes. Points,
 post, screen, and feedback materials reject an authored vertex stage with a diagnostic.
+Mesh materials with an authored vertex stage may also declare `instance name : type`
+attributes and read `instanceIndex` to draw many instances in one call; see the
+Instancing section of the language guide.
 A separate composing hook — `vertex(geo) { ... }` that mutates geometry while
 the default derived-field and interpolant pipeline still runs — is not
 implemented yet.
