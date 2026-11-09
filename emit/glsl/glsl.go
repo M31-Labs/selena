@@ -23,6 +23,8 @@ func Emit(m ir.Module) (vertex, fragment string, err error) {
 		switch m.Kind {
 		case ir.KindPoints:
 			return emitPointsVertex(m), emitPointsFragment(m), nil
+		case ir.KindScreen:
+			return emitScreenVertex(m), emitScreenFragment(m), nil
 		case ir.KindPost:
 			return emitPostVertex(m), emitPostFragment(m), nil
 		case ir.KindFeedback:

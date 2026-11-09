@@ -39,6 +39,9 @@ Every compile result carries a `bindings.Layout` descriptor.
 - `textures` lists each sampled texture and its per-backend binding coordinates.
   A texture declared with a `format`, or read with `load`, also carries
   `format` and `sampleMode` (see [Data Textures](#data-textures)).
+- `pipeline` is present only for `kind: "screen"` materials. It carries the
+  blend and depth state the material declared. See [Screen
+  Materials](#screen-materials).
 - `requires` lists what the host must arrange beyond uniforms, attributes and
   textures. It is absent for a material that needs nothing extra. See
   [Host Requirements](#host-requirements).
@@ -292,6 +295,71 @@ declared storage format. `sampleMode` is `"load"` (only `load` reads the
 texture) or `"both"` (`load` and a sampling call); absent means `"sample"`. A
 texture that is only passed to `size()` has no `sampleMode`. Both fields appear
 in the artifact files without a schema change.
+
+## Screen Materials
+
+A `kind screen` material (see the Screen Materials section of the [language
+guide](language-guide.md)) is a fullscreen pass that returns a colour with
+alpha and reads no scene colour. The descriptor has `kind: "screen"` and a
+`pipeline` object:
+
+```json
+"pipeline": { "blend": "additive", "depthTest": false, "depthWrite": false }
+```
+
+`blend` is `opaque`, `alpha`, `premultiplied` or `additive`. `depthTest` and
+`depthWrite` come from the `depth` word: `off` is false and false, `test` is
+true and false, `write` is true and true. A material with no `render` block gets
+`alpha`, false, false. The field is absent on every other kind, and older
+descriptors and artifact files decode as before. Selena only declares this
+state. The host builds its pipeline from it:
+
+| `blend` | Colour result (`s` shader output, `d` target) | WebGPU colour factors (src, dst) | Alpha factors (src, dst) |
+|---|---|---|---|
+| `opaque` | `s.rgb` | blending off | blending off |
+| `alpha` | `s.rgb*s.a + d*(1-s.a)` | `src-alpha`, `one-minus-src-alpha` | `one`, `one-minus-src-alpha` |
+| `premultiplied` | `s.rgb + d*(1-s.a)` | `one`, `one-minus-src-alpha` | `one`, `one-minus-src-alpha` |
+| `additive` | `s.rgb*s.a + d` | `src-alpha`, `one` | `one`, `one` |
+
+The same factors apply with `gl.blendFuncSeparate` and Metal's
+`MTLBlendFactor`. A host that draws into an opaque swapchain never reads the
+alpha channel.
+
+**Placement and draw call.** The vertex stage is a fullscreen triangle with no
+vertex buffer, so the host places the pass with the **viewport and scissor**
+set to the target rectangle. `screen.uv` is `0..1` across that rectangle with
+the origin at the top left, and `screenSize()` is the rectangle's size in
+pixels, on every target. Per target:
+
+| Target | Vertex stage | Draw call | Bindings |
+|---|---|---|---|
+| `wgsl` | `@builtin(vertex_index)` | `draw(3)` | Uniform block `@group(0) @binding(0)`, present only when the material has a uniform; texture `i` at binding `1+2i` and its sampler at `2+2i`. Same arithmetic as a mesh material, with no `mvp` or `normalMatrix`. |
+| `gles` | `gl_VertexID` | `drawArrays(TRIANGLES, 0, 3)` | Uniforms by name, textures on units from `textures[].gl.unit`. |
+| `glsl` | `attribute vec2 a_position` | `drawArrays` over a clip-space triangle `(-1,-1) (3,-1) (-1,3)` or a quad over `-1..1` | Uniforms by name, textures on their units, `_texSize_<name>` per `requires.glTexSizeUniforms`. |
+| `metal` | `[[vertex_id]]` | `drawPrimitives(.triangle, 0, 3)` | Uniforms at `[[buffer(0)]]` when present, texture `i` at `[[texture(i)]]` and `[[sampler(i)]]`. |
+
+Notes for the host:
+
+- **`screenSize`.** When the body calls `screenSize()`, the uniform block has a
+  `vec2` field `screenSize` tagged `class: "context"` and listed in
+  `layout.context`. Write the target rectangle's size in pixels each draw. It is
+  absent when the body does not call `screenSize()`.
+- **WebGL 1 precision.** The `glsl` fragment declares `precision highp float`,
+  because screen passes read data such as decibel levels and texel indices that
+  `mediump` cannot hold. Fragment `highp` is optional in GLSL ES 1.00; check
+  `getShaderPrecisionFormat` and refuse the material on a device without it.
+- **`uv` on WebGL 1.** The `glsl` vertex stage maps clip `y = +1` to `uv.y = 0`,
+  so the origin matches the other targets whatever triangle or quad you draw.
+  (`post` on this target maps the other way.)
+- **Depth.** `depthTest` and `depthWrite` assume the host has a depth buffer
+  attached to the target. The shader writes no depth: the fullscreen triangle
+  has `z = 0`, which the host may remap with the viewport's depth range.
+- **Data textures.** `load`, `size`, `format` and `sampleMode` behave as in
+  [Data Textures](#data-textures).
+- **Validation.** The screen conformance shaders compile under naga (WGSL) and
+  glslangValidator (ESSL 100 and 300). The Metal source is compiled only by the
+  optional `xcrun metal` check. No browser or GPU has drawn a screen pass in
+  this repository, so blend and depth behaviour is the host's to confirm.
 
 ## Current Gaps
 

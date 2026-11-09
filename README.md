@@ -138,7 +138,7 @@ shader keywords, generated symbols, or Selena stdlib builtins.
 Mesh and general materials may author a full `vertex() -> vec4` stage — the
 author computes the clip-space position and writes any declared varyings, and
 `vertex(geo) -> vec4` reads the raw `position`/`normal`/`uv` attributes. Points,
-post, and feedback materials reject an authored vertex stage with a diagnostic.
+post, screen, and feedback materials reject an authored vertex stage with a diagnostic.
 A separate composing hook — `vertex(geo) { ... }` that mutates geometry while
 the default derived-field and interpolant pipeline still runs — is not
 implemented yet.

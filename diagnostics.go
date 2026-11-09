@@ -130,6 +130,8 @@ func diagnosticHint(code, message string) string {
 		return "Rename one of the two declarations; they land on the same emitted uniform, texture, attribute, or varying slot."
 	case "SEL1007":
 		return "Declare the engine input with the type the registry gives it (see bindings.EngineInputs), or rename the context field if it is host-specific."
+	case "SEL1008":
+		return "Write the render block only in a `kind screen` material, as `render { blend <opaque|alpha|premultiplied|additive>  depth <off|test|write> }`."
 	case "SEL2001":
 		return "Declare a material param or let binding with this name, or correct the identifier."
 	case "SEL2002":

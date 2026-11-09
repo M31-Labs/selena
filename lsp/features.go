@@ -18,7 +18,7 @@ import (
 var geoDocs = map[string]string{
 	"position":    "Vertex position attribute. Scene3D bakes mesh positions to world space.",
 	"normal":      "Vertex normal attribute.",
-	"uv":          "Texture coordinate.",
+	"uv":          "Texture coordinate. In a screen or post material: 0..1 across the target, origin at the top left.",
 	"worldNormal": "World-space normal (normalMatrix times normal, normalized); synthesized from the normal attribute.",
 	"worldPos":    "World-space surface position.",
 	"pointUV":     "Position across the point billboard, 0..1 on both axes.",
@@ -26,6 +26,37 @@ var geoDocs = map[string]string{
 	"alpha":       "Point alpha, already multiplied by material opacity.",
 	"pointSize":   "Billboard size in pixels.",
 	"fogFactor":   "Exponential fog factor 0..1 for this point.",
+}
+
+// renderDocs explains the render block keys and the words each takes.
+var renderDocs = map[string]string{
+	"blend": "How the pass combines with what is already in the target: opaque, alpha, premultiplied or additive. The default is alpha. Selena declares it; the host applies it.",
+	"depth": "Depth state of the pass: off (no test, no write), test (test, no write) or write (test and write). The default is off.",
+}
+
+var renderWords = map[string][]string{
+	"blend": {"opaque", "alpha", "premultiplied", "additive"},
+	"depth": {"off", "test", "write"},
+}
+
+// inRenderBlock reports whether offset is inside the braces of a render block.
+// It reads the text, not the parsed program, so it still works while the block
+// is half typed and the file does not parse.
+func inRenderBlock(src []byte, offset int) bool {
+	for i := offset - 1; i >= 0; i-- {
+		switch src[i] {
+		case '}':
+			return false
+		case '{':
+			_, at := prevNonSpace(src, i)
+			if at < 0 {
+				return false
+			}
+			w, _, _, ok := wordAt(src, at+1)
+			return ok && w == "render"
+		}
+	}
+	return false
 }
 
 // symbol is what a name at the cursor refers to.
@@ -96,6 +127,10 @@ func (a *analysis) resolveWord(word string, start, end int) (symbol, bool) {
 	}
 	if doc, ok := typeDocs[word]; ok {
 		none.Hover = "```selena\n" + word + "\n```\n" + doc
+		return none, true
+	}
+	if doc, ok := renderDocs[word]; ok && inRenderBlock(a.src, start) {
+		none.Hover = "```selena\nrender { " + word + " ... }\n```\n" + doc
 		return none, true
 	}
 	if doc, ok := kindDocs[word]; ok {
@@ -388,6 +423,18 @@ func (a *analysis) completion(pos Position) []CompletionItem {
 	case prev == ':' || prev == '<' || prev == ',' && a.inTypeArgs(start):
 		for _, name := range sortedKeys(typeDocs) {
 			add(CompletionItem{Label: name, Kind: CompletionTypeParameter, Documentation: ptr(markdown(typeDocs[name]))})
+		}
+	case inRenderBlock(a.src, start):
+		for _, key := range sortedKeys(renderWords) {
+			if precededByWord(a.src, start, key) {
+				for _, word := range renderWords[key] {
+					add(CompletionItem{Label: word, Kind: CompletionKeyword})
+				}
+				return items
+			}
+		}
+		for _, key := range sortedKeys(renderDocs) {
+			add(CompletionItem{Label: key, Kind: CompletionKeyword, Documentation: ptr(markdown(renderDocs[key]))})
 		}
 	case precededByWord(a.src, start, "kind"):
 		for _, name := range sortedKeys(kindDocs) {

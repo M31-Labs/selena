@@ -129,6 +129,10 @@ type Layout struct {
 	// Surface describes the fragment hook of a surface-kind material. Nil for
 	// every other kind.
 	Surface *SurfaceHook `json:"surface,omitempty"`
+	// Pipeline is the blend and depth state a screen-kind material declares in
+	// its render block. Nil for every other kind, so their descriptors are
+	// unchanged. Selena only declares it; the host applies it.
+	Pipeline *PipelineState `json:"pipeline,omitempty"`
 }
 
 // Requirements is the host-side contract a compiled material needs beyond

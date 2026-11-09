@@ -65,7 +65,7 @@ func SelenaGrammar() *grammargen.Grammar {
 	// design). It MUST stay last in this Choice and be Define-d at the very END
 	// of the function, after every other rule, to preserve the LALR symbol-ID
 	// order of everything above.
-	g.Define("member", grammargen.Choice(sym("param"), sym("surface"), sym("feedback"), sym("statefield"), sym("param_array"), sym("vertex"), sym("varying_decl"), sym("context_block"), sym("specular"), sym("param_format")))
+	g.Define("member", grammargen.Choice(sym("param"), sym("surface"), sym("feedback"), sym("statefield"), sym("param_array"), sym("vertex"), sym("varying_decl"), sym("context_block"), sym("specular"), sym("param_format"), sym("render_block")))
 
 	g.Define("param", seq(
 		s("param"),
@@ -564,6 +564,22 @@ func SelenaGrammar() *grammargen.Grammar {
 		field("type", sym("identifier")),
 		s("format"),
 		field("format", sym("identifier")),
+	))
+
+	// render_block: `render { blend additive  depth off }`, the pipeline state a
+	// `kind screen` material declares. Each setting is a generic key/value pair
+	// of identifiers, so only `render` becomes a keyword; the parser checks the
+	// key and value words and reports an unknown one with the allowed list.
+	// Appended LAST to the member Choice and Defined at the very end to keep
+	// every earlier LALR symbol ID.
+	g.Define("render_block", seq(
+		s("render"), s("{"),
+		grammargen.Repeat(sym("render_setting")),
+		s("}"),
+	))
+	g.Define("render_setting", seq(
+		field("key", sym("identifier")),
+		field("value", sym("identifier")),
 	))
 
 	g.SetWord("identifier")

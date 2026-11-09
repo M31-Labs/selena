@@ -296,6 +296,9 @@ func printLayoutSummary(layout bindings.Layout) {
 	fmt.Println("layout:")
 	fmt.Printf("  schema: %s\n", layout.SchemaVersion)
 	fmt.Printf("  language: %s\n", layout.LanguageVersion)
+	if p := layout.Pipeline; p != nil {
+		fmt.Printf("  pipeline: blend %s, depth test %t, depth write %t\n", p.Blend, p.DepthTest, p.DepthWrite)
+	}
 	fmt.Printf("  uniform block: %d bytes\n", layout.UniformBlock.Size)
 	for _, f := range layout.UniformBlock.Fields {
 		fmt.Printf("    %s: %s offset=%d size=%d\n", f.Name, f.Type, f.Offset, f.Size)

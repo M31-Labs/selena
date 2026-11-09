@@ -40,6 +40,12 @@ func resolveExtends(m hir.Material, all []hir.Material) (hir.Material, error) {
 		out.Specular = parent.Specular
 	}
 
+	// A derived screen material inherits the parent's pipeline state unless it
+	// writes its own render block.
+	if out.Render == nil {
+		out.Render = parent.Render
+	}
+
 	// A parent's vertex() stage — and the varyings/statefield it writes and
 	// reads — used to be dropped here with no diagnostic: out := m above
 	// already carries the CHILD's own Vertex/Varyings/States (nil/empty when

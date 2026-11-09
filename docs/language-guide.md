@@ -176,8 +176,8 @@ Rules:
 - Array params take no default value.
 - Every element is packed at the std140 array stride of 16 bytes, whatever `T`
   is. The descriptor field carries `count` and `stride` so the host can pack it.
-- Mesh, post and feedback materials support array params. Points materials do
-  not yet.
+- Mesh, post, screen and feedback materials support array params. Points
+  materials do not yet.
 
 Read an element with `rects[i]`. The index must be `int` or `uint`, so write the
 loop counter with the `i` integer-literal suffix — `0i`, not `0`. A bare `0` is
@@ -331,6 +331,81 @@ Both need the host to cooperate, and the compiled descriptor says so in
 
 Post materials cannot declare `texture2d` params; the engine provides the scene
 textures. They can declare scalar, vector and `array<T, N>` params.
+
+## Screen Materials
+
+A `kind screen` material draws one fullscreen pass that returns a colour with
+alpha. Unlike `post`, it reads no scene colour: it is for overlays such as level
+meters, spectrograms and scopes that the author computes from params and data
+textures. The host decides where the pass lands and how it combines with what is
+already there.
+
+```selena
+material MeterStrip kind screen {
+    render { blend additive  depth off }
+
+    param levels : array<vec4, 128>   // (peakL, peakR, rmsL, rmsR) in dB
+    param strips : float = 16.0
+
+    surface(screen) -> color {
+        let x = screen.uv.x * strips
+        let i = int(min(floor(x), 127.0))
+        let l = levels[i]
+        let peak = fract(x) < 0.5 ? l.x : l.y
+        let lit = step(1.0 - screen.uv.y, (peak + 60.0) / 60.0)
+        return rgb(lit * 0.2, lit, lit * 0.4, lit)
+    }
+}
+```
+
+The full version, with peak-hold marks and a one-pixel gap between strips, is
+`testdata/conformance/screen-meter-strip.sel`; a data texture version is
+`screen-data-texture.sel`.
+
+**Inputs.**
+
+- `screen.uv` is a `vec2`, `0..1` across the target rectangle. The origin is
+  the **top left**: `uv.y` is 0 on the top row and grows downward, on every
+  target. A bar that grows from the bottom therefore compares against
+  `1.0 - screen.uv.y`. `load(tex, int(uv.x * w), int(uv.y * h))` reads texture
+  row 0 at the top. (`post` is not uniform here: its WebGL 1 `uv` starts at the
+  bottom left, the other targets at the top left. `screen` is the same on all
+  four.) The name `screen` is the geometry binding you
+  choose in `surface(screen)`, as `geo` is for a mesh.
+- `screenSize()` returns the size of the target rectangle in pixels as a
+  `vec2`, for example to draw a line one pixel wide whatever the rectangle's
+  size. The host writes it into the descriptor field `screenSize` before each
+  draw. It is available only in screen materials.
+
+**Params.** Scalar, vector, matrix and `array<T, N>` params, and `texture2d`
+params with the `format` qualifier, `load()`, `size()` and `sample()` from
+[Data Textures](#data-textures). `Sun` and `textureCube` params are rejected.
+`sceneColor`, `sceneDepth`, `sceneColorLevel` and `sceneSize` are `post`-only
+and report an error in a screen material. A param or context field cannot be
+named `screenSize`. An authored `vertex()`, `varying` or `state` is rejected:
+Selena emits the vertex stage.
+
+**Result.** The body returns a colour. `rgb(r, g, b, a)` sets alpha; a
+three-component result has alpha 1. For `blend premultiplied`, return colour
+already multiplied by alpha.
+
+**The `render` block.** It is optional, and only a screen material may write
+it. Selena records the state in the descriptor; the host applies it.
+
+| Setting | Words | Default | Meaning |
+|---------|-------|---------|---------|
+| `blend` | `opaque`, `alpha`, `premultiplied`, `additive` | `alpha` | `opaque` replaces the target; `alpha` is `src*a + dst*(1-a)`; `premultiplied` is `src + dst*(1-a)`; `additive` is `src*a + dst` |
+| `depth` | `off`, `test`, `write` | `off` | `off` skips the depth buffer; `test` tests without writing; `write` tests and writes |
+
+A derived material (`extends`) inherits its parent's `render` block unless it
+writes its own. An unknown key or word, a repeated key, or a `render` block on
+another kind is error `SEL1008`.
+
+**Placement.** Selena draws a fullscreen triangle. It does not take host
+geometry. To draw into part of a window, the host sets the viewport and scissor
+to that rectangle; `screen.uv` and `screenSize()` then describe the rectangle,
+not the window. See [compatibility.md](compatibility.md#screen-materials) for the
+bindings and the draw call.
 
 ## Host Packing
 

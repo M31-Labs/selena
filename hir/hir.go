@@ -95,6 +95,11 @@ const (
 	// emitters write a fragment hook; the host's standard lighting shades the
 	// record (docs/standard-material-interop.md).
 	KindSurface Kind = "surface"
+	// KindScreen is a fullscreen pass that draws an author-written color with
+	// alpha into a host-chosen target rectangle. It reads no scene color, so the
+	// host composes it with the blend and depth state of its render block. See
+	// hir/render.go.
+	KindScreen Kind = "screen"
 )
 
 // StateField declares a vec4-per-cell state grid (`state <name>`). The host
@@ -140,6 +145,9 @@ type Material struct {
 	// §3.1/§3.2). At most one `context { ... }` block is authored per material;
 	// its fields are flattened here in declaration order.
 	Context []ContextField
+	// Render is the `render { ... }` block of a screen material, or nil when the
+	// material wrote none. Only screen materials accept it.
+	Render *RenderBlock
 }
 
 // Param is a material input. Defaults are deferred to a later milestone.

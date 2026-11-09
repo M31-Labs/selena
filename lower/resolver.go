@@ -25,6 +25,8 @@ type resolver struct {
 	allowSceneSample bool
 	// allowState enables the state(dx, dy) previous-state read (feedback kind only).
 	allowState bool
+	// allowScreenSize enables screenSize() (screen kind only).
+	allowScreenSize bool
 	// allowVertexIndex enables the vertexIndex builtin (authored vertex stage). B4.
 	allowVertexIndex bool
 	// allowStateAt enables stateAt(uv) reads (mesh/general statefield). B4.
@@ -145,6 +147,9 @@ func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
 				return nil, diagnostic(CodeInvalidCall, x.Span, "sceneSize() takes no arguments")
 			}
 			return ir.SceneSize{}, nil
+		}
+		if x.Func == "screenSize" {
+			return r.resolveScreenSize(x)
 		}
 		if x.Func == "state" {
 			if !r.allowState {

@@ -29,6 +29,7 @@ var goldenCases = []struct {
 	{"post-tint.sel", builder.Options{Targets: []result.Target{result.TargetWGSL, result.TargetGLES}}},
 	{"brdf-specular.sel", builder.Options{SpecularMRT: true, Modules: []materiallib.Module{materiallib.BRDF}}},
 	{"data-texture.sel", builder.Options{}},
+	{"screen-overlay.sel", builder.Options{}},
 }
 
 func TestBuildMatchesGolden(t *testing.T) {

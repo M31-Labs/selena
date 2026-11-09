@@ -1,0 +1,23 @@
+// screen-data-texture.sel — a scrolling spectrogram read as data.
+//
+// `spectrum` is a float data texture the host fills, one column per frame.
+// surface() picks the texel with size() and load(), so no filtering or sampler
+// is involved; `palette` is a colour ramp read with sample(). The pass is
+// premultiplied alpha and tests against depth without writing it.
+material ScreenSpectrogram kind screen {
+    render { blend premultiplied  depth test }
+
+    param spectrum : texture2d format r16float
+    param palette  : texture2d
+    param head     : float = 0.0
+    param gain     : float = 1.0
+
+    surface(screen) -> color {
+        let sz = size(spectrum)
+        let col = int(mod(screen.uv.x * sz.x + head, sz.x))
+        let row = int(min(screen.uv.y * sz.y, sz.y - 1.0))
+        let mag = clamp(load(spectrum, col, row).r * gain, 0.0, 1.0)
+        let c = sample(palette, vec2f(mag, 0.5))
+        return rgb(c.r * mag, c.g * mag, c.b * mag, mag)
+    }
+}
