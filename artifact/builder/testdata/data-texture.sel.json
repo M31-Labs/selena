@@ -1,0 +1,177 @@
+{
+  "schema": "selena.artifact.v1",
+  "compiler": "golden",
+  "languageVersion": "selena.lang.v1",
+  "source": {
+    "path": "data-texture.sel",
+    "sha256": "3ea32561669aa16834c27f556b5efaca21fe4a3bd2a58615dbe60243c47cba57"
+  },
+  "options": {
+    "targets": [
+      "wgsl",
+      "glsl",
+      "metal",
+      "gles"
+    ]
+  },
+  "default": "DataTexture",
+  "materials": [
+    {
+      "name": "DataTexture",
+      "layout": {
+        "schemaVersion": "selena.descriptor.v1",
+        "languageVersion": "selena.lang.v1",
+        "material": "DataTexture",
+        "kind": "mesh",
+        "entryPoints": {
+          "vertex": "vertexMain",
+          "fragment": "fragmentMain"
+        },
+        "uniformBlock": {
+          "size": 128,
+          "fields": [
+            {
+              "name": "mvp",
+              "type": "mat4",
+              "offset": 0,
+              "size": 64
+            },
+            {
+              "name": "normalMatrix",
+              "type": "mat3",
+              "offset": 64,
+              "size": 48
+            },
+            {
+              "name": "head",
+              "type": "float",
+              "offset": 112,
+              "size": 4
+            }
+          ],
+          "defaults": [
+            {
+              "name": "head",
+              "type": "float",
+              "values": [
+                0
+              ]
+            }
+          ]
+        },
+        "attributes": [
+          {
+            "name": "position",
+            "location": 0,
+            "type": "vec3"
+          },
+          {
+            "name": "normal",
+            "location": 1,
+            "type": "vec3"
+          },
+          {
+            "name": "uv",
+            "location": 2,
+            "type": "vec2"
+          }
+        ],
+        "textures": [
+          {
+            "name": "spectrum",
+            "dimension": "2d",
+            "wgsl": {
+              "group": 0,
+              "textureBinding": 1,
+              "samplerBinding": 2
+            },
+            "gl": {
+              "uniform": "spectrum",
+              "unit": 0
+            },
+            "metal": {
+              "texture": 0,
+              "sampler": 0
+            },
+            "format": "r16float",
+            "sampleMode": "load"
+          },
+          {
+            "name": "gains",
+            "dimension": "2d",
+            "wgsl": {
+              "group": 0,
+              "textureBinding": 3,
+              "samplerBinding": 4
+            },
+            "gl": {
+              "uniform": "gains",
+              "unit": 1
+            },
+            "metal": {
+              "texture": 1,
+              "sampler": 1
+            },
+            "vertexStage": true,
+            "format": "rgba32float",
+            "sampleMode": "load"
+          },
+          {
+            "name": "palette",
+            "dimension": "2d",
+            "wgsl": {
+              "group": 0,
+              "textureBinding": 5,
+              "samplerBinding": 6
+            },
+            "gl": {
+              "uniform": "palette",
+              "unit": 2
+            },
+            "metal": {
+              "texture": 2,
+              "sampler": 2
+            },
+            "format": "rgba16float",
+            "sampleMode": "both"
+          }
+        ],
+        "wgsl": {
+          "group": 0,
+          "binding": 0
+        },
+        "metal": {
+          "buffer": 0
+        },
+        "requires": {
+          "glVertexTextureUnits": 1,
+          "glTexSizeUniforms": [
+            "_texSize_spectrum",
+            "_texSize_gains",
+            "_texSize_palette"
+          ]
+        }
+      },
+      "shaders": [
+        {
+          "target": "wgsl",
+          "source": "struct Uniforms {\n  mvp : mat4x4<f32>,\n  normalMatrix : mat3x3<f32>,\n  head : f32,\n};\n@group(0) @binding(0) var<uniform> u : Uniforms;\n\n@group(0) @binding(1) var spectrum : texture_2d<f32>;\n@group(0) @binding(2) var spectrumSampler : sampler;\n@group(0) @binding(3) var gains : texture_2d<f32>;\n@group(0) @binding(4) var gainsSampler : sampler;\n@group(0) @binding(5) var palette : texture_2d<f32>;\n@group(0) @binding(6) var paletteSampler : sampler;\n\nstruct VertexInput {\n  @location(0) position : vec3<f32>,\n  @location(1) normal : vec3<f32>,\n  @location(2) uv : vec2<f32>,\n};\n\nstruct VertexOutput {\n  @builtin(position) position : vec4<f32>,\n  @location(0) vLevel : f32,\n  @location(1) vUv : vec2<f32>,\n};\n\n@vertex\nfn vertexMain(in : VertexInput) -> VertexOutput {\n  var out : VertexOutput;\n  let columns = vec2<f32>(textureDimensions(gains)).x;\n  let column = i32(clamp((in.uv.x * columns), 0.0, (columns - 1.0)));\n  let level = textureLoad(gains, vec2<i32>(column, 0i), 0).r;\n  out.vLevel = level;\n  out.vUv = in.uv;\n  out.position = (u.mvp * vec4<f32>((in.position + (in.normal * level)), 1.0));\n  return out;\n}\n\n@fragment\nfn fragmentMain(in : VertexOutput) -> @location(0) vec4<f32> {\n  let sz = vec2<f32>(textureDimensions(spectrum));\n  let col = i32((((in.vUv.x * sz.x) + u.head) - (sz.x * floor(((in.vUv.x * sz.x) + u.head) / sz.x))));\n  let row = i32((in.vUv.y * sz.y));\n  let mag = textureLoad(spectrum, vec2<i32>(col, row), 0).r;\n  let exact = textureLoad(palette, vec2<i32>(0i, 0i), 0);\n  let soft = textureSample(palette, paletteSampler, in.vUv);\n  return vec4<f32>(vec3<f32>(((mag * exact.r) + (soft.r * 0.25)), ((mag * 0.6) + in.vLevel), (1.0 - mag)), 1.0);\n}\n"
+        },
+        {
+          "target": "glsl",
+          "vertex": "attribute vec3 position;\nattribute vec3 normal;\nattribute vec2 uv;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform float head;\nuniform highp sampler2D gains;\nuniform highp vec2 _texSize_gains;\nvarying float vLevel;\nvarying vec2 vUv;\n\nvoid main() {\n  float columns = _texSize_gains.x;\n  int column = int(clamp((uv.x * columns), 0.0, (columns - 1.0)));\n  float level = texture2D(gains, (vec2(column, 0) + 0.5) / _texSize_gains).r;\n  vLevel = level;\n  vUv = uv;\n  gl_Position = (mvp * vec4((position + (normal * level)), 1.0));\n}\n",
+          "fragment": "precision mediump float;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform float head;\nvarying float vLevel;\nvarying vec2 vUv;\nuniform sampler2D spectrum;\nuniform sampler2D gains;\nuniform sampler2D palette;\nuniform highp vec2 _texSize_spectrum;\nuniform highp vec2 _texSize_palette;\n\nvoid main() {\n  vec2 sz = _texSize_spectrum;\n  int col = int(mod(((vUv.x * sz.x) + head), sz.x));\n  int row = int((vUv.y * sz.y));\n  float mag = texture2D(spectrum, (vec2(col, row) + 0.5) / _texSize_spectrum).r;\n  vec4 exact = texture2D(palette, (vec2(0, 0) + 0.5) / _texSize_palette);\n  vec4 soft = texture2D(palette, vUv);\n  gl_FragColor = vec4(vec3(((mag * exact.r) + (soft.r * 0.25)), ((mag * 0.6) + vLevel), (1.0 - mag)), 1.0);\n}\n"
+        },
+        {
+          "target": "metal",
+          "source": "#include <metal_stdlib>\nusing namespace metal;\n\nstruct Uniforms {\n  float4x4 mvp;\n  float3x3 normalMatrix;\n  float head;\n};\n\nstruct VertexIn {\n  float3 position [[attribute(0)]];\n  float3 normal [[attribute(1)]];\n  float2 uv [[attribute(2)]];\n};\n\nstruct VertexOut {\n  float4 position [[position]];\n  float vLevel;\n  float2 vUv;\n};\n\nvertex VertexOut vertexMain(VertexIn in [[stage_in]], constant Uniforms& u [[buffer(0)]], texture2d<float> gains [[texture(1)]], sampler gainsSampler [[sampler(1)]]) {\n  VertexOut out;\n  float columns = float2(gains.get_width(), gains.get_height()).x;\n  int column = int(clamp((in.uv.x * columns), 0.0, (columns - 1.0)));\n  float level = gains.read(uint2(column, 0), 0).r;\n  out.vLevel = level;\n  out.vUv = in.uv;\n  out.position = (u.mvp * float4((in.position + (in.normal * level)), 1.0));\n  return out;\n}\n\nfragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]], texture2d<float> spectrum [[texture(0)]], sampler spectrumSampler [[sampler(0)]], texture2d<float> gains [[texture(1)]], sampler gainsSampler [[sampler(1)]], texture2d<float> palette [[texture(2)]], sampler paletteSampler [[sampler(2)]]) {\n  float2 sz = float2(spectrum.get_width(), spectrum.get_height());\n  int col = int((((in.vUv.x * sz.x) + u.head) - (sz.x * floor(((in.vUv.x * sz.x) + u.head) / sz.x))));\n  int row = int((in.vUv.y * sz.y));\n  float mag = spectrum.read(uint2(col, row), 0).r;\n  float4 exact = palette.read(uint2(0, 0), 0);\n  float4 soft = palette.sample(paletteSampler, in.vUv);\n  return float4(float3(((mag * exact.r) + (soft.r * 0.25)), ((mag * 0.6) + in.vLevel), (1.0 - mag)), 1.0);\n}\n"
+        },
+        {
+          "target": "gles",
+          "vertex": "#version 300 es\nin vec3 position;\nin vec3 normal;\nin vec2 uv;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform float head;\nuniform highp sampler2D gains;\nout float vLevel;\nout vec2 vUv;\n\nvoid main() {\n  float columns = vec2(textureSize(gains, 0)).x;\n  int column = int(clamp((uv.x * columns), 0.0, (columns - 1.0)));\n  float level = texelFetch(gains, ivec2(column, 0), 0).r;\n  vLevel = level;\n  vUv = uv;\n  gl_Position = (mvp * vec4((position + (normal * level)), 1.0));\n}\n",
+          "fragment": "#version 300 es\nprecision highp float;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform float head;\nin float vLevel;\nin vec2 vUv;\nuniform sampler2D spectrum;\nuniform sampler2D gains;\nuniform sampler2D palette;\nout vec4 fragColor;\n\nvoid main() {\n  vec2 sz = vec2(textureSize(spectrum, 0));\n  int col = int(mod(((vUv.x * sz.x) + head), sz.x));\n  int row = int((vUv.y * sz.y));\n  float mag = texelFetch(spectrum, ivec2(col, row), 0).r;\n  vec4 exact = texelFetch(palette, ivec2(0, 0), 0);\n  vec4 soft = texture(palette, vUv);\n  fragColor = vec4(vec3(((mag * exact.r) + (soft.r * 0.25)), ((mag * 0.6) + vLevel), (1.0 - mag)), 1.0);\n}\n"
+        }
+      ]
+    }
+  ]
+}

@@ -229,6 +229,9 @@ func (r *resolver) expr(e hir.Expr) (ir.Expr, error) {
 			}
 			return ir.SampleLevel{Texture: texRef.Name, UV: uv, LOD: lod}, nil
 		}
+		if x.Func == "load" || x.Func == "size" {
+			return r.resolveTexelCall(x)
+		}
 		if x.Func == "sampleCube" {
 			if len(x.Args) != 2 {
 				return nil, diagnostic(CodeInvalidCall, x.Span, "sampleCube(texture, dir) takes 2 arguments")

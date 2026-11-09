@@ -65,7 +65,7 @@ func SelenaGrammar() *grammargen.Grammar {
 	// design). It MUST stay last in this Choice and be Define-d at the very END
 	// of the function, after every other rule, to preserve the LALR symbol-ID
 	// order of everything above.
-	g.Define("member", grammargen.Choice(sym("param"), sym("surface"), sym("feedback"), sym("statefield"), sym("param_array"), sym("vertex"), sym("varying_decl"), sym("context_block"), sym("specular")))
+	g.Define("member", grammargen.Choice(sym("param"), sym("surface"), sym("feedback"), sym("statefield"), sym("param_array"), sym("vertex"), sym("varying_decl"), sym("context_block"), sym("specular"), sym("param_format")))
 
 	g.Define("param", seq(
 		s("param"),
@@ -549,6 +549,21 @@ func SelenaGrammar() *grammargen.Grammar {
 		s("specular"), s("("), field("geo", sym("identifier")),
 		s(")"), s("->"), field("returns", sym("identifier")),
 		field("body", sym("block")),
+	))
+
+	// param_format: `param name : texture2d format <storage-format>`. A separate
+	// member alternative (not an Optional inside param) so the existing param
+	// rule and every earlier symbol ID stay untouched. It is appended LAST to
+	// the member Choice and Defined here at the very end. The type is a plain
+	// identifier; lowering accepts a format only on texture2d params and checks
+	// the format name.
+	g.Define("param_format", seq(
+		s("param"),
+		field("name", sym("identifier")),
+		s(":"),
+		field("type", sym("identifier")),
+		s("format"),
+		field("format", sym("identifier")),
 	))
 
 	g.SetWord("identifier")
