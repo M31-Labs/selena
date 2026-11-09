@@ -276,6 +276,30 @@ value, so `for (var i = 0i; i < 8i; i = i + 1i)` gives an `int` counter and
 `for (var i = 0; i < 8; i = i + 1)` gives a `float` one. Use the `i` form
 whenever the counter indexes an array.
 
+## Surface Materials
+
+A material whose surface returns `Surface` instead of a color is a surface
+material. It describes the surface; the host's standard lighting shades it,
+so it shares lights, shadows, image-based lighting, fog and exposure with the
+host's StandardMaterial.
+
+```selena
+material Lacquer {
+    param tint : color = rgb(0.6, 0.1, 0.1)
+    surface(geo) -> Surface {
+        return withClearcoat(pbr(tint, 0.6, 0.0), 1.0, 0.05)
+    }
+}
+```
+
+`pbr(baseColor, roughness, metallic)` builds the record, the `with*` setters
+replace one field, `mixSurface(a, b, t)` blends two, and `s.roughness` reads a
+field. Surface materials emit WGSL and GLES fragment hooks only. The fields,
+builtins, rules and host ABI are in
+[Standard Material Interop](standard-material-interop.md); the
+[surface module](material-library/surface.md) adds texture-set, triplanar and
+layering helpers.
+
 ## Post Materials
 
 A `kind post` material runs one fullscreen pass over the rendered scene. Its

@@ -93,7 +93,12 @@ func CompileProgram(p hir.Program, opts CompileOptions) (Result, error) {
 		layout.EntryPoints.FragmentSpecular = "fragmentMainSpecular"
 		layout.SpecularOutput = &bindings.SpecularOutput{Semantic: "specular", Location: 1, Type: "vec4", ColorSpace: "linear", Authored: mod.Specular != nil, GLExtensions: []string{"WEBGL_draw_buffers"}}
 	}
-	artifacts, err := emitArtifacts(mod, opts.Targets)
+	targets := opts.Targets
+	if targets == nil && mod.Kind == ir.KindSurface {
+		// Surface hooks exist for the WebGPU and WebGL 2 hosts only.
+		targets = []Target{TargetWGSL, TargetGLES}
+	}
+	artifacts, err := emitArtifacts(mod, targets)
 	if err != nil {
 		return Result{}, compileError(err)
 	}

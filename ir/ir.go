@@ -38,7 +38,53 @@ const (
 	// so it lowers to BOTH a WGSL @compute kernel (writing outState) and a
 	// GLSL/GLES fullscreen fragment ping-pong pass (writing the stage output).
 	KindFeedback Kind = "feedback"
+	// KindSurface is a typed-surface fragment hook. The module has no vertex
+	// stage of its own: the host's standard vertex shader feeds the hook a
+	// SurfaceGeo record, and the hook returns the Surface record that the host's
+	// standard lighting shades. The fragment body ends with one local per
+	// SurfaceFields entry, named in Module.SurfaceOutputs.
+	KindSurface Kind = "surface"
 )
+
+// SurfaceField is one field of a record in the surface hook ABI.
+type SurfaceField struct {
+	Name string
+	Type Type
+}
+
+// SurfaceFields is the Surface record a KindSurface hook returns, in ABI
+// order (bindings.SurfaceABI). Colors are linear RGB; normal is a unit
+// world-space vector; the scalars are 0..1.
+var SurfaceFields = []SurfaceField{
+	{"baseColor", Vec3},
+	{"alpha", Float},
+	{"normal", Vec3},
+	{"roughness", Float},
+	{"metallic", Float},
+	{"occlusion", Float},
+	{"emissive", Vec3},
+	{"clearcoat", Float},
+	{"clearcoatRoughness", Float},
+	{"sheen", Float},
+	{"transmission", Float},
+}
+
+// SurfaceTextureName is the identifier a KindSurface hook uses for its i-th
+// texture. WGSL samples it with the sampler SurfaceTextureName(i) + "Sampler".
+func SurfaceTextureName(i int) string { return "selenaSurfaceTex" + strconv.Itoa(i) }
+
+// SurfaceGeoFields is the geometry record the host passes to a KindSurface
+// hook, in ABI order. Positions and vectors are world space; viewDir points
+// from the surface toward the camera; color is the instance/vertex color.
+var SurfaceGeoFields = []SurfaceField{
+	{"worldPos", Vec3},
+	{"worldNormal", Vec3},
+	{"uv", Vec2},
+	{"tangent", Vec3},
+	{"bitangent", Vec3},
+	{"viewDir", Vec3},
+	{"color", Vec4},
+}
 
 // Module is a complete material shader: a declared interface (uniforms,
 // per-vertex attributes, vertex->fragment varyings, sampled textures) plus the
@@ -71,6 +117,9 @@ type Module struct {
 	// vertex-index source: WGSL @builtin(vertex_index), GLES gl_VertexID, Metal
 	// [[vertex_id]], GLSL (WebGL1) a host-supplied a_vertexIndex attribute. B4.
 	UsesVertexIndex bool
+	// SurfaceOutputs names, for a KindSurface module, the fragment local that
+	// holds each SurfaceFields entry, in the same order. Empty otherwise.
+	SurfaceOutputs []string
 }
 
 // Texture is a sampled texture used by the fragment stage. Backends bind it

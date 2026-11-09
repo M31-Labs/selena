@@ -235,6 +235,8 @@ func call(name string, a []val) (val, error) {
 		return mapv(a[0], math.Trunc), nil
 	case "acos":
 		return mapv(a[0], math.Acos), nil
+	case "abs":
+		return mapv(a[0], math.Abs), nil
 	case "cos":
 		return mapv(a[0], math.Cos), nil
 	case "exp":

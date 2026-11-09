@@ -1,0 +1,41 @@
+// A sculpted rock for a Blender-exported boulder or cliff with no clean UVs:
+// triplanar rock with a finer detail normal, moss on upward faces that fills
+// the cracks first, sand around the base and a wet band at the water line.
+// The renderer's standard lighting shades the returned Surface. Link the
+// surface module (gosx.config.json "build": {"selena": {"modules": ["surface"]}}).
+//
+// Texture params: rockAlbedo, mossAlbedo and sandAlbedo are sRGB color
+// images; rockNormal and mossNormal are tangent-space normal maps; rockORM
+// packs occlusion (r), roughness (g), metallic (b) and height (a). mossAlbedo
+// carries the moss height in alpha.
+material SculptedRock {
+    param rockAlbedo : texture2d
+    param rockNormal : texture2d
+    param rockORM    : texture2d
+    param mossAlbedo : texture2d
+    param mossNormal : texture2d
+    param sandAlbedo : texture2d
+    param scale      : float = 0.5
+    param mossCover  : float = 0.6
+    param sandLine   : float = 0.4
+    param waterLine  : float = 0.0
+
+    surface(geo) -> Surface {
+        let n = normalize(geo.worldNormal)
+        let rockOrm = mlTriplanar(rockORM, geo.worldPos, n, scale, 4.0)
+        let rockN = mlTriplanarNormal(rockNormal, geo.worldPos, n, scale, 4.0, 1.0)
+        let detailN = mlTriplanarNormal(rockNormal, geo.worldPos, n, scale * 6.0, 4.0, 0.5)
+        let rock = mlSurfaceFromSet(mlTriplanar(rockAlbedo, geo.worldPos, n, scale, 4.0), mlDetailWorldNormal(rockN, detailN, n, 0.6), rockOrm.rgb)
+
+        let mossC = mlTriplanar(mossAlbedo, geo.worldPos, n, scale * 2.0, 4.0)
+        let moss = withNormal(pbr(mossC.rgb, 0.9, 0.0), mlTriplanarNormal(mossNormal, geo.worldPos, n, scale * 2.0, 4.0, 0.7))
+        let mossWeight = mlSlopeMask(n, vec3f(0.0, 1.0, 0.0), 0.55, 0.85) * mossCover
+        let mossy = mlLayer(rock, moss, rockOrm.a, mossC.a, mossWeight, 0.08)
+
+        let sand = pbr(mlTriplanar(sandAlbedo, geo.worldPos, n, scale * 3.0, 2.0).rgb, 0.95, 0.0)
+        let sandy = mixSurface(mossy, sand, 1.0 - mlHeightMask(geo.worldPos.y, sandLine - 0.3, sandLine))
+
+        let wet = 1.0 - mlHeightMask(geo.worldPos.y, waterLine, waterLine + 0.25)
+        return withRoughness(withBaseColor(sandy, sandy.baseColor * (1.0 - 0.45 * wet)), mix(sandy.roughness, 0.15, wet))
+    }
+}

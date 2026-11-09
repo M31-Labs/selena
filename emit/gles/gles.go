@@ -27,6 +27,9 @@ func Emit(m ir.Module) (vertex, fragment string, err error) {
 			return emitPostVertex(m), emitPostFragment(m), nil
 		case ir.KindFeedback:
 			return emitFeedbackVertex(m), emitFeedbackFragment(m), nil
+		case ir.KindSurface:
+			// A surface hook has no vertex stage: the host's runs.
+			return "", emitSurface(m), nil
 		default:
 			if m.VertexAuthored {
 				return emitVertexAuthored(m), emitFragmentAuthored(m), nil

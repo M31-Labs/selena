@@ -1,8 +1,9 @@
 # Material library
 
-`materiallib` adds 77 opt-in Selena functions for a tabletop game scene.
-One authored material still compiles to WGSL, GLSL, Metal and GLES plus the
-existing `selena.descriptor.v1` host layout.
+`materiallib` adds 111 opt-in Selena functions in eight modules. A full
+material still compiles to WGSL, GLSL, Metal and GLES plus the existing
+`selena.descriptor.v1` host layout; a surface-kind material compiles to WGSL
+and GLES hooks.
 
 ```go
 result, err := materiallib.Compile(source, selena.CompileOptions{},
@@ -26,23 +27,22 @@ growth. Standard user functions keep their existing substitution behavior.
 | [Effects](normals-effects.md) | Finite ripple, dust and flash from event uniforms; loads Procedural |
 | [Sky](sky.md) | Physical daylight sky from the engine's sky inputs |
 | [Lighting](lighting.md) | Every scene light, cascaded directional shadows and fog from the engine's scene lighting block |
+| [Surface](surface.md) | PBR texture sets, triplanar projection, height and slope layer masks and detail normals for surface-kind materials |
 
 ## Integration boundary
 
-The library replaces shared shader math; it does not supply GoSX's lighting,
-environment maps, shadows, tone mapping or native program transport. The current
-GoSX custom material API consumes full GLSL/WGSL vertex/fragment programs. A
-renderer-owned standard-lit surface hook must be added in GoSX before Selena can
-override PBR properties inside that pipeline. That hook needs a typed output
-contract for base color, roughness, metalness, normal, coat, sheen and tangent
-anisotropy, plus per-target renderer insertion points. Emitting standalone
-custom shaders cannot implement that contract by itself.
+The library replaces shared shader math. A full custom material
+(`surface(geo) -> color`) still owns its lighting; `Lighting` gives it the
+engine's lights, shadows and fog. A surface-kind material
+(`surface(geo) -> Surface`) returns a typed record instead and the host's
+standard lighting shades it: GoSX splices the hook into its StandardMaterial
+fragment on WebGL2 and WebGPU, so lights, shadows, image-based lighting, fog
+and exposure match a StandardMaterial. `Surface` holds the authoring helpers
+for that kind. See [standard material interop](../standard-material-interop.md).
 
-Until those hooks exist, keep explicit camera/light inputs and standard material
-fallbacks in the consumer. Native custom rendering also needs GoSX transport and
-renderer support for the Metal/GLES artifacts; compiling them is not evidence
-of native execution. The library keeps the binding schema and language versions
-unchanged. See [standard material interop](../standard-material-interop.md).
+Native custom rendering also needs GoSX transport and renderer support for
+the Metal/GLES artifacts; compiling them is not evidence of native execution.
+The library keeps the binding schema and language versions unchanged.
 
 ## Consumer migration
 

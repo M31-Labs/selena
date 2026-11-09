@@ -10,6 +10,10 @@ import (
 
 	prismvalidate "m31labs.dev/prism/validate"
 	"m31labs.dev/selena"
+	"m31labs.dev/selena/bindings"
+	"m31labs.dev/selena/emit/gles"
+	"m31labs.dev/selena/emit/wgsl"
+	"m31labs.dev/selena/hir"
 	"m31labs.dev/selena/parse"
 )
 
@@ -58,12 +62,24 @@ func TestEveryHelperConformsAcrossTargets(t *testing.T) {
 		for _, f := range functions {
 			t.Run(string(module)+"/"+f.Name, func(t *testing.T) {
 				var declarations, args []string
+				surfaceProbe := f.Returns == hir.SurfaceT
 				for i, p := range f.Params {
 					name := fmt.Sprintf("arg%d", i)
+					if p.Type == hir.SurfaceT {
+						// A Surface argument is built from dynamic params.
+						surfaceProbe = true
+						declarations = append(declarations, fmt.Sprintf("param %sc : color\nparam %sr : float", name, name))
+						args = append(args, fmt.Sprintf("pbr(%sc, %sr, %sr)", name, name, name))
+						continue
+					}
 					declarations = append(declarations, fmt.Sprintf("param %s : %s", name, p.Type))
 					args = append(args, name)
 				}
 				value := f.Name + "(" + strings.Join(args, ", ") + ")"
+				if surfaceProbe {
+					validateSurfaceProbe(t, module, declarations, value, f.Returns == hir.SurfaceT)
+					return
+				}
 				switch f.Returns {
 				case "int":
 					value = "rgb(float(" + value + "), 0.0, 0.0)"
@@ -81,6 +97,27 @@ func TestEveryHelperConformsAcrossTargets(t *testing.T) {
 			})
 		}
 	}
+}
+
+// validateSurfaceProbe compiles a surface-kind probe around a helper that
+// takes or returns a Surface, then validates both hooks in their harnesses.
+func validateSurfaceProbe(t *testing.T, module Module, declarations []string, value string, returnsSurface bool) {
+	t.Helper()
+	if !returnsSurface {
+		value = "pbr(rgb(" + value + ", 0.0, 0.0), 0.5, 0.0)"
+	}
+	source := []byte("material Probe {\n" + strings.Join(declarations, "\n") + "\nsurface(geo) -> Surface { return " + value + " }\n}")
+	res, err := Compile(source, selena.CompileOptions{}, module)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, ok := res.Artifact(selena.TargetWGSL)
+	g, ok2 := res.Artifact(selena.TargetGLES)
+	if !ok || !ok2 || len(res.Artifacts) != 2 {
+		t.Fatalf("surface probe artifacts: %d", len(res.Artifacts))
+	}
+	prismvalidate.Shader(t, "naga", wgsl.SurfaceHarness(w.Source, len(res.Layout.Textures)), ".wgsl", nil)
+	prismvalidate.Shader(t, "glslangValidator", gles.SurfaceHarness(g.Fragment, len(res.Layout.Textures)), ".frag", nil)
 }
 
 func validateArtifacts(t *testing.T, res selena.Result) {
@@ -120,6 +157,13 @@ func TestExamplesConformAcrossTargets(t *testing.T) {
 			res, err := Compile(source, selena.CompileOptions{}, modules(t)...)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if res.Layout.Kind == bindings.SurfaceKindSurface {
+				w, _ := res.Artifact(selena.TargetWGSL)
+				g, _ := res.Artifact(selena.TargetGLES)
+				prismvalidate.Shader(t, "naga", wgsl.SurfaceHarness(w.Source, len(res.Layout.Textures)), ".wgsl", nil)
+				prismvalidate.Shader(t, "glslangValidator", gles.SurfaceHarness(g.Fragment, len(res.Layout.Textures)), ".frag", nil)
+				return
 			}
 			validateArtifacts(t, res)
 		})

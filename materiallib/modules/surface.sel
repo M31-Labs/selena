@@ -1,0 +1,155 @@
+// Authoring helpers for surface-kind materials (surface(geo) -> Surface):
+// PBR texture sets, triplanar projection, height and slope layer masks, and
+// detail normals. A normal is a unit world-space vector unless its name says
+// tangent. Pass geo fields straight in: geo.uv, geo.worldPos,
+// geo.worldNormal, geo.tangent and geo.bitangent.
+
+// mlUnpackNormal decodes a tangent-space normal-map texel (rgb in 0..1) and
+// scales its slope by strength; strength 0 gives the flat normal (0, 0, 1).
+fn mlUnpackNormal(texel: vec3, strength: float) -> vec3 {
+    let n = texel * 2.0 - vec3f(1.0, 1.0, 1.0)
+    return normalize(vec3f(n.x * strength, n.y * strength, max(n.z, 0.0001)))
+}
+
+// mlTangentToWorld turns a tangent-space normal into world space with the
+// mesh tangent frame. tangent and bitangent must be nonzero: export tangents
+// from Blender, or use the triplanar helpers on meshes without UVs.
+fn mlTangentToWorld(tangentNormal: vec3, tangent: vec3, bitangent: vec3, normal: vec3) -> vec3 {
+    let n = normalize(normal)
+    let t = normalize(tangent - n * dot(n, tangent))
+    let b = normalize(bitangent - n * dot(n, bitangent))
+    return normalize(t * tangentNormal.x + b * tangentNormal.y + n * tangentNormal.z)
+}
+
+// mlSurfaceFromSet builds a Surface from one texel of a PBR texture set: base
+// color with alpha, a world normal, and a glTF-packed ORM texel (r occlusion,
+// g roughness, b metallic).
+fn mlSurfaceFromSet(base: vec4, normal: vec3, orm: vec3) -> Surface {
+    return withAlpha(withOcclusion(withNormal(pbr(base.rgb, orm.y, orm.z), normal), orm.x), base.a)
+}
+
+// mlPBRSet samples a UV-mapped texture set: baseColor (sRGB), normalMap and
+// orm (both linear) at uv.
+fn mlPBRSet(baseColor: texture2d, normalMap: texture2d, orm: texture2d, uv: vec2, tangent: vec3, bitangent: vec3, normal: vec3, normalStrength: float) -> Surface {
+    let n = mlTangentToWorld(mlUnpackNormal(sample(normalMap, uv).rgb, normalStrength), tangent, bitangent, normal)
+    return mlSurfaceFromSet(sample(baseColor, uv), n, sample(orm, uv).rgb)
+}
+
+// mlTriplanarWeights gives the three projection weights for a world normal;
+// they sum to 1. Higher sharpness narrows the blend zone between faces.
+fn mlTriplanarWeights(normal: vec3, sharpness: float) -> vec3 {
+    let w = pow(abs(normal), vec3f(sharpness, sharpness, sharpness))
+    return w / max(w.x + w.y + w.z, 0.0001)
+}
+
+fn mlAxisSign(v: float) -> float {
+    return v < 0.0 ? -1.0 : 1.0
+}
+
+// mlTriplanar samples tex along the three world axes at scale texture repeats
+// per meter and blends the samples by mlTriplanarWeights. The projections flip
+// on negative faces, so no face shows a mirrored texture. Rotating the mesh
+// leaves no UV seam, because no UV is read.
+fn mlTriplanar(tex: texture2d, worldPos: vec3, normal: vec3, scale: float, sharpness: float) -> vec4 {
+    let w = mlTriplanarWeights(normal, sharpness)
+    let p = worldPos * scale
+    let x = sample(tex, vec2f(p.z * mlAxisSign(normal.x), p.y))
+    let y = sample(tex, vec2f(p.x * mlAxisSign(normal.y), p.z))
+    let z = sample(tex, vec2f(0.0 - p.x * mlAxisSign(normal.z), p.y))
+    return x * w.x + y * w.y + z * w.z
+}
+
+// mlTriplanarNormal projects a tangent-space normal map along the three axes
+// and blends it into the world normal with the whiteout blend (Ben Golus,
+// "Normal Mapping for a Triplanar Shader", 2017).
+fn mlTriplanarNormal(tex: texture2d, worldPos: vec3, normal: vec3, scale: float, sharpness: float, strength: float) -> vec3 {
+    let n = normalize(normal)
+    let w = mlTriplanarWeights(n, sharpness)
+    let p = worldPos * scale
+    let sx = mlAxisSign(n.x)
+    let sy = mlAxisSign(n.y)
+    let sz = mlAxisSign(n.z)
+    let tx = mlUnpackNormal(sample(tex, vec2f(p.z * sx, p.y)).rgb, strength)
+    let ty = mlUnpackNormal(sample(tex, vec2f(p.x * sy, p.z)).rgb, strength)
+    let tz = mlUnpackNormal(sample(tex, vec2f(0.0 - p.x * sz, p.y)).rgb, strength)
+    return mlTriplanarBlendNormals(tx, ty, tz, n, w)
+}
+
+// mlTriplanarBlendNormals combines three per-axis tangent normals (already
+// unpacked) with the world normal n and the projection weights w.
+fn mlTriplanarBlendNormals(tx: vec3, ty: vec3, tz: vec3, n: vec3, w: vec3) -> vec3 {
+    let sx = mlAxisSign(n.x)
+    let sy = mlAxisSign(n.y)
+    let sz = mlAxisSign(n.z)
+    let wx = vec3f(abs(tx.z) * n.x, tx.y + n.y, tx.x * sx + n.z)
+    let wy = vec3f(ty.x * sy + n.x, abs(ty.z) * n.y, ty.y + n.z)
+    let wz = vec3f(n.x - tz.x * sz, tz.y + n.y, abs(tz.z) * n.z)
+    return normalize(wx * w.x + wy * w.y + wz * w.z)
+}
+
+// mlTriplanarSet samples a whole PBR texture set by triplanar projection, the
+// usual choice for sculpted rock and cliffs that have no clean UVs.
+fn mlTriplanarSet(baseColor: texture2d, normalMap: texture2d, orm: texture2d, worldPos: vec3, normal: vec3, scale: float, sharpness: float, normalStrength: float) -> Surface {
+    let n = normalize(normal)
+    let base = mlTriplanar(baseColor, worldPos, n, scale, sharpness)
+    let packed = mlTriplanar(orm, worldPos, n, scale, sharpness)
+    return mlSurfaceFromSet(base, mlTriplanarNormal(normalMap, worldPos, n, scale, sharpness, normalStrength), packed.rgb)
+}
+
+// mlSlopeMask is 1 where the surface faces up (flat ground) and 0 on steep
+// faces: dot(normal, up) mapped through smoothstep(start, end).
+fn mlSlopeMask(normal: vec3, up: vec3, start: float, end: float) -> float {
+    return smoothstep(start, end, dot(normalize(normal), normalize(up)))
+}
+
+// mlHeightMask is 0 below low and 1 above high (world height in meters).
+fn mlHeightMask(height: float, low: float, high: float) -> float {
+    return smoothstep(low, high, height)
+}
+
+// mlHeightBlend sharpens a layer weight with two height maps (0..1): where
+// layer B's height rises above A's, B wins first, so moss fills the cracks of
+// rock before it covers the bumps. contrast is the blend band in height
+// units; small values give crisp edges. Returns B's weight, 0..1.
+fn mlHeightBlend(heightA: float, heightB: float, weightB: float, contrast: float) -> float {
+    let w = clamp(weightB, 0.0, 1.0)
+    let a = heightA + 1.0 - w
+    let b = heightB + w
+    let top = max(a, b) - max(contrast, 0.0001)
+    let wa = max(a - top, 0.0)
+    let wb = max(b - top, 0.0)
+    return wb / max(wa + wb, 0.0001)
+}
+
+// mlLayer blends Surface b over a with mlHeightBlend weights.
+fn mlLayer(a: Surface, b: Surface, heightA: float, heightB: float, weightB: float, contrast: float) -> Surface {
+    return mixSurface(a, b, mlHeightBlend(heightA, heightB, weightB, contrast))
+}
+
+// mlBlendNormalsRNM combines a base and a detail tangent-space normal with
+// reoriented normal mapping (Barre-Brisebois and Hill, "Blending in Detail",
+// 2012): the detail follows the base slope instead of flattening it.
+fn mlBlendNormalsRNM(base: vec3, detail: vec3) -> vec3 {
+    let t = base + vec3f(0.0, 0.0, 1.0)
+    let u = detail * vec3f(-1.0, -1.0, 1.0)
+    return normalize(t * (dot(t, u) / t.z) - u)
+}
+
+// mlBlendNormalsUDN is the cheaper partial-derivative-free blend: add the
+// detail slope to the base slope.
+fn mlBlendNormalsUDN(base: vec3, detail: vec3) -> vec3 {
+    return normalize(vec3f(base.x + detail.x, base.y + detail.y, base.z))
+}
+
+// mlDetailNormal tiles a detail normal map over a world normal (for example
+// a triplanar rock normal) in the mesh tangent frame, tiling times per UV
+// unit.
+fn mlDetailNormal(normal: vec3, detailMap: texture2d, uv: vec2, tiling: float, strength: float, tangent: vec3, bitangent: vec3) -> vec3 {
+    return mlTangentToWorld(mlUnpackNormal(sample(detailMap, uv * tiling).rgb, strength), tangent, bitangent, normal)
+}
+
+// mlDetailWorldNormal adds the deviation of a world-space detail normal (for
+// example a second, finer triplanar fetch) from the geometric normal to base.
+fn mlDetailWorldNormal(base: vec3, detail: vec3, geometric: vec3, strength: float) -> vec3 {
+    return normalize(base + (detail - normalize(geometric)) * strength)
+}

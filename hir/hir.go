@@ -30,6 +30,10 @@ const (
 	// engine inputs in a context block (shadowMap0, shadowMap1, one layer per
 	// shadow cascade); read with sampleDepth(tex, uv, layer) -> float.
 	TextureDepth2DArray Type = "textureDepth2dArray"
+	// SurfaceT is the typed surface record a surface-kind material returns
+	// (surface(geo) -> Surface). It never reaches the IR: lowering splits a
+	// Surface value into one local per field (see lower/surface.go).
+	SurfaceT Type = "Surface"
 )
 
 // Position is a 1-based source position with a 0-based byte offset.
@@ -85,6 +89,12 @@ const (
 	// authored feedback(cell) -> vec4 body lowers to BOTH a WGSL @compute kernel
 	// (WebGPU) and a GLSL/GLES fullscreen fragment ping-pong pass (WebGL2).
 	KindFeedback Kind = "feedback"
+	// KindSurface is a material whose surface(geo) returns the typed Surface
+	// record (base color, normal, roughness, metallic, occlusion, emissive,
+	// alpha, clearcoat, sheen, transmission) instead of a final color. The
+	// emitters write a fragment hook; the host's standard lighting shades the
+	// record (docs/standard-material-interop.md).
+	KindSurface Kind = "surface"
 )
 
 // StateField declares a vec4-per-cell state grid (`state <name>`). The host
