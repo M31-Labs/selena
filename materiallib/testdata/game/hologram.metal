@@ -4,10 +4,11 @@ using namespace metal;
 struct Uniforms {
   float4x4 mvp;
   float3x3 normalMatrix;
-  float3 tint;
+  packed_float3 tint;
   float density;
   float flicker;
-  float3 cameraPos;
+  char _selenaPad0[12];
+  packed_float3 cameraPos;
   float time;
 };
 
@@ -32,7 +33,7 @@ vertex VertexOut vertexMain(VertexIn in [[stage_in]], constant Uniforms& u [[buf
 
 fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {
   float3 n = normalize(in.vWorldNormal);
-  float3 v = normalize((u.cameraPos - in.vWorldPos));
+  float3 v = normalize((float3(u.cameraPos) - in.vWorldPos));
   float3 selenaLib0 = n;
   float3 selenaLib1 = v;
   float3 selenaLib2 = in.vWorldPos;
@@ -56,5 +57,5 @@ fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[b
   float selenaLib20 = fract((sin(dot(selenaLib19, float2(127.1, 311.7))) * 43758.5453));
   float selenaLib21 = (1.0 - (clamp(selenaLib5, 0.0, 1.0) * selenaLib20));
   float selenaLib22 = (((0.25 + (selenaLib10 * 0.9)) + (selenaLib18 * 0.5)) * selenaLib21);
-  return float4((u.tint * selenaLib22), 1.0);
+  return float4((float3(u.tint) * selenaLib22), 1.0);
 }

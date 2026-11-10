@@ -23,7 +23,8 @@ struct ParticleInstance {
 };
 
 struct UserUniforms {
-  float3 fogColor;
+  packed_float3 fogColor;
+  char _selenaPad0[4];
 };
 
 struct PointsOut {
@@ -88,6 +89,6 @@ fragment float4 fragmentMain(PointsOut in [[stage_in]], constant UserUniforms& u
   float core = exp((-((radial * radial) * falloff)));
   float edge = (1.0 - smoothstep(0.78, 1.0, radial));
   float a = ((core * edge) * in.v_alpha);
-  float3 foggedRGB = mix(u.fogColor, in.v_color, in.v_fogFactor);
+  float3 foggedRGB = mix(float3(u.fogColor), in.v_color, in.v_fogFactor);
   return float4(foggedRGB.r, foggedRGB.g, foggedRGB.b, a);
 }

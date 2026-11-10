@@ -4,7 +4,7 @@ using namespace metal;
 struct Uniforms {
   float4x4 mvp;
   float3x3 normalMatrix;
-  float3 baseColor;
+  packed_float3 baseColor;
   float gain;
 };
 
@@ -38,5 +38,5 @@ fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[b
   for (int i = 0; (i < 2); i = (i + 1)) {
     acc = (acc + 0.1);
   }
-  return float4(((u.baseColor * (acc * lit)) + (white * 0.0)), 1.0);
+  return float4(((float3(u.baseColor) * (acc * lit)) + (white * 0.0)), 1.0);
 }

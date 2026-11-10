@@ -9,7 +9,9 @@ struct Uniforms {
   float poolHeight;
   float cornerRadius;
   float poolShape;
-  float3 lightDir;
+  char _selenaPad0[12];
+  packed_float3 lightDir;
+  char _selenaPad1[4];
 };
 
 struct StateGrid {
@@ -164,7 +166,7 @@ fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[b
   float2 wuv = clamp(in.vWaterUV, float2(0.0, 0.0), float2(1.0, 1.0));
   float4 info = _inState[min(uint((wuv).x * float(_stateGrid.gridWidth)) + uint((wuv).y * float(_stateGrid.gridHeight)) * _stateGrid.gridWidth, _stateGrid.gridWidth * _stateGrid.gridHeight - 1u)];
   float wh = (info.x * u.poolHeight);
-  float3 ldir = normalize(u.lightDir);
+  float3 ldir = normalize(float3(u.lightDir));
   float3 refr = refract((-ldir), float3(0.0, 1.0, 0.0), (1.0 / 1.333));
   float refY = ((abs(refr.y) > 0.05) ? refr.y : 0.05);
   float duw = max((u.poolWidth * 2.0), 0.001);

@@ -4,15 +4,21 @@ using namespace metal;
 struct Uniforms {
   float4x4 mvp;
   float3x3 normalMatrix;
-  float3 surfaceColor;
-  float3 deepColor;
+  packed_float3 surfaceColor;
+  char _selenaPad0[4];
+  packed_float3 deepColor;
   float sparkle;
-  float3 cameraPos;
-  float3 ambient;
+  packed_float3 cameraPos;
+  char _selenaPad1[4];
+  packed_float3 ambient;
+  char _selenaPad2[4];
   float4 fog;
   float lightCount;
-  float3 sunDir;
-  float3 sunColor;
+  char _selenaPad3[12];
+  packed_float3 sunDir;
+  char _selenaPad4[4];
+  packed_float3 sunColor;
+  char _selenaPad5[4];
   float4 lights[32];
 };
 
@@ -37,14 +43,14 @@ vertex VertexOut vertexMain(VertexIn in [[stage_in]], constant Uniforms& u [[buf
 
 fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {
   float3 n = normalize(in.vWorldNormal);
-  float3 v = normalize((u.cameraPos - in.vWorldPos));
-  float3 selenaLib0 = u.surfaceColor;
-  float3 selenaLib1 = u.deepColor;
+  float3 v = normalize((float3(u.cameraPos) - in.vWorldPos));
+  float3 selenaLib0 = float3(u.surfaceColor);
+  float3 selenaLib1 = float3(u.deepColor);
   float3 selenaLib2 = n;
   float3 selenaLib3 = v;
   float3 selenaLib4 = mix(selenaLib0, selenaLib1, clamp(dot(selenaLib2, selenaLib3), 0.0, 1.0));
   float3 body = selenaLib4;
-  float3 lit = (u.ambient * body);
+  float3 lit = (float3(u.ambient) * body);
   for (int i = 0; (i < 8); i = (i + 1)) {
     int selenaLib5 = i;
     float3 selenaLib6 = n;
@@ -135,7 +141,7 @@ fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[b
   float3 selenaLib89 = in.vWorldPos;
   float3 selenaLib90 = n;
   float3 selenaLib91 = v;
-  float3 selenaLib92 = normalize(u.sunDir);
+  float3 selenaLib92 = normalize(float3(u.sunDir));
   float selenaLib93 = u.sparkle;
   float3 selenaLib94 = floor((selenaLib89 * selenaLib93));
   float2 selenaLib95 = (selenaLib94.xy + float2((selenaLib94.z * 13.1), (selenaLib94.z * 7.7)));
@@ -148,16 +154,16 @@ fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[b
   float3 selenaLib102 = float3((selenaLib99 - 0.5), (selenaLib101 - 0.5), (selenaLib97 - 0.5));
   float3 selenaLib103 = normalize((selenaLib90 + (selenaLib102 * 0.6)));
   float selenaLib104 = (pow(clamp(dot(selenaLib103, normalize((selenaLib92 + selenaLib91))), 0.0, 1.0), 200.0) * step(0.7, selenaLib97));
-  float3 glint = ((selenaLib104 * u.sunColor) * 4.0);
+  float3 glint = ((selenaLib104 * float3(u.sunColor)) * 4.0);
   float3 selenaLib105 = n;
   float3 selenaLib106 = v;
   float selenaLib107 = 4.0;
   float selenaLib108 = pow((1.0 - clamp(dot(selenaLib105, selenaLib106), 0.0, 1.0)), selenaLib107);
-  float3 rim = ((selenaLib108 * u.surfaceColor) * 0.5);
+  float3 rim = ((selenaLib108 * float3(u.surfaceColor)) * 0.5);
   float3 selenaLib109 = ((lit + glint) + rim);
   float3 selenaLib110 = in.vWorldPos;
   float3 selenaLib111 = selenaLib110;
-  float selenaLib112 = (length((selenaLib111 - u.cameraPos)) * u.fog.w);
+  float selenaLib112 = (length((selenaLib111 - float3(u.cameraPos))) * u.fog.w);
   float selenaLib113 = clamp(exp((-(selenaLib112 * selenaLib112))), 0.0, 1.0);
   float3 selenaLib114 = mix(u.fog.xyz, selenaLib109, selenaLib113);
   return float4(selenaLib114, 1.0);

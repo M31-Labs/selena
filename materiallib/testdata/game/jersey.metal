@@ -6,11 +6,16 @@ struct Uniforms {
   float3x3 normalMatrix;
   float4 labelRect;
   float4 numberRect;
-  float3 shirtColor;
-  float3 numberColor;
-  float3 sunDir;
-  float3 sunColor;
-  float3 ambient;
+  packed_float3 shirtColor;
+  char _selenaPad0[4];
+  packed_float3 numberColor;
+  char _selenaPad1[4];
+  packed_float3 sunDir;
+  char _selenaPad2[4];
+  packed_float3 sunColor;
+  char _selenaPad3[4];
+  packed_float3 ambient;
+  char _selenaPad4[4];
 };
 
 struct VertexIn {
@@ -50,6 +55,6 @@ fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[b
   float selenaLib12 = (((step(0.0, selenaLib11.x) * step(selenaLib11.x, 1.0)) * step(0.0, selenaLib11.y)) * step(selenaLib11.y, 1.0));
   float ink = (glyph.a * selenaLib12);
   float3 n = normalize(in.vWorldNormal);
-  float3 light = (u.ambient + (u.sunColor * max(dot(n, normalize(u.sunDir)), 0.0)));
-  return float4((mix(u.shirtColor, (u.numberColor * glyph.rgb), ink) * light), 1.0);
+  float3 light = (float3(u.ambient) + (float3(u.sunColor) * max(dot(n, normalize(float3(u.sunDir))), 0.0)));
+  return float4((mix(float3(u.shirtColor), (float3(u.numberColor) * glyph.rgb), ink) * light), 1.0);
 }

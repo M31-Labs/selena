@@ -9,9 +9,11 @@ struct UserUniforms {
   float objectRadius;
   float objectHalfX;
   float objectHalfZ;
-  float3 lightDir;
+  char _selenaPad0[4];
+  packed_float3 lightDir;
   float objectCenterX;
   float objectCenterZ;
+  char _selenaPad1[12];
 };
 
 struct PostOut {
@@ -29,7 +31,7 @@ vertex PostOut vertexMain(uint vid [[vertex_id]]) {
 }
 
 fragment float4 fragmentMain(PostOut in [[stage_in]], texture2d<float> _sceneColorTex [[texture(0)]], sampler _sceneColorSamp [[sampler(0)]], depth2d<float> _sceneDepthTex [[texture(2)]], sampler _sceneDepthSamp [[sampler(2)]], constant UserUniforms& u [[buffer(1)]]) {
-  float3 lnorm = normalize(u.lightDir);
+  float3 lnorm = normalize(float3(u.lightDir));
   float uvX = clamp((in.v_uv.x - (lnorm.x * 0.025)), 0.0, 1.0);
   float uvY = clamp((in.v_uv.y + (lnorm.z * 0.025)), 0.0, 1.0);
   float2 centerUV = float2(((u.objectCenterX * 0.5) + 0.5), ((u.objectCenterZ * 0.5) + 0.5));

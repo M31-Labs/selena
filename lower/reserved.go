@@ -1,6 +1,10 @@
 package lower
 
-import "m31labs.dev/selena/hir"
+import (
+	"strings"
+
+	"m31labs.dev/selena/hir"
+)
 
 func validateAuthorName(kind, name string, span hir.Span) error {
 	if reason, ok := reservedBackendName(name); ok {
@@ -21,6 +25,9 @@ func reservedBackendName(name string) (string, bool) {
 	// stay legal author names.
 	if _, ok := stdlib.builtin(name); ok && name != "load" && name != "size" {
 		return "Selena stdlib builtin", true
+	}
+	if strings.HasPrefix(name, "_selenaPad") {
+		return "generated Metal uniform padding", true
 	}
 	switch name {
 	case "rgb", "sample", "state", "stateAt":

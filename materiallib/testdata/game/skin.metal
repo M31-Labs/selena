@@ -4,14 +4,19 @@ using namespace metal;
 struct Uniforms {
   float4x4 mvp;
   float3x3 normalMatrix;
-  float3 albedo;
-  float3 scatter;
+  packed_float3 albedo;
+  char _selenaPad0[4];
+  packed_float3 scatter;
   float wrap;
   float thickness;
-  float3 cameraPos;
-  float3 ambient;
+  char _selenaPad1[12];
+  packed_float3 cameraPos;
+  char _selenaPad2[4];
+  packed_float3 ambient;
+  char _selenaPad3[4];
   float4 fog;
   float lightCount;
+  char _selenaPad4[12];
   float4 lights[32];
 };
 
@@ -36,8 +41,8 @@ vertex VertexOut vertexMain(VertexIn in [[stage_in]], constant Uniforms& u [[buf
 
 fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {
   float3 n = normalize(in.vWorldNormal);
-  float3 v = normalize((u.cameraPos - in.vWorldPos));
-  float3 lit = (u.ambient * u.albedo);
+  float3 v = normalize((float3(u.cameraPos) - in.vWorldPos));
+  float3 lit = (float3(u.ambient) * float3(u.albedo));
   for (int i = 0; (i < 8); i = (i + 1)) {
     int selenaLib0 = i;
     float3 selenaLib1 = in.vWorldPos;
@@ -92,7 +97,7 @@ fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[b
     float back = (selenaLib44 * selenaLib46);
     float3 selenaLib47 = n;
     float3 selenaLib48 = l;
-    float3 selenaLib49 = u.scatter;
+    float3 selenaLib49 = float3(u.scatter);
     float selenaLib50 = 0.35;
     float selenaLib51 = clamp((1.0 - (abs(dot(selenaLib47, selenaLib48)) / max(selenaLib50, 0.0001))), 0.0, 1.0);
     float3 selenaLib52 = (selenaLib49 * selenaLib51);
@@ -142,12 +147,12 @@ fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[b
     float selenaLib96 = ((float(selenaLib95) < u.lightCount) ? 1.0 : 0.0);
     float3 selenaLib97 = (((selenaLib94 * selenaLib84) * selenaLib93) * selenaLib96);
     float3 selenaLib98 = (((selenaLib97 * pow(max(dot(selenaLib56, selenaLib71), 0.0), selenaLib59)) * selenaLib73) * selenaLib72);
-    lit = ((lit + (radiance * (((u.albedo * soft) + (selenaLib52 * selenaLib54)) + (u.scatter * back)))) + (0.15 * selenaLib98));
+    lit = ((lit + (radiance * (((float3(u.albedo) * soft) + (selenaLib52 * selenaLib54)) + (float3(u.scatter) * back)))) + (0.15 * selenaLib98));
   }
   float3 selenaLib99 = lit;
   float3 selenaLib100 = in.vWorldPos;
   float3 selenaLib101 = selenaLib100;
-  float selenaLib102 = (length((selenaLib101 - u.cameraPos)) * u.fog.w);
+  float selenaLib102 = (length((selenaLib101 - float3(u.cameraPos))) * u.fog.w);
   float selenaLib103 = clamp(exp((-(selenaLib102 * selenaLib102))), 0.0, 1.0);
   float3 selenaLib104 = mix(u.fog.xyz, selenaLib99, selenaLib103);
   return float4(selenaLib104, 1.0);

@@ -9,6 +9,7 @@ struct GridUniforms {
 struct UserUniforms {
   float dropRadius;
   float dropCount;
+  char _selenaPad0[8];
   float4 drops[64];
 };
 

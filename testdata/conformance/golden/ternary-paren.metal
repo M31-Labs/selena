@@ -5,8 +5,11 @@ struct Uniforms {
   float4x4 mvp;
   float3x3 normalMatrix;
   float threshold;
-  float3 colorA;
-  float3 colorB;
+  char _selenaPad0[12];
+  packed_float3 colorA;
+  char _selenaPad1[4];
+  packed_float3 colorB;
+  char _selenaPad2[4];
 };
 
 struct VertexIn {
@@ -34,5 +37,5 @@ fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[b
   float pick2 = ((su > 0.5) ? 0.25 : ((sv > 0.5) ? 0.75 : 1.0));
   float m = clamp(((su > u.threshold) ? band : pick), 0.0, 1.0);
   float shade = ((((m > 0.5) ? pick : pick2) * band) + (1.0 - m));
-  return float4(((u.colorA * shade) + (u.colorB * (1.0 - shade))), 1.0);
+  return float4(((float3(u.colorA) * shade) + (float3(u.colorB) * (1.0 - shade))), 1.0);
 }

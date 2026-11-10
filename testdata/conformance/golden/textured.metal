@@ -5,7 +5,9 @@ struct Uniforms {
   float4x4 mvp;
   float3x3 normalMatrix;
   float light_ambient;
-  float3 light_dir;
+  char _selenaPad0[12];
+  packed_float3 light_dir;
+  char _selenaPad1[4];
 };
 
 struct VertexIn {
@@ -30,5 +32,5 @@ vertex VertexOut vertexMain(VertexIn in [[stage_in]], constant Uniforms& u [[buf
 
 fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]], texture2d<float> albedo [[texture(0)]], sampler albedoSampler [[sampler(0)]]) {
   float3 c = albedo.sample(albedoSampler, in.vUv).rgb;
-  return float4((c * (u.light_ambient + max(dot(normalize(in.vWorldNormal), u.light_dir), 0.0))), 1.0);
+  return float4((c * (u.light_ambient + max(dot(normalize(in.vWorldNormal), float3(u.light_dir)), 0.0))), 1.0);
 }

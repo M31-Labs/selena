@@ -21,14 +21,9 @@ func emitScreen(m ir.Module) (string, error) {
 
 	hasUniforms := len(m.Uniforms) > 0 || len(m.ArrayUniforms) > 0
 	if hasUniforms {
-		b.WriteString("struct Uniforms {\n")
-		for _, u := range m.Uniforms {
-			fmt.Fprintf(&b, "  %s %s;\n", typeName(u.Type), u.Name)
+		if err := writeUniformStruct(&b, "Uniforms", m); err != nil {
+			return "", err
 		}
-		for _, au := range m.ArrayUniforms {
-			fmt.Fprintf(&b, "  %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
-		}
-		b.WriteString("};\n\n")
 	}
 
 	b.WriteString(`struct ScreenOut {
@@ -47,7 +42,7 @@ vertex ScreenOut vertexMain(uint vid [[vertex_id]]) {
 
 `)
 
-	fs := internal.NewQualified(prismDialect, m, true)
+	fs := qualified(m, true)
 	fs.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
 	fragSig := "fragment float4 fragmentMain(ScreenOut in [[stage_in]]"
 	if hasUniforms {

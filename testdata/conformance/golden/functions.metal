@@ -4,9 +4,10 @@ using namespace metal;
 struct Uniforms {
   float4x4 mvp;
   float3x3 normalMatrix;
-  float3 baseColor;
+  packed_float3 baseColor;
   float light_ambient;
-  float3 light_dir;
+  packed_float3 light_dir;
+  char _selenaPad0[4];
 };
 
 struct VertexIn {
@@ -28,5 +29,5 @@ vertex VertexOut vertexMain(VertexIn in [[stage_in]], constant Uniforms& u [[buf
 
 fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {
   float3 n = normalize(in.vWorldNormal);
-  return float4((u.baseColor * (u.light_ambient + max(dot(n, u.light_dir), 0.0))), 1.0);
+  return float4((float3(u.baseColor) * (u.light_ambient + max(dot(n, float3(u.light_dir)), 0.0))), 1.0);
 }

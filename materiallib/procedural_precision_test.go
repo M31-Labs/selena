@@ -45,6 +45,8 @@ func emittedProbe(t *testing.T, result selena.Result, target selena.Target) hir.
 	return emittedFunction(t, result, target, "p:vec2")
 }
 
+var packedMember = regexp.MustCompile(`packed_float3 (\w+);`)
+
 func emittedFunction(t *testing.T, result selena.Result, target selena.Target, parameters string) hir.FuncDecl {
 	t.Helper()
 	a, ok := result.Artifact(target)
@@ -56,6 +58,10 @@ func emittedFunction(t *testing.T, result selena.Result, target selena.Target, p
 		source = a.Fragment
 	}
 	normalize := func(expression string) string {
+		// Metal reads a packed vec3 uniform as float3(u.name); drop the cast.
+		for _, m := range packedMember.FindAllStringSubmatch(source, -1) {
+			expression = strings.ReplaceAll(expression, "float3(u."+m[1]+")", "u."+m[1])
+		}
 		expression = strings.ReplaceAll(expression, "u.", "")
 		expression = strings.NewReplacer("dFdx(", "dpdx(", "dFdy(", "dpdy(", "dfdx(", "dpdx(", "dfdy(", "dpdy(").Replace(expression)
 		return emittedVector.ReplaceAllStringFunc(expression, func(s string) string {

@@ -8,6 +8,7 @@ struct GridUniforms {
 
 struct UserUniforms {
   float damping;
+  char _selenaPad0[12];
 };
 
 kernel void computeMain(

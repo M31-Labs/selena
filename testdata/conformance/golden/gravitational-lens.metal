@@ -7,6 +7,7 @@ struct UserUniforms {
   float strength;
   float softening;
   float maxBend;
+  char _selenaPad0[12];
 };
 
 struct PostOut {

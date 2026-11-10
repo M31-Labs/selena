@@ -9,6 +9,7 @@ struct GridUniforms {
 struct UserUniforms {
   float waveSpeed;
   float damping;
+  char _selenaPad0[8];
 };
 
 kernel void computeMain(

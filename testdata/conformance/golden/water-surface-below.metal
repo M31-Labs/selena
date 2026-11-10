@@ -15,10 +15,15 @@ struct Uniforms {
   float objectSubtype;
   float objectCount;
   float opticsEnable;
-  float3 lightDir;
-  float3 cameraPos;
-  float3 objectCenter;
-  float3 objectHalf;
+  char _selenaPad0[4];
+  packed_float3 lightDir;
+  char _selenaPad1[4];
+  packed_float3 cameraPos;
+  char _selenaPad2[4];
+  packed_float3 objectCenter;
+  char _selenaPad3[4];
+  packed_float3 objectHalf;
+  char _selenaPad4[4];
   float4 spheres[32];
 };
 
@@ -66,13 +71,13 @@ fragment float4 fragmentMain(VertexOut in [[stage_in]], constant Uniforms& u [[b
     pinfo = _inState[min(uint((coord).x * float(_stateGrid.gridWidth)) + uint((coord).y * float(_stateGrid.gridHeight)) * _stateGrid.gridWidth, _stateGrid.gridWidth * _stateGrid.gridHeight - 1u)];
   }
   float3 n = (-normalize(float3(clamp((pinfo.z * u.normalScale), (-0.999), 0.999), sqrt(max(0.001, (1.0 - min(((clamp((pinfo.z * u.normalScale), (-0.999), 0.999) * clamp((pinfo.z * u.normalScale), (-0.999), 0.999)) + (clamp((pinfo.w * u.normalScale), (-0.999), 0.999) * clamp((pinfo.w * u.normalScale), (-0.999), 0.999))), 0.999)))), clamp((pinfo.w * u.normalScale), (-0.999), 0.999))));
-  float3 ldir = normalize(u.lightDir);
-  float3 viewDir = normalize((u.cameraPos - wp));
+  float3 ldir = normalize(float3(u.lightDir));
+  float3 viewDir = normalize((float3(u.cameraPos) - wp));
   float3 reflectD = reflect((-viewDir), n);
   float3 refractD = refract((-viewDir), n, (1.333 / 1.0));
   float fresnel = mix(0.5, 1.0, pow((1.0 - clamp(dot(n, viewDir), 0.0, 1.0)), 3.0));
-  float3 objC = float3((u.objectCenter.x * u.poolWidth), u.objectCenter.y, (u.objectCenter.z * u.poolLength));
-  float3 objH = float3((u.objectHalf.x * u.poolWidth), u.objectHalf.y, (u.objectHalf.z * u.poolLength));
+  float3 objC = float3((float3(u.objectCenter).x * u.poolWidth), float3(u.objectCenter).y, (float3(u.objectCenter).z * u.poolLength));
+  float3 objH = float3((float3(u.objectHalf).x * u.poolWidth), float3(u.objectHalf).y, (float3(u.objectHalf).z * u.poolLength));
   float objR = max((u.objectRadius * u.poolLength), 0.001);
   bool objActive = ((u.opticsEnable > 0.0) && (u.objectKind > 0.5));
   bool isTorus = ((u.objectSubtype > 0.5) && (u.objectSubtype < 1.5));
