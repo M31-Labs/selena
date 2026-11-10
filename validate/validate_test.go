@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	prismvalidate "m31labs.dev/prism/validate"
+	"m31labs.dev/selena/internal/shadertest"
 
 	selena "m31labs.dev/selena"
 	"m31labs.dev/selena/emit/gles"
@@ -97,10 +98,10 @@ func TestGLESCompilesWithGlslang(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Run(name+".vert", func(t *testing.T) {
-			prismvalidate.Shader(t, "glslangValidator", vert, ".vert", nil)
+			shadertest.Shader(t, "glslangValidator", vert, ".vert", nil)
 		})
 		t.Run(name+".frag", func(t *testing.T) {
-			prismvalidate.Shader(t, "glslangValidator", frag, ".frag", nil)
+			shadertest.Shader(t, "glslangValidator", frag, ".frag", nil)
 		})
 	}
 }
@@ -116,7 +117,7 @@ func TestWGSLCompilesWithNaga(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Run(name, func(t *testing.T) {
-			prismvalidate.Shader(t, "naga", src, ".wgsl", nil)
+			shadertest.Shader(t, "naga", src, ".wgsl", nil)
 		})
 	}
 }
@@ -130,7 +131,7 @@ func TestPointsWGSLCompilesWithNaga(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prismvalidate.Shader(t, "naga", src, ".wgsl", nil)
+	shadertest.Shader(t, "naga", src, ".wgsl", nil)
 }
 
 func TestPostWGSLCompilesWithNaga(t *testing.T) {
@@ -142,7 +143,7 @@ func TestPostWGSLCompilesWithNaga(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prismvalidate.Shader(t, "naga", src, ".wgsl", nil)
+	shadertest.Shader(t, "naga", src, ".wgsl", nil)
 }
 
 func TestPointsGLESCompilesWithGlslang(t *testing.T) {
@@ -154,8 +155,8 @@ func TestPointsGLESCompilesWithGlslang(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prismvalidate.Shader(t, "glslangValidator", vert, ".vert", nil)
-	prismvalidate.Shader(t, "glslangValidator", frag, ".frag", nil)
+	shadertest.Shader(t, "glslangValidator", vert, ".vert", nil)
+	shadertest.Shader(t, "glslangValidator", frag, ".frag", nil)
 }
 
 func TestPostGLESCompilesWithGlslang(t *testing.T) {
@@ -167,8 +168,8 @@ func TestPostGLESCompilesWithGlslang(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prismvalidate.Shader(t, "glslangValidator", vert, ".vert", nil)
-	prismvalidate.Shader(t, "glslangValidator", frag, ".frag", nil)
+	shadertest.Shader(t, "glslangValidator", vert, ".vert", nil)
+	shadertest.Shader(t, "glslangValidator", frag, ".frag", nil)
 }
 
 // conformanceSelFiles returns all .sel files in testdata/conformance relative
@@ -208,7 +209,7 @@ func TestConformanceWGSLCompilesWithNaga(t *testing.T) {
 			if !ok {
 				t.Fatal("no WGSL artifact")
 			}
-			prismvalidate.Shader(t, "naga", a.Source, ".wgsl", nil)
+			shadertest.Shader(t, "naga", a.Source, ".wgsl", nil)
 		})
 	}
 }
@@ -240,10 +241,10 @@ func TestConformanceGLSLCompilesWithGlslang(t *testing.T) {
 			// extension is required — so the ES 1.00 rules the browser applies
 			// went unchecked. See essl100 in post_surface_test.go.
 			t.Run("vert", func(t *testing.T) {
-				prismvalidate.Shader(t, "glslangValidator", essl100(vert), ".vert", nil)
+				shadertest.Shader(t, "glslangValidator", essl100(vert), ".vert", nil)
 			})
 			t.Run("frag", func(t *testing.T) {
-				prismvalidate.Shader(t, "glslangValidator", essl100(frag), ".frag", nil)
+				shadertest.Shader(t, "glslangValidator", essl100(frag), ".frag", nil)
 			})
 		})
 	}
@@ -271,10 +272,10 @@ func TestConformanceGLESCompilesWithGlslang(t *testing.T) {
 				t.Fatalf("gles.Emit: %v", err)
 			}
 			t.Run("vert", func(t *testing.T) {
-				prismvalidate.Shader(t, "glslangValidator", vert, ".vert", nil)
+				shadertest.Shader(t, "glslangValidator", vert, ".vert", nil)
 			})
 			t.Run("frag", func(t *testing.T) {
-				prismvalidate.Shader(t, "glslangValidator", frag, ".frag", nil)
+				shadertest.Shader(t, "glslangValidator", frag, ".frag", nil)
 			})
 		})
 	}
@@ -311,7 +312,7 @@ func TestWGSLSampleInsideNonUniformEarlyReturnValidatesWithNaga(t *testing.T) {
 	if !ok {
 		t.Fatal("no WGSL artifact")
 	}
-	prismvalidate.Shader(t, "naga", a.Source, ".wgsl", nil)
+	shadertest.Shader(t, "naga", a.Source, ".wgsl", nil)
 }
 
 // TestWGSLSampleLevelInsideNonUniformEarlyReturnValidatesWithNaga is the
@@ -338,7 +339,7 @@ func TestWGSLSampleLevelInsideNonUniformEarlyReturnValidatesWithNaga(t *testing.
 	if !ok {
 		t.Fatal("no WGSL artifact")
 	}
-	prismvalidate.Shader(t, "naga", a.Source, ".wgsl", nil)
+	shadertest.Shader(t, "naga", a.Source, ".wgsl", nil)
 }
 
 // TestFeedbackEarlyReturnValidatesWithNaga checks the one WGSL shape whose
@@ -370,7 +371,7 @@ func TestFeedbackEarlyReturnValidatesWithNaga(t *testing.T) {
 	if !ok {
 		t.Fatal("no WGSL artifact")
 	}
-	prismvalidate.Shader(t, "naga", a.Source, ".wgsl", nil)
+	shadertest.Shader(t, "naga", a.Source, ".wgsl", nil)
 }
 
 // TestVertexStageRejectsFragmentOnlyBuiltins is the compile-time half of the
@@ -447,7 +448,7 @@ fn vertexMain() -> VertexOutput {
 `
 	r, err := prismvalidate.Run("naga", src, ".wgsl", nil)
 	if r.Skipped {
-		t.Skip("naga: skipped (not on PATH)")
+		shadertest.Missing(t, "naga")
 	}
 	if err == nil {
 		t.Fatalf("naga accepted dpdx() in a vertex stage, want a validation error\n%s", r.Output)
@@ -478,7 +479,7 @@ fn vertexMain() -> VertexOutput {
 `
 	r, err := prismvalidate.Run("naga", src, ".wgsl", nil)
 	if r.Skipped {
-		t.Skip("naga: skipped (not on PATH)")
+		shadertest.Missing(t, "naga")
 	}
 	if err == nil {
 		t.Fatalf("naga accepted sample() (textureSample) in a vertex stage, want a validation error\n%s", r.Output)
@@ -538,7 +539,7 @@ fn fragmentMain(in : VertexOutput) -> @location(0) vec4<f32> {
 `
 	r, err := prismvalidate.Run("naga", src, ".wgsl", nil)
 	if r.Skipped {
-		t.Skip("naga: skipped (not on PATH)")
+		shadertest.Missing(t, "naga")
 	}
 	if err == nil {
 		t.Fatalf("naga accepted an undeclared vertexIndex reference, want a validation error\n%s", r.Output)
@@ -564,7 +565,7 @@ void main() {
 `
 	r, err := prismvalidate.Run("glslangValidator", src, ".vert", nil)
 	if r.Skipped {
-		t.Skip("glslangValidator: skipped (not on PATH)")
+		shadertest.Missing(t, "glslangValidator")
 	}
 	if err == nil {
 		t.Fatalf("glslangValidator accepted an undeclared sampler in the vertex stage, want a validation error\n%s", r.Output)

@@ -3,8 +3,8 @@ package validate
 import (
 	"testing"
 
-	prismvalidate "m31labs.dev/prism/validate"
 	"m31labs.dev/selena"
+	"m31labs.dev/selena/internal/shadertest"
 )
 
 // Materials whose vertex() stage samples a texture with sampleLevel. The
@@ -55,12 +55,12 @@ func TestVertexSampleLevelShadersValidate(t *testing.T) {
 			t.Fatalf("%s: compile: %v", name, err)
 		}
 		a, _ := r.Artifact(selena.TargetWGSL)
-		t.Run(name+"/wgsl", func(t *testing.T) { prismvalidate.Shader(t, "naga", a.Source, ".wgsl", nil) })
+		t.Run(name+"/wgsl", func(t *testing.T) { shadertest.Shader(t, "naga", a.Source, ".wgsl", nil) })
 		g, _ := r.Artifact(selena.TargetGLSL)
-		t.Run(name+"/essl100-vert", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", essl100(g.Vertex), ".vert", nil) })
-		t.Run(name+"/essl100-frag", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", essl100(g.Fragment), ".frag", nil) })
+		t.Run(name+"/essl100-vert", func(t *testing.T) { shadertest.Shader(t, "glslangValidator", essl100(g.Vertex), ".vert", nil) })
+		t.Run(name+"/essl100-frag", func(t *testing.T) { shadertest.Shader(t, "glslangValidator", essl100(g.Fragment), ".frag", nil) })
 		e, _ := r.Artifact(selena.TargetGLES)
-		t.Run(name+"/essl300-vert", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", e.Vertex, ".vert", nil) })
-		t.Run(name+"/essl300-frag", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", e.Fragment, ".frag", nil) })
+		t.Run(name+"/essl300-vert", func(t *testing.T) { shadertest.Shader(t, "glslangValidator", e.Vertex, ".vert", nil) })
+		t.Run(name+"/essl300-frag", func(t *testing.T) { shadertest.Shader(t, "glslangValidator", e.Fragment, ".frag", nil) })
 	}
 }

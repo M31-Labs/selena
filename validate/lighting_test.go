@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
-	prismvalidate "m31labs.dev/prism/validate"
 	"m31labs.dev/selena"
+	"m31labs.dev/selena/internal/shadertest"
 	"m31labs.dev/selena/materiallib"
 )
 
@@ -22,15 +22,15 @@ func TestSceneLightingShadersValidate(t *testing.T) {
 		t.Fatal(err)
 	}
 	w, _ := r.Artifact(selena.TargetWGSL)
-	t.Run("wgsl", func(t *testing.T) { prismvalidate.Shader(t, "naga", w.Source, ".wgsl", nil) })
-	t.Run("wgsl-specular", func(t *testing.T) { prismvalidate.Shader(t, "naga", w.SpecularMRT.Source, ".wgsl", nil) })
+	t.Run("wgsl", func(t *testing.T) { shadertest.Shader(t, "naga", w.Source, ".wgsl", nil) })
+	t.Run("wgsl-specular", func(t *testing.T) { shadertest.Shader(t, "naga", w.SpecularMRT.Source, ".wgsl", nil) })
 	g, _ := r.Artifact(selena.TargetGLSL)
-	t.Run("essl100-vert", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", essl100(g.Vertex), ".vert", nil) })
-	t.Run("essl100-frag", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", essl100(g.Fragment), ".frag", nil) })
+	t.Run("essl100-vert", func(t *testing.T) { shadertest.Shader(t, "glslangValidator", essl100(g.Vertex), ".vert", nil) })
+	t.Run("essl100-frag", func(t *testing.T) { shadertest.Shader(t, "glslangValidator", essl100(g.Fragment), ".frag", nil) })
 	e, _ := r.Artifact(selena.TargetGLES)
-	t.Run("essl300-vert", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", e.Vertex, ".vert", nil) })
-	t.Run("essl300-frag", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", e.Fragment, ".frag", nil) })
+	t.Run("essl300-vert", func(t *testing.T) { shadertest.Shader(t, "glslangValidator", e.Vertex, ".vert", nil) })
+	t.Run("essl300-frag", func(t *testing.T) { shadertest.Shader(t, "glslangValidator", e.Fragment, ".frag", nil) })
 	t.Run("essl300-specular", func(t *testing.T) {
-		prismvalidate.Shader(t, "glslangValidator", e.SpecularMRT.Fragment, ".frag", nil)
+		shadertest.Shader(t, "glslangValidator", e.SpecularMRT.Fragment, ".frag", nil)
 	})
 }

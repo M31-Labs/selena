@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+env:
+  NAGA_VERSION: "29.0.3"
+
 jobs:
   test:
     name: Go tests
@@ -19,5 +22,29 @@ jobs:
           go-version: "1.26.x"
           cache: true
 
+      - name: Install glslang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y glslang-tools
+
+      - name: Cache naga
+        id: naga-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cargo/bin/naga
+          key: naga-cli-${{ runner.os }}-${{ env.NAGA_VERSION }}
+
+      - name: Install naga
+        if: steps.naga-cache.outputs.cache-hit != 'true'
+        run: cargo install naga-cli --version "$NAGA_VERSION" --locked
+
+      - name: Show validator versions
+        run: |
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.cargo/bin/naga" --version
+          glslangValidator --version
+
       - name: Test
+        env:
+          SELENA_REQUIRE_VALIDATORS: "1"
         run: go test ./...

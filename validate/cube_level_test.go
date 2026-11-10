@@ -1,8 +1,8 @@
 package validate
 
 import (
-	prismvalidate "m31labs.dev/prism/validate"
 	"m31labs.dev/selena"
+	"m31labs.dev/selena/internal/shadertest"
 	"testing"
 )
 
@@ -20,9 +20,9 @@ func TestCubeLevelShadersValidate(t *testing.T) {
 	}
 	for _, target := range []selena.Target{selena.TargetGLES, selena.TargetGLSL} {
 		a, _ := r.Artifact(target)
-		t.Run(string(target)+"-vertex", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", a.Vertex, ".vert", nil) })
-		t.Run(string(target)+"-fragment", func(t *testing.T) { prismvalidate.Shader(t, "glslangValidator", a.Fragment, ".frag", nil) })
+		t.Run(string(target)+"-vertex", func(t *testing.T) { shadertest.Shader(t, "glslangValidator", a.Vertex, ".vert", nil) })
+		t.Run(string(target)+"-fragment", func(t *testing.T) { shadertest.Shader(t, "glslangValidator", a.Fragment, ".frag", nil) })
 	}
 	a, _ := r.Artifact(selena.TargetWGSL)
-	t.Run("wgsl", func(t *testing.T) { prismvalidate.Shader(t, "naga", a.Source, ".wgsl", nil) })
+	t.Run("wgsl", func(t *testing.T) { shadertest.Shader(t, "naga", a.Source, ".wgsl", nil) })
 }
