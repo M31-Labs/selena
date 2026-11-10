@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	prismvalidate "m31labs.dev/prism/validate"
+	"m31labs.dev/selena/internal/shadertest"
 
 	selena "m31labs.dev/selena"
 	"m31labs.dev/selena/emit/gles"
@@ -112,8 +113,8 @@ func TestGLSLDerivativesRequestExtensionAndCompileAsESSL100(t *testing.T) {
 					t.Fatalf("%s: #extension must precede `precision`:\n%s", tc.name, frag)
 				}
 			}
-			prismvalidate.Shader(t, "glslangValidator", essl100(vert), ".vert", nil)
-			prismvalidate.Shader(t, "glslangValidator", essl100(frag), ".frag", nil)
+			shadertest.Shader(t, "glslangValidator", essl100(vert), ".vert", nil)
+			shadertest.Shader(t, "glslangValidator", essl100(frag), ".frag", nil)
 		})
 	}
 }
@@ -147,7 +148,7 @@ func TestESSL100RejectsDerivativesWithoutExtension(t *testing.T) {
 	stripped := strings.ReplaceAll(frag, "#extension GL_OES_standard_derivatives : enable\n", "")
 	out, runErr := prismvalidate.Run("glslangValidator", essl100(stripped), ".frag", nil)
 	if out.Skipped {
-		t.Skip("glslangValidator not installed")
+		shadertest.Missing(t, "glslangValidator")
 	}
 	if runErr == nil {
 		t.Fatalf("expected GLSL ES 1.00 to reject fwidth without GL_OES_standard_derivatives, got success:\n%s", out.Output)
@@ -166,8 +167,8 @@ func TestGLESDerivativesAreCoreAndCompile(t *testing.T) {
 	mustNotContain(t, "gles", frag, "GL_OES_standard_derivatives")
 	mustContain(t, "gles", frag, "#version 300 es")
 	mustContain(t, "gles", frag, "fwidth(")
-	prismvalidate.Shader(t, "glslangValidator", vert, ".vert", nil)
-	prismvalidate.Shader(t, "glslangValidator", frag, ".frag", nil)
+	shadertest.Shader(t, "glslangValidator", vert, ".vert", nil)
+	shadertest.Shader(t, "glslangValidator", frag, ".frag", nil)
 }
 
 // TestDerivativesDeclareGLExtensionRequirement checks the half of the contract
@@ -216,7 +217,7 @@ func TestBackdropLODAndSizeCompileOnEveryBackend(t *testing.T) {
 	}
 	mustContain(t, "wgsl", wgslArt.Source, "textureSampleLevel(_sceneColorTex, _sceneColorSamp,")
 	mustContain(t, "wgsl", wgslArt.Source, "textureDimensions(_sceneColorTex, 0)")
-	prismvalidate.Shader(t, "naga", wgslArt.Source, ".wgsl", nil)
+	shadertest.Shader(t, "naga", wgslArt.Source, ".wgsl", nil)
 
 	glVert, glFrag, err := glsl.Emit(res.Module)
 	if err != nil {
@@ -225,8 +226,8 @@ func TestBackdropLODAndSizeCompileOnEveryBackend(t *testing.T) {
 	mustContain(t, "glsl", glFrag, "#extension GL_EXT_shader_texture_lod : enable")
 	mustContain(t, "glsl", glFrag, "texture2DLodEXT(_sceneColor,")
 	mustContain(t, "glsl", glFrag, "uniform vec2 _sceneSize;")
-	prismvalidate.Shader(t, "glslangValidator", essl100(glVert), ".vert", nil)
-	prismvalidate.Shader(t, "glslangValidator", essl100(glFrag), ".frag", nil)
+	shadertest.Shader(t, "glslangValidator", essl100(glVert), ".vert", nil)
+	shadertest.Shader(t, "glslangValidator", essl100(glFrag), ".frag", nil)
 
 	esVert, esFrag, err := gles.Emit(res.Module)
 	if err != nil {
@@ -235,8 +236,8 @@ func TestBackdropLODAndSizeCompileOnEveryBackend(t *testing.T) {
 	mustContain(t, "gles", esFrag, "textureLod(_sceneColor,")
 	mustContain(t, "gles", esFrag, "vec2(textureSize(_sceneColor, 0))")
 	mustNotContain(t, "gles", esFrag, "_sceneSize")
-	prismvalidate.Shader(t, "glslangValidator", esVert, ".vert", nil)
-	prismvalidate.Shader(t, "glslangValidator", esFrag, ".frag", nil)
+	shadertest.Shader(t, "glslangValidator", esVert, ".vert", nil)
+	shadertest.Shader(t, "glslangValidator", esFrag, ".frag", nil)
 
 	metalArt, ok := res.Artifact(selena.TargetMetal)
 	if !ok {

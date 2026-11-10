@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	prismvalidate "m31labs.dev/prism/validate"
 	"m31labs.dev/selena"
 	"m31labs.dev/selena/bindings"
 	"m31labs.dev/selena/emit/gles"
 	"m31labs.dev/selena/emit/wgsl"
 	"m31labs.dev/selena/hir"
+	"m31labs.dev/selena/internal/shadertest"
 	"m31labs.dev/selena/parse"
 )
 
@@ -116,8 +116,8 @@ func validateSurfaceProbe(t *testing.T, module Module, declarations []string, va
 	if !ok || !ok2 || len(res.Artifacts) != 2 {
 		t.Fatalf("surface probe artifacts: %d", len(res.Artifacts))
 	}
-	prismvalidate.Shader(t, "naga", wgsl.SurfaceHarness(w.Source, len(res.Layout.Textures)), ".wgsl", nil)
-	prismvalidate.Shader(t, "glslangValidator", gles.SurfaceHarness(g.Fragment, len(res.Layout.Textures)), ".frag", nil)
+	shadertest.Shader(t, "naga", wgsl.SurfaceHarness(w.Source, len(res.Layout.Textures)), ".wgsl", nil)
+	shadertest.Shader(t, "glslangValidator", gles.SurfaceHarness(g.Fragment, len(res.Layout.Textures)), ".frag", nil)
 }
 
 func validateArtifacts(t *testing.T, res selena.Result) {
@@ -131,10 +131,10 @@ func validateArtifacts(t *testing.T, res selena.Result) {
 	for _, a := range res.Artifacts {
 		switch a.Target {
 		case selena.TargetWGSL:
-			prismvalidate.Shader(t, "naga", a.Source, ".wgsl", nil)
+			shadertest.Shader(t, "naga", a.Source, ".wgsl", nil)
 		case selena.TargetGLSL, selena.TargetGLES:
-			prismvalidate.Shader(t, "glslangValidator", a.Vertex, ".vert", nil)
-			prismvalidate.Shader(t, "glslangValidator", a.Fragment, ".frag", nil)
+			shadertest.Shader(t, "glslangValidator", a.Vertex, ".vert", nil)
+			shadertest.Shader(t, "glslangValidator", a.Fragment, ".frag", nil)
 		case selena.TargetMetal:
 			if !strings.Contains(a.Source, "fragmentMain") {
 				t.Fatal("missing Metal fragment entry")
@@ -161,8 +161,8 @@ func TestExamplesConformAcrossTargets(t *testing.T) {
 			if res.Layout.Kind == bindings.SurfaceKindSurface {
 				w, _ := res.Artifact(selena.TargetWGSL)
 				g, _ := res.Artifact(selena.TargetGLES)
-				prismvalidate.Shader(t, "naga", wgsl.SurfaceHarness(w.Source, len(res.Layout.Textures)), ".wgsl", nil)
-				prismvalidate.Shader(t, "glslangValidator", gles.SurfaceHarness(g.Fragment, len(res.Layout.Textures)), ".frag", nil)
+				shadertest.Shader(t, "naga", wgsl.SurfaceHarness(w.Source, len(res.Layout.Textures)), ".wgsl", nil)
+				shadertest.Shader(t, "glslangValidator", gles.SurfaceHarness(g.Fragment, len(res.Layout.Textures)), ".frag", nil)
 				return
 			}
 			validateArtifacts(t, res)
