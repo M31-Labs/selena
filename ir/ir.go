@@ -542,12 +542,6 @@ func (StateSample) isExpr()   {}
 func (StateSampleUV) isExpr() {}
 func (CellUV) isExpr()        {}
 
-// Dialect spells the backend-specific parts of expression printing: how a type
-// name renders (vec4 vs vec4<f32>) and how a reference renders in the current
-// stage scope (a uniform as u.x in WGSL vs a bare global in GLSL). Operators,
-// builtins, literals, and the overall expression structure are shared — see
-// Print. The two backends differing only in Dialect (and stage scaffolding) is
-// the property this slice is meant to validate.
 // IndexReader is an optional Dialect extension. A backend whose array storage
 // element differs from the element type (a Metal float array widened to float4
 // to keep the 16 byte uniform stride) renders the read of element idx of the
@@ -557,6 +551,12 @@ type IndexReader interface {
 	IndexRead(name, arr, idx string) (string, bool)
 }
 
+// Dialect spells the backend-specific parts of expression printing: how a type
+// name renders (vec4 vs vec4<f32>) and how a reference renders in the current
+// stage scope (a uniform as u.x in WGSL vs a bare global in GLSL). Operators,
+// builtins, literals, and the overall expression structure are shared — see
+// Print. The two backends differing only in Dialect (and stage scaffolding) is
+// the property this slice is meant to validate.
 type Dialect interface {
 	TypeName(Type) string
 	Ref(name string) string

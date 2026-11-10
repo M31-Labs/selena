@@ -20,6 +20,11 @@ type metalMaterial struct {
 	source string
 }
 
+// metalNoCompileAllowed lists corpus materials that may fail to compile for
+// Metal. SculptedRock is a surface material, and the Metal target has no
+// surface hook. Any other failure is a regression, so the test fails on it.
+var metalNoCompileAllowed = map[string]bool{"sculpted-rock.sel/SculptedRock": true}
+
 // metalCorpus compiles the Metal output of every material in the conformance
 // corpus and the examples. Materials that do not compile are logged and left
 // out: they are meant to fail, or need a host-specific module set, and the
@@ -56,7 +61,11 @@ func metalCorpus(t *testing.T) []metalMaterial {
 			name := filepath.Base(file) + "/" + m.Name
 			res, err := selena.CompileProgram(linked, selena.CompileOptions{Material: m.Name, Targets: []selena.Target{selena.TargetMetal}})
 			if err != nil {
-				t.Logf("%s: not compiled: %v", name, err)
+				if metalNoCompileAllowed[name] {
+					t.Logf("%s: not compiled: %v", name, err)
+					continue
+				}
+				t.Errorf("%s: Metal compile failed and the material is not in the allowlist: %v", name, err)
 				continue
 			}
 			artifact, ok := res.Artifact(selena.TargetMetal)

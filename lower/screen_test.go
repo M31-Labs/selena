@@ -316,3 +316,13 @@ func mustProgram(t *testing.T, src string) hir.Program {
 	}
 	return p
 }
+
+func TestReservesMetalPaddingPrefix(t *testing.T) {
+	for _, name := range []string{"_selenaPad0", "_selenaPadX"} {
+		_, _, err := lowerScreenSrc(t, "material M kind screen {\n param "+name+" : float\n "+screenBody+"\n}")
+		wantDiagnostic(t, err, CodeReservedName, name)
+	}
+	if _, ok := reservedBackendName("selenaPad"); ok {
+		t.Error("selenaPad must stay a legal name")
+	}
+}

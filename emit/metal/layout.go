@@ -123,6 +123,9 @@ func writeUniformStruct(b *strings.Builder, name string, m ir.Module) error {
 	}
 	for _, f := range block.Fields {
 		t := types[f.Name]
+		if f.Count > 1 && (t == ir.Mat3 || t == ir.Mat4) {
+			return fmt.Errorf("uniform %q: uniform arrays of mat3 or mat4 are not supported: the binding descriptor cannot describe their layout", f.Name)
+		}
 		typ, l, err := mslMember(t, f.Count <= 1)
 		if wide, _, ok := wideElement(t); ok && f.Count > 1 {
 			typ, l, err = wide, mslLayout{16, 16}, nil

@@ -92,7 +92,7 @@ func TestMetalUniformLayoutMatchesDescriptor(t *testing.T) {
 		t.Fatal("no material with uniforms was checked")
 	}
 	// The Metal target has no surface hook, so surface materials are not here.
-	for _, kind := range []string{"mesh", "points", "post", "feedback"} {
+	for _, kind := range []string{"mesh", "points", "post", "feedback", "screen"} {
 		if !kinds[kind] {
 			t.Errorf("no %s material with uniforms in the corpus", kind)
 		}

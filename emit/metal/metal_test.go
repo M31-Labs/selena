@@ -108,3 +108,14 @@ func TestNarrowUniformArraysKeepStride16(t *testing.T) {
 		t.Errorf("float read = %q", read)
 	}
 }
+
+func TestMatrixUniformArrayErrorMessage(t *testing.T) {
+	for _, typ := range []ir.Type{ir.Mat3, ir.Mat4} {
+		m := ir.Module{ArrayUniforms: []ir.ArrayBinding{{Name: "bones", ElemType: typ, Count: 2}}}
+		_, err := uniformStruct(t, m)
+		want := `uniform "bones": uniform arrays of mat3 or mat4 are not supported: the binding descriptor cannot describe their layout`
+		if err == nil || err.Error() != want {
+			t.Errorf("%s: err = %v, want %q", typ, err, want)
+		}
+	}
+}
