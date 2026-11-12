@@ -6,7 +6,7 @@ uniform float head;
 in float vLevel;
 in vec2 vUv;
 uniform sampler2D spectrum;
-uniform sampler2D gains;
+uniform highp sampler2D gains;
 uniform sampler2D palette;
 out vec4 fragColor;
 

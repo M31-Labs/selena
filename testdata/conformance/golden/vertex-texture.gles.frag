@@ -6,7 +6,7 @@ uniform float scale;
 uniform float lod;
 in float height;
 in vec2 vUv;
-uniform sampler2D heightMap;
+uniform highp sampler2D heightMap;
 uniform sampler2D tint;
 out vec4 fragColor;
 

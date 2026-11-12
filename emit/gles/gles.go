@@ -120,8 +120,12 @@ func emitFragmentAuthored(m ir.Module) string {
 		}
 		fmt.Fprintf(&b, "in %s %s;\n", typeName(v.Type), v.Name)
 	}
+	// A texture the vertex stage also reads is declared highp there. A
+	// uniform both stages use must have one precision, or the program does
+	// not link, so the fragment stage declares it the same way.
+	vertexRead := vertexReadTextures(m)
 	for _, t := range m.Textures {
-		fmt.Fprintf(&b, "uniform %s %s;\n", samplerType(t, false), t.Name)
+		fmt.Fprintf(&b, "uniform %s %s;\n", samplerType(t, vertexRead[t.Name]), t.Name)
 	}
 	res := internal.NewBare(prismDialect)
 	res.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
@@ -236,8 +240,12 @@ func emitFragment(m ir.Module) string {
 	for _, v := range m.Varyings {
 		fmt.Fprintf(&b, "in %s %s;\n", typeName(v.Type), v.Name)
 	}
+	// A texture the vertex stage also reads is declared highp there. A
+	// uniform both stages use must have one precision, or the program does
+	// not link, so the fragment stage declares it the same way.
+	vertexRead := vertexReadTextures(m)
 	for _, t := range m.Textures {
-		fmt.Fprintf(&b, "uniform %s %s;\n", samplerType(t, false), t.Name)
+		fmt.Fprintf(&b, "uniform %s %s;\n", samplerType(t, vertexRead[t.Name]), t.Name)
 	}
 	res := internal.NewBare(prismDialect)
 	res.TypedUintLiterals = ir.NeedsTypedUintLiterals(m)
@@ -430,6 +438,19 @@ func samplerType(t ir.Texture, vertex bool) string {
 		return "highp sampler2D"
 	}
 	return "sampler2D"
+}
+
+// vertexReadTextures is the set of textures the authored vertex stage reads.
+func vertexReadTextures(m ir.Module) map[string]bool {
+	names := ir.VertexSampledTextures(m)
+	if len(names) == 0 {
+		return nil
+	}
+	set := make(map[string]bool, len(names))
+	for _, name := range names {
+		set[name] = true
+	}
+	return set
 }
 
 // textureNamed returns the module texture called name, or a plain 2D texture
