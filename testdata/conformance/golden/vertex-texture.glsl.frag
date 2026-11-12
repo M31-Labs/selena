@@ -5,7 +5,6 @@ uniform float scale;
 uniform float lod;
 varying float height;
 varying vec2 vUv;
-uniform sampler2D heightMap;
 uniform sampler2D tint;
 
 void main() {

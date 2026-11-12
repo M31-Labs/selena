@@ -297,7 +297,9 @@ func TestNoInstancingLeavesDescriptorAndShadersAlone(t *testing.T) {
 		t.Errorf("a material without instance attributes mentions instancing:\n%s", js)
 	}
 	g, _ := r.Artifact(TargetGLES)
-	if strings.Contains(g.Vertex+g.Fragment, "flat") || strings.Contains(g.Fragment, "precision highp int") {
+	// Every gles fragment stage declares "precision highp int" now, so only
+	// the flat qualifier of an integer varying marks an instancing change.
+	if strings.Contains(g.Vertex+g.Fragment, "flat") {
 		t.Errorf("gles output changed for a material without instancing:\n%s", g.Vertex+g.Fragment)
 	}
 }

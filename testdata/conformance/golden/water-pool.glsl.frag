@@ -1,9 +1,9 @@
 precision mediump float;
 uniform mat4 mvp;
 uniform mat3 normalMatrix;
-uniform float poolWidth;
-uniform float poolLength;
-uniform float poolHeight;
+uniform highp float poolWidth;
+uniform highp float poolLength;
+uniform highp float poolHeight;
 uniform float cornerRadius;
 uniform float poolShape;
 uniform vec3 lightDir;

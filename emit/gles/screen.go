@@ -32,7 +32,7 @@ func emitScreenVertex(m ir.Module) string {
 // emitScreenFragment emits the GLSL ES 3.00 fragment shader of a screen pass.
 func emitScreenFragment(m ir.Module) string {
 	var b strings.Builder
-	b.WriteString("#version 300 es\nprecision highp float;\n")
+	b.WriteString(fragmentPrecision)
 	for _, u := range m.Uniforms {
 		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
 	}

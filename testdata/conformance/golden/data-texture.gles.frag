@@ -1,12 +1,13 @@
 #version 300 es
 precision highp float;
+precision highp int;
 uniform mat4 mvp;
 uniform mat3 normalMatrix;
 uniform float head;
 in float vLevel;
 in vec2 vUv;
 uniform sampler2D spectrum;
-uniform sampler2D gains;
+uniform highp sampler2D gains;
 uniform sampler2D palette;
 out vec4 fragColor;
 
