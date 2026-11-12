@@ -65,12 +65,7 @@ func emitVertexAuthored(m ir.Module) string {
 		// WebGL1 fallback: host-supplied float vertex-index attribute.
 		b.WriteString("attribute float a_vertexIndex;\n")
 	}
-	for _, u := range m.Uniforms {
-		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
-	}
-	for _, au := range m.ArrayUniforms {
-		fmt.Fprintf(&b, "uniform %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
-	}
+	writeUserUniforms(&b, m)
 	if m.StateField != "" {
 		b.WriteString("uniform highp sampler2D stateTex;\n")
 	}
@@ -106,12 +101,7 @@ func emitFragmentAuthored(m ir.Module) string {
 		b.WriteString("#extension GL_EXT_draw_buffers : require\n")
 	}
 	writeFragmentPrologue(&b, m, "mediump")
-	for _, u := range m.Uniforms {
-		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
-	}
-	for _, au := range m.ArrayUniforms {
-		fmt.Fprintf(&b, "uniform %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
-	}
+	writeUserUniforms(&b, m)
 	if m.StateField != "" {
 		b.WriteString("uniform highp sampler2D stateTex;\n")
 	}
@@ -122,7 +112,14 @@ func emitFragmentAuthored(m ir.Module) string {
 	// uniform both stages use must have one precision, or the program does
 	// not link, so the fragment stage declares it the same way.
 	vertexRead := vertexReadTextures(m)
+	fragmentRead := nameSet(ir.FragmentSampledTextures(m))
 	for _, t := range m.Textures {
+		if vertexRead[t.Name] && !fragmentRead[t.Name] {
+			// Only the vertex stage reads it. A highp declaration here
+			// would fail to compile on a device without fragment highp,
+			// and a lowp one would not link: leave it out.
+			continue
+		}
 		fmt.Fprintf(&b, "uniform %s %s;\n", samplerType(t, vertexRead[t.Name]), t.Name)
 	}
 	writeTexSizeUniforms(&b, m, true)
@@ -199,12 +196,7 @@ func emitVertex(m ir.Module) string {
 	for _, a := range m.Attributes {
 		fmt.Fprintf(&b, "attribute %s %s;\n", typeName(a.Type), a.Name)
 	}
-	for _, u := range m.Uniforms {
-		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
-	}
-	for _, au := range m.ArrayUniforms {
-		fmt.Fprintf(&b, "uniform %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
-	}
+	writeUserUniforms(&b, m)
 	for _, v := range m.Varyings {
 		fmt.Fprintf(&b, "varying %s %s;\n", typeName(v.Type), v.Name)
 	}
@@ -228,12 +220,7 @@ func emitFragment(m ir.Module) string {
 		b.WriteString("#extension GL_EXT_draw_buffers : require\n")
 	}
 	writeFragmentPrologue(&b, m, "mediump")
-	for _, u := range m.Uniforms {
-		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
-	}
-	for _, au := range m.ArrayUniforms {
-		fmt.Fprintf(&b, "uniform %s %s[%d];\n", typeName(au.ElemType), au.Name, au.Count)
-	}
+	writeUserUniforms(&b, m)
 	for _, v := range m.Varyings {
 		fmt.Fprintf(&b, "varying %s %s;\n", typeName(v.Type), v.Name)
 	}
@@ -241,7 +228,14 @@ func emitFragment(m ir.Module) string {
 	// uniform both stages use must have one precision, or the program does
 	// not link, so the fragment stage declares it the same way.
 	vertexRead := vertexReadTextures(m)
+	fragmentRead := nameSet(ir.FragmentSampledTextures(m))
 	for _, t := range m.Textures {
+		if vertexRead[t.Name] && !fragmentRead[t.Name] {
+			// Only the vertex stage reads it. A highp declaration here
+			// would fail to compile on a device without fragment highp,
+			// and a lowp one would not link: leave it out.
+			continue
+		}
 		fmt.Fprintf(&b, "uniform %s %s;\n", samplerType(t, vertexRead[t.Name]), t.Name)
 	}
 	writeTexSizeUniforms(&b, m, true)
@@ -490,7 +484,11 @@ func samplerType(t ir.Texture, vertex bool) string {
 
 // vertexReadTextures is the set of textures the authored vertex stage reads.
 func vertexReadTextures(m ir.Module) map[string]bool {
-	names := ir.VertexSampledTextures(m)
+	return nameSet(ir.VertexSampledTextures(m))
+}
+
+// nameSet turns a list of names into a set. It returns nil for an empty list.
+func nameSet(names []string) map[string]bool {
 	if len(names) == 0 {
 		return nil
 	}
@@ -510,4 +508,26 @@ func textureNamed(m ir.Module, name string) ir.Texture {
 		}
 	}
 	return ir.Texture{Name: name}
+}
+
+// writeUserUniforms declares the material's uniforms and uniform arrays for a
+// mesh stage. The vertex stage's float default is highp and the fragment
+// stage's is mediump, so a uniform both stages read is declared highp in both:
+// WebGL 1 links a program only when each shared uniform has one precision.
+// Reading one in the fragment stage therefore needs fragment highp support
+// (docs/compatibility.md). A bool takes no precision qualifier.
+func writeUserUniforms(b *strings.Builder, m ir.Module) {
+	shared := nameSet(ir.SharedUniforms(m))
+	qualifier := func(name string, t ir.Type) string {
+		if shared[name] && t != ir.Bool {
+			return "highp "
+		}
+		return ""
+	}
+	for _, u := range m.Uniforms {
+		fmt.Fprintf(b, "uniform %s%s %s;\n", qualifier(u.Name, u.Type), typeName(u.Type), u.Name)
+	}
+	for _, au := range m.ArrayUniforms {
+		fmt.Fprintf(b, "uniform %s%s %s[%d];\n", qualifier(au.Name, au.ElemType), typeName(au.ElemType), au.Name, au.Count)
+	}
 }

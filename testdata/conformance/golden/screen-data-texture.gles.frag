@@ -1,5 +1,6 @@
 #version 300 es
 precision highp float;
+precision highp int;
 uniform float head;
 uniform float gain;
 in vec2 v_uv;

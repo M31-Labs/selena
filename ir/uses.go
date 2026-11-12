@@ -300,3 +300,81 @@ func VertexSampledTextures(m Module) []string {
 	}
 	return out
 }
+
+// FragmentSampledTextures returns the names of the textures m's fragment stage
+// (and its optional specular companion) reads in any way, in m.Textures order
+// and without duplicates. An emitter uses it to leave out a declaration for a
+// texture only the vertex stage reads.
+func FragmentSampledTextures(m Module) []string {
+	used := map[string]bool{}
+	collect := func(stage Stage) {
+		stageMatches(stage, func(e Expr) bool {
+			switch s := e.(type) {
+			case Sample:
+				used[s.Texture] = true
+			case SampleLevel:
+				used[s.Texture] = true
+			case SampleDepth:
+				used[s.Texture] = true
+			case SampleCube:
+				used[s.Texture] = true
+			case SampleCubeLevel:
+				used[s.Texture] = true
+			case Load:
+				used[s.Texture] = true
+			case TextureSize:
+				used[s.Texture] = true
+			}
+			return false // keep walking: collect every use
+		})
+	}
+	collect(m.Fragment)
+	if m.Specular != nil {
+		collect(*m.Specular)
+	}
+	var out []string
+	for _, t := range m.Textures {
+		if used[t.Name] {
+			out = append(out, t.Name)
+		}
+	}
+	return out
+}
+
+// SharedUniforms returns the names of the uniforms and uniform arrays that
+// both m's vertex stage and its fragment stage (or the fragment's specular
+// companion) read, in declaration order: plain uniforms first, then arrays.
+// A uniform that both stages declare must carry one precision qualifier, or
+// the program does not link on a driver that checks it (GLSL ES 1.00 gives the
+// vertex stage a default float precision and the fragment stage none).
+func SharedUniforms(m Module) []string {
+	refs := func(stage Stage) map[string]bool {
+		set := map[string]bool{}
+		stageMatches(stage, func(e Expr) bool {
+			if r, ok := e.(Ref); ok {
+				set[r.Name] = true
+			}
+			return false // keep walking: collect every reference
+		})
+		return set
+	}
+	vertex := refs(m.Vertex)
+	fragment := refs(m.Fragment)
+	if m.Specular != nil {
+		for name := range refs(*m.Specular) {
+			fragment[name] = true
+		}
+	}
+	var out []string
+	for _, u := range m.Uniforms {
+		if vertex[u.Name] && fragment[u.Name] {
+			out = append(out, u.Name)
+		}
+	}
+	for _, a := range m.ArrayUniforms {
+		if vertex[a.Name] && fragment[a.Name] {
+			out = append(out, a.Name)
+		}
+	}
+	return out
+}

@@ -100,7 +100,7 @@
         {
           "target": "gles",
           "vertex": "#version 300 es\nin vec3 position;\nin vec3 normal;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform vec3 baseColor;\nuniform float light_ambient;\nuniform vec3 light_dir;\nout vec3 vWorldNormal;\n\nvoid main() {\n  vWorldNormal = normalize((normalMatrix * normal));\n  gl_Position = (mvp * vec4(position, 1.0));\n}\n",
-          "fragment": "#version 300 es\nprecision highp float;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform vec3 baseColor;\nuniform float light_ambient;\nuniform vec3 light_dir;\nin vec3 vWorldNormal;\nout vec4 fragColor;\n\nvoid main() {\n  vec3 n = normalize(vWorldNormal);\n  fragColor = vec4((baseColor * (light_ambient + max(dot(n, light_dir), 0.0))), 1.0);\n}\n"
+          "fragment": "#version 300 es\nprecision highp float;\nprecision highp int;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform vec3 baseColor;\nuniform float light_ambient;\nuniform vec3 light_dir;\nin vec3 vWorldNormal;\nout vec4 fragColor;\n\nvoid main() {\n  vec3 n = normalize(vWorldNormal);\n  fragColor = vec4((baseColor * (light_ambient + max(dot(n, light_dir), 0.0))), 1.0);\n}\n"
         }
       ]
     },
@@ -194,7 +194,7 @@
         {
           "target": "gles",
           "vertex": "#version 300 es\nin vec3 position;\nin vec3 normal;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform vec3 baseColor;\nuniform float light_ambient;\nuniform vec3 light_dir;\nuniform vec3 tint;\nout vec3 vWorldNormal;\n\nvoid main() {\n  vWorldNormal = normalize((normalMatrix * normal));\n  gl_Position = (mvp * vec4(position, 1.0));\n}\n",
-          "fragment": "#version 300 es\nprecision highp float;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform vec3 baseColor;\nuniform float light_ambient;\nuniform vec3 light_dir;\nuniform vec3 tint;\nin vec3 vWorldNormal;\nout vec4 fragColor;\n\nvoid main() {\n  fragColor = vec4(((baseColor * (light_ambient + max(dot(normalize(vWorldNormal), light_dir), 0.0))) * tint), 1.0);\n}\n"
+          "fragment": "#version 300 es\nprecision highp float;\nprecision highp int;\nuniform mat4 mvp;\nuniform mat3 normalMatrix;\nuniform vec3 baseColor;\nuniform float light_ambient;\nuniform vec3 light_dir;\nuniform vec3 tint;\nin vec3 vWorldNormal;\nout vec4 fragColor;\n\nvoid main() {\n  fragColor = vec4(((baseColor * (light_ambient + max(dot(normalize(vWorldNormal), light_dir), 0.0))) * tint), 1.0);\n}\n"
         }
       ]
     }

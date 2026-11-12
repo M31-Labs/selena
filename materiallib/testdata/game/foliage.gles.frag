@@ -1,5 +1,6 @@
 #version 300 es
 precision highp float;
+precision highp int;
 uniform mat4 mvp;
 uniform mat3 normalMatrix;
 uniform vec3 leafColor;

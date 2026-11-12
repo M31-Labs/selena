@@ -65,7 +65,7 @@
         {
           "target": "gles",
           "vertex": "#version 300 es\n\nout vec2 v_uv;\n\nvoid main() {\n  const vec2[3] positions = vec2[3](\n    vec2(-1.0, -1.0), vec2(3.0, -1.0), vec2(-1.0, 3.0)\n  );\n  const vec2[3] uvs = vec2[3](\n    vec2(0.0, 1.0), vec2(2.0, 1.0), vec2(0.0, -1.0)\n  );\n  v_uv = uvs[gl_VertexID];\n  gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);\n}\n",
-          "fragment": "#version 300 es\nprecision highp float;\nin vec2 v_uv;\n\nuniform sampler2D _sceneColor;\nuniform sampler2D _sceneDepth;\nuniform vec3 tint;\nout vec4 fragColor;\n\nvoid main() {\n  fragColor = vec4((texture(_sceneColor, v_uv).rgb * tint), 1.0);\n}\n"
+          "fragment": "#version 300 es\nprecision highp float;\nprecision highp int;\nin vec2 v_uv;\n\nuniform sampler2D _sceneColor;\nuniform sampler2D _sceneDepth;\nuniform vec3 tint;\nout vec4 fragColor;\n\nvoid main() {\n  fragColor = vec4((texture(_sceneColor, v_uv).rgb * tint), 1.0);\n}\n"
         }
       ]
     }

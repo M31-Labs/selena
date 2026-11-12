@@ -1,9 +1,9 @@
 attribute float a_vertexIndex;
 uniform mat4 mvp;
 uniform mat3 normalMatrix;
-uniform float poolWidth;
-uniform float poolLength;
-uniform float poolHeight;
+uniform highp float poolWidth;
+uniform highp float poolLength;
+uniform highp float poolHeight;
 uniform float normalScale;
 uniform float objectRadius;
 uniform float opticsCaustic;

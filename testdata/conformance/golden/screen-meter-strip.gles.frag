@@ -1,5 +1,6 @@
 #version 300 es
 precision highp float;
+precision highp int;
 uniform float strips;
 uniform vec2 screenSize;
 uniform vec4 levels[64];

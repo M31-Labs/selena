@@ -11,6 +11,12 @@ import (
 
 var prismDialect = dialect.GLES{}
 
+// fragmentPrecision opens every fragment stage. A fragment int defaults to
+// mediump, while the vertex stage's int is highp, and a uniform both stages
+// declare must have one precision or the program does not link. GLSL ES 3.00
+// requires highp support in the fragment stage, so both defaults are highp.
+const fragmentPrecision = "#version 300 es\nprecision highp float;\nprecision highp int;\n"
+
 // Emit renders m as GLSL ES 3.00 vertex and fragment sources for the Android
 // GLSurfaceView backend consumed by gosx-native. Like the WebGL GLSL emitter it
 // uses bare globals, but the GLES3 IO model differs: in/out instead of
@@ -97,13 +103,7 @@ func emitVertexAuthored(m ir.Module) string {
 // stateTex) when the material declares a statefield.
 func emitFragmentAuthored(m ir.Module) string {
 	var b strings.Builder
-	b.WriteString("#version 300 es\nprecision highp float;\n")
-	for _, v := range m.Varyings {
-		if internal.IsIntegral(v.Type) {
-			b.WriteString("precision highp int;\n") // fragment int defaults to mediump
-			break
-		}
-	}
+	b.WriteString(fragmentPrecision)
 	for _, u := range m.Uniforms {
 		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
 	}
@@ -156,7 +156,7 @@ func emitFeedbackVertex(m ir.Module) string {
 // which texture/FBO is in/out each step).
 func emitFeedbackFragment(m ir.Module) string {
 	var b strings.Builder
-	b.WriteString("#version 300 es\nprecision highp float;\n")
+	b.WriteString(fragmentPrecision)
 	b.WriteString("in vec2 vUV;\n\n")
 	b.WriteString("uniform highp sampler2D stateTex;\n")
 	b.WriteString("uniform vec2 texelSize;\n")
@@ -230,7 +230,7 @@ func emitVertex(m ir.Module) string {
 
 func emitFragment(m ir.Module) string {
 	var b strings.Builder
-	b.WriteString("#version 300 es\nprecision highp float;\n")
+	b.WriteString(fragmentPrecision)
 	for _, u := range m.Uniforms {
 		fmt.Fprintf(&b, "uniform %s %s;\n", typeName(u.Type), u.Name)
 	}
@@ -332,7 +332,7 @@ func emitPointsVertex(m ir.Module) string {
 // pt.pointUV resolves to gl_PointCoord directly (no dead varying).
 func emitPointsFragment(m ir.Module) string {
 	var b strings.Builder
-	b.WriteString("#version 300 es\nprecision highp float;\n")
+	b.WriteString(fragmentPrecision)
 	b.WriteString("in vec3 v_color;\n")
 	b.WriteString("in float v_alpha;\n")
 	b.WriteString("in float v_fogFactor;\n")
@@ -376,7 +376,7 @@ func emitPostVertex(m ir.Module) string {
 // emitPostFragment emits the GLES3 post-process fragment shader.
 func emitPostFragment(m ir.Module) string {
 	var b strings.Builder
-	b.WriteString("#version 300 es\nprecision highp float;\n")
+	b.WriteString(fragmentPrecision)
 	b.WriteString("in vec2 v_uv;\n\n")
 	b.WriteString("uniform sampler2D _sceneColor;\n")
 	b.WriteString("uniform sampler2D _sceneDepth;\n")

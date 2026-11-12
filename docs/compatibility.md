@@ -242,6 +242,20 @@ Only `sampleLevel` (2D, explicit LOD), `load` and `size` are available in
 sampler2D is declared `highp` on the GLSL targets, because the vertex-stage
 default is `lowp`.
 
+A texture that `vertex()` and `surface()` both read is declared `highp` in both
+stages, because a uniform both stages declare must have one precision to link.
+On the `glsl` target (WebGL 1) that needs fragment `highp`. The fragment stage
+does not declare a texture that only `vertex()` reads, so such a texture adds no
+fragment `highp` requirement. On `gles` the fragment stage always has `highp`.
+
+The same rule applies to a `float`, vector, matrix or `int` param and to a
+uniform array that both stages read. The `glsl` target declares each one
+`highp` in both stages, so a material that reads a param in `vertex()` and in
+`surface()` needs fragment `highp` on WebGL 1. Without it the fragment stage
+does not compile. A `bool` param takes no precision qualifier. The `gles`
+target writes `precision highp int;` in every fragment stage, so an `int`
+uniform has the vertex stage's precision.
+
 ## Data Textures
 
 `load(tex, ix, iy)` and `size(tex)` read a `texture2d` param at integer texel
