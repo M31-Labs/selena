@@ -2,6 +2,7 @@ package selena
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -366,6 +367,9 @@ func TestFirstInstanceLocationRules(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "location 16") || !strings.Contains(err.Error(), "below 16") {
 		t.Errorf("overflow past 16: %v", err)
 	}
+	if _, err := Compile([]byte(twoAttrs), CompileOptions{FirstInstanceLocation: math.MaxInt}); err == nil || !strings.Contains(err.Error(), "below 16") {
+		t.Errorf("maximum integer location: %v", err)
+	}
 	// Without instance attributes the option changes nothing.
 	plain := readInstancing(t, "testdata/conformance/vertex.sel")
 	a, err := Compile(plain, CompileOptions{})
@@ -408,5 +412,26 @@ func TestDefaultInstancePlacementRespectsLocationLimit(t *testing.T) {
 	_, err = Compile([]byte(build(17)), CompileOptions{})
 	if err == nil {
 		t.Error("17 instance attributes compiled")
+	}
+}
+
+func TestCulledInstanceExample(t *testing.T) {
+	source := readInstancing(t, "examples/culled-instances.sel")
+	r, err := Compile(source, CompileOptions{FirstInstanceLocation: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Layout.InstanceAttributes) != 4 || r.Layout.InstanceStride != 64 {
+		t.Fatalf("unexpected matrix layout: %+v", r.Layout)
+	}
+	for i, attr := range r.Layout.InstanceAttributes {
+		if attr.Location != 4+i || attr.Offset != 16*i || attr.Type != "vec4" {
+			t.Errorf("column %d: %+v", i, attr)
+		}
+	}
+	for _, target := range AllTargets() {
+		if _, ok := r.Artifact(target); !ok {
+			t.Errorf("no artifact for %v", target)
+		}
 	}
 }
