@@ -1,0 +1,14 @@
+material CulledInstances {
+    instance m0 : vec4
+    instance m1 : vec4
+    instance m2 : vec4
+    instance m3 : vec4
+
+    vertex(geo) -> vec4 {
+        return mvp * (m0 * geo.position.x + m1 * geo.position.y + m2 * geo.position.z + m3)
+    }
+
+    surface(geo) -> color {
+        return rgb(0.2, 0.6, 1.0)
+    }
+}

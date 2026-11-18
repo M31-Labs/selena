@@ -450,6 +450,16 @@ material with `FirstInstanceLocation: 9`, and `rect`, `tone` and `region` of
 NoteQuad take locations 9, 10 and 11, in a separate buffer layout from the
 engine record. Up to 7 authored attributes fit this way (locations 9 to 15).
 
+Elio’s GoSX culling pass writes 80-byte instance records. The first 64 bytes
+contain the transform matrix and the last 16 carry picking metadata. To draw
+these records directly, compile [CulledInstances](../examples/culled-instances.sel)
+with `--first-instance-location 4`. Bind the published vertex buffer at a
+stride of **80 bytes**, with its four `vec4` columns at offsets 0, 16, 32 and
+48. Selena reports the 64 bytes used by the shader. Using that value as the
+physical stride would make the second instance read the first instance’s
+picking data as a matrix column. Use the indirect count from the same cull
+dispatch to draw the surviving instances.
+
 **`instanceIndex` is not an identity.** It is the draw-order index of the
 instance within one draw call, counted from 0. If the host culls, sorts,
 compacts or draws indirectly, the same note can get a different

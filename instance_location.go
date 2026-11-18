@@ -28,6 +28,9 @@ func placeInstanceAttributes(mod *ir.Module, layout *bindings.Layout, first int)
 	if first < len(mod.Attributes) {
 		return fmt.Errorf("first instance location %d is below the %d vertex attributes; use at least %d", first, len(mod.Attributes), len(mod.Attributes))
 	}
+	if first >= maxVertexAttributes {
+		return fmt.Errorf("first instance location %d must be below %d", first, maxVertexAttributes)
+	}
 	if last := first + n - 1; last >= maxVertexAttributes {
 		return fmt.Errorf("first instance location %d puts the last of %d instance attributes at location %d; locations must stay below %d", first, n, last, maxVertexAttributes)
 	}
