@@ -28,13 +28,19 @@ struct UserUniforms {
 };
 @group(1) @binding(0) var<uniform> u : UserUniforms;
 
+// Per-point varyings are flat: every vertex of a billboard quad carries the
+// same per-instance color, alpha, fog, and size, and perspective
+// interpolation of a constant is not bit-exact on every GPU (NVIDIA/D3D12
+// drifted by ULPs frame to frame and re-rolled fract(sin()) hashes seeded
+// from v_color, seen as whole-sprite flicker). Only v_pointCoord varies
+// across the quad and keeps default interpolation.
 struct PointsOutput {
   @builtin(position) clipPos : vec4<f32>,
-  @location(0) v_color       : vec3<f32>,
-  @location(1) v_fogFactor   : f32,
-  @location(2) v_alpha       : f32,
+  @location(0) @interpolate(flat) v_color       : vec3<f32>,
+  @location(1) @interpolate(flat) v_fogFactor   : f32,
+  @location(2) @interpolate(flat) v_alpha       : f32,
   @location(3) v_pointCoord  : vec2<f32>,
-  @location(4) v_pointSize   : f32,
+  @location(4) @interpolate(flat) v_pointSize   : f32,
 };
 
 // Attribute input for the static-layer vertex entry (vertexMain).
@@ -143,11 +149,11 @@ const _quadPos = array<vec2<f32>, 6>(
 }
 
 struct PointsInput {
-  @location(0) v_color      : vec3<f32>,
-  @location(1) v_fogFactor  : f32,
-  @location(2) v_alpha      : f32,
+  @location(0) @interpolate(flat) v_color      : vec3<f32>,
+  @location(1) @interpolate(flat) v_fogFactor  : f32,
+  @location(2) @interpolate(flat) v_alpha      : f32,
   @location(3) v_pointCoord : vec2<f32>,
-  @location(4) v_pointSize  : f32,
+  @location(4) @interpolate(flat) v_pointSize  : f32,
 };
 
 @fragment fn fragmentMain(in : PointsInput) -> @location(0) vec4<f32> {
